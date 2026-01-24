@@ -20,31 +20,31 @@ Thank you for your interest in contributing to TavernUI! This document provides 
 ### Development Setup
 
 1. **Fork and Clone the Repository**
-   `Bash
+   ```Bash
    git clone https://github.com/your-username/TavernUI.git
    cd TavernUI
-   `
+   ```
 
 2. **Set Up Libraries**
    
    See [DEVELOPER.md](DEVELOPER.md) for detailed instructions on downloading libraries.
 
    Quick start:
-   `Bash
+   ```Bash
    # Using BigWigs Packager (recommended)
    bash release.sh -d -z
    
    # Then copy libraries from .release/TavernUI/libs/ to libs/
    # Or use the setup script if available
-   `
+   ```
 
 3. **Link to WoW AddOns Directory**
    
    Create a symlink or copy the addon to your WoW AddOns folder for testing:
-   `Bash
+   ```Bash
    # Windows (PowerShell as Administrator)
    New-Item -ItemType SymbolicLink -Path "C:\Program Files (x86)\World of Warcraft\_retail_\Interface\AddOns\TavernUI" -Target "C:\Program Files (x86)\World of Warcraft\_retail_\Interface\AddOns\TavernUI"
-   `
+   ```
 
 ## Development Workflow
 
@@ -58,9 +58,9 @@ Thank you for your interest in contributing to TavernUI! This document provides 
 ### Making Changes
 
 1. Create a new branch from main:
-   `Bash
+   ```Bash
    git checkout -b feature/your-feature-name
-   `
+   ```
 
 2. Make your changes
    - Follow the existing code style
@@ -68,10 +68,10 @@ Thank you for your interest in contributing to TavernUI! This document provides 
    - Test your changes in-game
 
 3. Commit your changes:
-   `Bash
+   ```Bash
    git add .
    git commit -m "Description of your changes"
-   `
+   ```
    
    **Commit Message Guidelines:**
    - Use clear, descriptive messages
@@ -80,9 +80,9 @@ Thank you for your interest in contributing to TavernUI! This document provides 
    - Add detailed description if needed
 
 4. Push to your fork:
-   `Bash
+   ```Bash
    git push origin feature/your-feature-name
-   `
+   ```
 
 5. Create a Pull Request on GitHub
 
@@ -99,7 +99,7 @@ Thank you for your interest in contributing to TavernUI! This document provides 
 
 ### Example
 
-`lua
+```lua
 -- Good
 local function calculateHealth(unit)
     local health = UnitHealth(unit)
@@ -109,7 +109,7 @@ end
 
 -- Avoid
 local function calc(u) return UnitHealth(u),UnitHealthMax(u) end
-`
+```
 
 ## Testing
 

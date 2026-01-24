@@ -24,17 +24,17 @@ The BigWigs Packager is the standard tool for managing WoW addon libraries.
    - Extract to a location in your PATH, or use it directly
 
 2. **Install via pip (Alternative):**
-   `Bash
+   ```Bash
    pip install bigwigs-packager
-   `
+   ```
 
 #### Downloading Libraries
 
 1. **Run the packager:**
-   `Bash
+   ```Bash
    # From the TavernUI directory
    bash release.sh -d -z
-   `
+   ```
    
    Flags:
    - -d - Skip uploading
@@ -45,19 +45,19 @@ The BigWigs Packager is the standard tool for managing WoW addon libraries.
    
    The packager downloads libraries to .release/TavernUI/libs/. Copy them to your main libs/ folder:
    
-   `Bash
+   ```Bash
    # Windows (PowerShell)
    Copy-Item -Path ".release\TavernUI\libs\*" -Destination "libs\" -Recurse -Force
    
    # Linux/Mac
    cp -r .release/TavernUI/libs/* libs/
-   `
+   ```
 
 3. **Verify libraries are present:**
-   `Bash
+   ```Bash
    # Check that libs folder contains the libraries
    ls libs/
-   `
+   ```
 
 #### Troubleshooting
 
