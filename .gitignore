@@ -43,6 +43,10 @@ SavedVariables/
 WTF/
 *.old
 
+# Libraries (managed by .pkgmeta)
+libs/
+!libs/Libs.xml
+
 # Build/compiled files (if any)
 *.zip
 *.rar
