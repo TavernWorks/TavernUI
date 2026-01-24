@@ -1,0 +1,49 @@
+# Folders starting with .
+.*/
+
+# OS-specific files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+Desktop.ini
+
+# Editor/IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.project
+.classpath
+.settings/
+
+# Backup files
+*.bak
+*.backup
+*.lua.bak
+*.lua~
+*.xml.bak
+*.xml~
+*.toc.bak
+*.toc~
+
+# Temporary files
+*.tmp
+*.temp
+*.log
+*.cache
+
+# WoW-specific
+SavedVariables.lua
+SavedVariables/
+WTF/
+*.old
+
+# Build/compiled files (if any)
+*.zip
+*.rar
+*.7z
