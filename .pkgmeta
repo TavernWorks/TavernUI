@@ -1,0 +1,28 @@
+﻿package-as: TavernUI
+enable-nolib-creation: no
+
+externals:
+  libs/: https://github.com/WoWUIDev/Ace3.git
+  libs/LibSerialize: https://github.com/rossnichols/LibSerialize
+  libs/LibCustomGlow-1.0: https://github.com/Stanzilla/LibCustomGlow
+  libs/LibDeflate:
+    url: https://github.com/SafeteeWoW/LibDeflate.git
+    tag: latest
+  libs/TaintLess:
+    url: https://www.townlong-yak.com/addons.git/taintless
+    commit: default
+  libs/oUF:
+    url: https://github.com/oUF-wow/oUF.git
+    branch: master
+  libs/LibDualSpec-1.0:
+    url: https://github.com/AdiAddons/LibDualSpec-1.0.git
+    branch: master
+  libs/AbstractFramework:
+    url: https://github.com/enderneko/AbstractFramework.git
+    branch: main
+  libs/OpenRaidLibrary
+    url: https://github.com/Tercioo/Open-Raid-Library.git
+    branch: main
+
+tools-used:
+  - ouf

@@ -1,0 +1,21 @@
+## Interface: 120000
+## Title: |cff00ff00TavernUI|r
+## Notes: A modern UI addon for World of Warcraft
+## Author: Mondo, LiQiuDgg
+## Version: 0.0.1
+## X-Category: Interface Enhancements
+## X-License: GPL-3.0
+## X-Website: https://github.com/TavernWorks/TavernUI
+## X-Curse-Project-ID: 
+## X-Wago-ID: 
+## X-WoWI-ID: 
+## X-oUF: TavernUI
+
+## OptionalDeps: LibStub, AbstractFramework, LibSharedMedia-3.0
+
+# Libraries (loaded via XML for proper order)
+libs\Libs.xml
+
+# Core files
+Init.lua
+Core.lua
