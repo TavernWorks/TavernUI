@@ -1,4 +1,4 @@
-﻿package-as: TavernUI
+package-as: TavernUI
 enable-nolib-creation: no
 
 externals:
@@ -23,6 +23,12 @@ externals:
   libs/OpenRaidLibrary
     url: https://github.com/Tercioo/Open-Raid-Library.git
     branch: main
+
+ignore:
+  - "*.md"
+
+move-folders:
+  Modules/*: TavernUI_*
 
 tools-used:
   - ouf

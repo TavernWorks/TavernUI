@@ -12,10 +12,13 @@
 ## X-oUF: TavernUI
 
 ## OptionalDeps: LibStub, AbstractFramework, LibSharedMedia-3.0
+## SavedVariables: TavernUIConfig
 
 # Libraries (loaded via XML for proper order)
 libs\Libs.xml
 
-# Core files
-Init.lua
+# Core files (must load first to define TavernUI and RegisterModuleDefaults)
 Core.lua
+
+# Modules (each module registers its defaults at load time, before OnInitialize)
+Modules\Modules.xml
