@@ -8,8 +8,6 @@ externals:
   libs/LibDeflate:
     url: https://github.com/SafeteeWoW/LibDeflate.git
     tag: latest
-  libs/TaintLess:
-    url: https://www.townlong-yak.com/addons.git/taintless
   libs/oUF:
     url: https://github.com/oUF-wow/oUF.git
   libs/LibDualSpec-1.0:
