@@ -8,18 +8,16 @@ externals:
   libs/LibDeflate:
     url: https://github.com/SafeteeWoW/LibDeflate.git
     tag: latest
+  libs/TaintLess:
+    url: https://www.townlong-yak.com/addons.git/taintless
   libs/oUF:
     url: https://github.com/oUF-wow/oUF.git
-    branch: master
   libs/LibDualSpec-1.0:
     url: https://github.com/AdiAddons/LibDualSpec-1.0.git
-    branch: master
   libs/AbstractFramework:
     url: https://github.com/enderneko/AbstractFramework.git
-    branch: main
   libs/OpenRaidLibrary:
     url: https://github.com/Tercioo/Open-Raid-Library.git
-    branch: main
 
 ignore:
   - "*.md"
