@@ -26,9 +26,14 @@ externals:
 
 ignore:
   - "*.md"
+  - "libs/*/tests"
+  - "libs/*/test"
+  - "libs/*/*/tests"
+  - "libs/*/*/test"
 
 move-folders:
-  Modules/*: TavernUI_*
+  TavernUI/Modules/ExampleModule: TavernUI_ExampleModule
+  TavernUI/Modules/Options: TavernUI_Options
 
 tools-used:
   - ouf
