@@ -8,9 +8,6 @@ externals:
   libs/LibDeflate:
     url: https://github.com/SafeteeWoW/LibDeflate.git
     tag: latest
-  libs/TaintLess:
-    url: https://www.townlong-yak.com/addons.git/taintless
-    commit: default
   libs/oUF:
     url: https://github.com/oUF-wow/oUF.git
     branch: master
