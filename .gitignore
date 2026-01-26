@@ -44,7 +44,9 @@ WTF/
 *.old
 
 # Libraries (managed by .pkgmeta)
-libs/
+# Ignore everything in libs/ except Libs.xml
+libs/*
+!libs/
 !libs/Libs.xml
 
 # Build/compiled files (if any)

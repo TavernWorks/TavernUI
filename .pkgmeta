@@ -16,6 +16,12 @@ externals:
     url: https://github.com/enderneko/AbstractFramework.git
   libs/OpenRaidLibrary:
     url: https://github.com/Tercioo/Open-Raid-Library.git
+  libs/LibDogTag-3.0:
+    url: https://github.com/parnic/LibDogTag-3.0.git
+  libs/LibDogTag-Unit-3.0:
+    url: https://github.com/parnic/LibDogTag-Unit-3.0.git
+  libs/LibAnchorRegistry-1.0:
+    url: https://github.com/TavernWorks/LibAnchorRegistry.git
 
 ignore:
   - "*.md"
