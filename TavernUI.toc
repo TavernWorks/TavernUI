@@ -6,8 +6,8 @@
 ## X-Category: Interface Enhancements
 ## X-License: GPL-3.0
 ## X-Website: https://github.com/TavernWorks/TavernUI
-## X-Curse-Project-ID: 
-## X-Wago-ID: 
+## X-Curse-Project-ID: 1443486
+## X-Wago-ID: qKQmgaKx
 ## X-WoWI-ID: 
 ## X-oUF: TavernUI
 
