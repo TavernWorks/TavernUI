@@ -48,6 +48,8 @@ WTF/
 libs/*
 !libs/
 !libs/Libs.xml
+!.github/
+!.github/*
 
 # Build/compiled files (if any)
 *.zip
