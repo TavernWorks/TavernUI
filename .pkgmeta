@@ -25,10 +25,15 @@ externals:
 
 ignore:
   - "*.md"
+  - "*.bat"
+  - "libs/tests"
+  - "libs/test"
+  - "libs/tests/**"
+  - "libs/test/**"
   - "libs/*/tests"
   - "libs/*/test"
-  - "libs/*/*/tests"
-  - "libs/*/*/test"
+  - "libs/*/tests/**"
+  - "libs/*/test/**"
 
 move-folders:
   TavernUI/Modules/ExampleModule: TavernUI_ExampleModule
