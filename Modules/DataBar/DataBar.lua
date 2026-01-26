@@ -36,17 +36,16 @@ TavernUI:RegisterModuleDefaults("DataBar", defaults, false)
 -- Datatext Registry System
 local datatextRegistry = {}
 
-local function registerDatatext(name, tag, namespace, iconDefaults)
+local function registerDatatext(name, tag, namespace)
     datatextRegistry[name] = {
         name = name,
         tag = tag,
         namespace = namespace,
-        iconDefaults = iconDefaults,
     }
 end
 
-function module:RegisterDatatext(name, tag, namespace, iconDefaults)
-    registerDatatext(name, tag, namespace, iconDefaults)
+function module:RegisterDatatext(name, tag, namespace)
+    registerDatatext(name, tag, namespace)
 end
 
 function module:GetDatatext(name)
@@ -58,21 +57,20 @@ function module:GetAllDatatexts()
 end
 
 local function initializeDatatexts()
-    -- Simple tag names - namespace is passed to AddFontString separately
-    registerDatatext("Gold", "[Gold]", "TavernUI", {enabled = true, source = "preset", texture = "gold", position = "left", textPosition = "right", size = nil, alpha = 1, zoom = 1})
-    registerDatatext("Experience", "[XP]", "TavernUI", nil)
-    registerDatatext("Experience: Rested", "[RestedXP]", "TavernUI", {enabled = true, source = "preset", texture = "rested", position = "center", textPosition = "over", size = nil, alpha = 1, zoom = 1})
-    registerDatatext("Experience: Percent", "[XPPercent]", "TavernUI", nil)
-    registerDatatext("Time: Local", "[LocalTime]", "TavernUI", {enabled = true, source = "preset", texture = "time", position = "left", textPosition = "right", size = nil, alpha = 1, zoom = 1})
-    registerDatatext("Time: Local (12h)", "[LocalTime12]", "TavernUI", {enabled = true, source = "preset", texture = "time", position = "left", textPosition = "right", size = nil, alpha = 1, zoom = 1})
-    registerDatatext("Time: Server", "[ServerTime]", "TavernUI", {enabled = true, source = "preset", texture = "time", position = "left", textPosition = "right", size = nil, alpha = 1, zoom = 1})
-    registerDatatext("FPS", "[FPS]", "TavernUI", {enabled = true, source = "preset", texture = "fps", position = "left", textPosition = "right", size = nil, alpha = 1, zoom = 1})
-    registerDatatext("Latency", "[Latency]", "TavernUI", {enabled = true, source = "preset", texture = "latency", position = "left", textPosition = "right", size = nil, alpha = 1, zoom = 1})
-    registerDatatext("Durability", "[Durability]", "TavernUI", {enabled = true, source = "preset", texture = "durability", position = "left", textPosition = "right", size = nil, alpha = 1, zoom = 1})
-    registerDatatext("Friends Online", "[FriendsOnline]", "TavernUI", {enabled = true, source = "preset", texture = "friends", position = "left", textPosition = "right", size = nil, alpha = 1, zoom = 1})
-    registerDatatext("Guild Online", "[GuildOnline]", "TavernUI", {enabled = true, source = "preset", texture = "guild", position = "left", textPosition = "right", size = nil, alpha = 1, zoom = 1})
-    registerDatatext("Memory Usage", "[MemoryUsage]", "TavernUI", {enabled = true, source = "preset", texture = "memory", position = "left", textPosition = "right", size = nil, alpha = 1, zoom = 1})
-    registerDatatext("Reputation", "[Reputation]", "TavernUI", {enabled = true, source = "preset", texture = "reputation", position = "left", textPosition = "right", size = nil, alpha = 1, zoom = 1})
+    registerDatatext("Gold", "[Gold]", "TavernUI")
+    registerDatatext("Experience", "[XP]", "TavernUI")
+    registerDatatext("Experience: Rested", "[RestedXP]", "TavernUI")
+    registerDatatext("Experience: Percent", "[XPPercent]", "TavernUI")
+    registerDatatext("Time: Local", "[LocalTime]", "TavernUI")
+    registerDatatext("Time: Local (12h)", "[LocalTime12]", "TavernUI")
+    registerDatatext("Time: Server", "[ServerTime]", "TavernUI")
+    registerDatatext("FPS", "[FPS]", "TavernUI")
+    registerDatatext("Latency", "[Latency]", "TavernUI")
+    registerDatatext("Durability", "[Durability]", "TavernUI")
+    registerDatatext("Friends Online", "[FriendsOnline]", "TavernUI")
+    registerDatatext("Guild Online", "[GuildOnline]", "TavernUI")
+    registerDatatext("Memory Usage", "[MemoryUsage]", "TavernUI")
+    registerDatatext("Reputation", "[Reputation]", "TavernUI")
 end
 
 local presetValues = {}
@@ -91,7 +89,6 @@ function module:OnInitialize()
     self.frames = {}
     self.barFrames = {}
     self.slotFrames = {}
-    self.slotIcons = {}
     self.slotTexts = {}
     self.anchorHandles = {}
     self.anchorNames = {}
@@ -116,7 +113,6 @@ function module:OnInitialize()
         self:Debug("LibDogTag-3.0 not found, tags will not be registered")
     end
     
-    self:InitializeIconPresets()
     self:RegisterOptions()
     
     self:Debug("DataBar initialized")
@@ -225,27 +221,6 @@ function module:OnProfileChanged()
     end
 end
 
--- Icon Presets
-
-function module:InitializeIconPresets()
-    self.iconPresets = {
-        gold = "Interface\\Icons\\INV_Misc_Coin_01",
-        rested = "Interface\\Icons\\Spell_Shadow_Twilight",
-        experience = "Interface\\Icons\\XP_Icon",
-        reputation = "Interface\\Icons\\INV_BannerPVP_02",
-        time = "Interface\\Icons\\INV_Misc_PocketWatch_01",
-        fps = "Interface\\Icons\\Spell_Nature_TimeStop",
-        latency = "Interface\\Icons\\Spell_ChargeNegative",
-        durability = "Interface\\Icons\\Trade_BlackSmithing",
-        friends = "Interface\\Icons\\INV_Letter_20",
-        guild = "Interface\\Icons\\INV_BannerPVP_01",
-        memory = "Interface\\Icons\\INV_Misc_EngGizmos_19",
-    }
-end
-
-function module:GetIconPresetTexture(presetName)
-    return self.iconPresets[presetName] or "Interface\\BUTTONS\\WHITE8X8"
-end
 
 -- Custom LibDogTag Tags
 
@@ -581,22 +556,6 @@ local function createSimpleOptionSetter(barId, obj, field, updateFunc)
     end
 end
 
-local function ensureIconConfig(slot)
-    if not slot.icon then
-        slot.icon = {
-            enabled = false,
-            texture = "",
-            source = "file",
-            size = nil,
-            position = "left",
-            textPosition = "right",
-            alpha = 1,
-            zoom = 1,
-            borders = {},
-        }
-    end
-    return slot.icon
-end
 
 local function createOption(t)
     return t
@@ -783,7 +742,6 @@ function module:BuildSlotOptions(args, barId, bar)
                     width = nil,
                     textColor = nil,
                     anchorConfig = nil,
-                    icon = datatext.iconDefaults and (type(datatext.iconDefaults) == "table" and {unpack(datatext.iconDefaults)} or datatext.iconDefaults) or nil,
                 }
                 table.insert(bar.slots, slot)
                 self:UpdateBar(barId)
@@ -827,9 +785,6 @@ function module:BuildSlotOptions(args, barId, bar)
                 if datatext then
                     slot.tag = datatext.tag
                     slot.namespace = datatext.namespace
-                    if datatext.iconDefaults then
-                        slot.icon = type(datatext.iconDefaults) == "table" and {unpack(datatext.iconDefaults)} or datatext.iconDefaults
-                    end
                     self:UpdateBar(barId)
                 end
             end,
@@ -900,13 +855,6 @@ function module:BuildSlotOptions(args, barId, bar)
             order = 10,
         }
         
-        slotArgs.args.iconHeader = {
-            type = "header",
-            name = "Icon Settings",
-            order = 11,
-        }
-        
-        self:BuildIconOptions(slotArgs.args, barId, slotIndex, slot, bar, 12)
         self:BuildSlotPositionOptions(slotArgs.args, barId, slotIndex, slot, bar)
         
         slotArgs.args.spacer2 = {
@@ -931,45 +879,6 @@ function module:BuildSlotOptions(args, barId, bar)
     end
 end
 
-function module:BuildIconOptions(args, barId, slotIndex, slot, bar, startOrder)
-    startOrder = startOrder or 10
-    local icon = ensureIconConfig(slot)
-    
-    local iconFieldMap = {
-        iconEnabled = "enabled",
-        iconSource = "source",
-        iconTexture = "texture",
-        iconPosition = "position",
-        textPosition = "textPosition",
-        iconAlpha = "alpha",
-        iconZoom = "zoom",
-    }
-    
-    local iconOptions = {
-        {key = "iconEnabled", type = "toggle", name = "Enable Icon", desc = "Show an icon for this slot", get = function() return icon.enabled end},
-        {key = "iconSource", type = "select", name = "Icon Source", desc = "Where to get the icon texture from", values = {file = "File Path", libsharedmedia = "LibSharedMedia", preset = "Preset", wow = "WoW Texture"}, get = function() return icon.source or "file" end},
-        {key = "iconTexture", type = "input", name = "Icon Texture", desc = "Texture path or preset name", get = function() return icon.texture or "" end},
-        {key = "iconPosition", type = "select", name = "Icon Position", desc = "Where to position the icon relative to the text", values = {left = "Left", right = "Right", center = "Center", background = "Background"}, get = function() return icon.position or "left" end},
-        {key = "textPosition", type = "select", name = "Text Position", desc = "Where to position the text relative to the icon", values = {over = "Over", left = "Left", right = "Right", below = "Below"}, get = function() return icon.textPosition or "right" end},
-        {key = "iconAlpha", type = "range", name = "Icon Alpha", desc = "Icon transparency", min = 0, max = 1, step = 0.1, get = function() return icon.alpha or 1 end},
-        {key = "iconZoom", type = "range", name = "Icon Zoom", desc = "Icon zoom level", min = 0.1, max = 2.0, step = 0.1, get = function() return icon.zoom or 1 end},
-    }
-    
-    for i, opt in ipairs(iconOptions) do
-        local optDef = {type = opt.type, name = opt.name, desc = opt.desc, order = startOrder + i - 1,
-            get = opt.get, set = createSimpleOptionSetter(barId, icon, iconFieldMap[opt.key])}
-        if opt.values then optDef.values = opt.values end
-        if opt.min then optDef.min, optDef.max, optDef.step = opt.min, opt.max, opt.step end
-        args[opt.key] = optDef
-    end
-    
-    args.iconSize = {type = "input", name = "Icon Size", desc = "Icon size in pixels (leave empty to use bar height)", order = startOrder + 3,
-        get = function() return icon.size and tostring(icon.size) or "" end,
-        set = function(_, value)
-            icon.size = (value == "" or value == "nil") and nil or tonumber(value)
-            self:UpdateBar(barId)
-        end}
-end
 
 function module:BuildStylingOptions(args, barId, bar)
     local function addHeader(name, order)
@@ -1273,7 +1182,6 @@ function module:CreateBarFrame(barId, bar)
     self.barFrames[barId] = frame
     self:RegisterFrame("bar" .. barId, frame)
     self.slotFrames[barId] = {}
-    self.slotIcons[barId] = {}
     self.slotTexts[barId] = {}
     self.slotAnchorHandles[barId] = {}
     
@@ -1393,7 +1301,6 @@ function module:DestroyBar(barId)
     
     self.barFrames[barId] = nil
     self.slotFrames[barId] = nil
-    self.slotIcons[barId] = nil
     self.slotTexts[barId] = nil
     self.slotAnchorHandles[barId] = nil
 end
@@ -1602,7 +1509,6 @@ function module:AddSlot(barId, slotIndex, tag, namespace)
         width = nil,
         textColor = nil,
         anchorConfig = nil,
-        icon = nil,
     }
     
     table.insert(bar.slots, slotIndex, slot)
@@ -1628,7 +1534,6 @@ function module:RemoveSlot(barId, slotIndex)
         slotFrame:Hide()
         slotFrame:SetParent(nil)
         self.slotFrames[barId][slotIndex] = nil
-        self.slotIcons[barId][slotIndex] = nil
         self.slotTexts[barId][slotIndex] = nil
     end
     
@@ -1787,17 +1692,10 @@ function module:CreateSlot(barId, slotIndex, slot, bar)
         slotFrame:Show()
     end
     
-    if slot.icon and slot.icon.enabled then
-        self:CreateSlotIcon(barId, slotIndex, slot, bar)
-    else
-        if self.slotIcons[barId] and self.slotIcons[barId][slotIndex] then
-            self.slotIcons[barId][slotIndex]:Hide()
-        end
-        text:ClearAllPoints()
-        text:SetPoint("LEFT", slotFrame, "LEFT", 4, 0)
-        text:SetJustifyH("LEFT")
-        text:SetJustifyV("MIDDLE")
-    end
+    text:ClearAllPoints()
+    text:SetPoint("LEFT", slotFrame, "LEFT", 4, 0)
+    text:SetJustifyH("LEFT")
+    text:SetJustifyV("MIDDLE")
     
     slotFrame:Show()
     slotFrame:SetParent(self.barFrames[barId])
@@ -1806,171 +1704,6 @@ function module:CreateSlot(barId, slotIndex, slot, bar)
         tostring(text:IsVisible()), tostring(slotFrame:IsVisible()), tostring(text:GetText() or ""))
 end
 
-function module:CreateSlotIcon(barId, slotIndex, slot, bar)
-    if not self.slotIcons[barId] then
-        self.slotIcons[barId] = {}
-    end
-    
-    local slotFrame = self.slotFrames[barId][slotIndex]
-    if not slotFrame then
-        return
-    end
-    
-    if not self.slotIcons[barId][slotIndex] then
-        local icon = slotFrame:CreateTexture(nil, "ARTWORK")
-        self.slotIcons[barId][slotIndex] = icon
-        icon:SetParent(slotFrame)
-    end
-    
-    local icon = self.slotIcons[barId][slotIndex]
-    local iconConfig = slot.icon
-    
-    local texture = self:GetIconTexture(iconConfig)
-    icon:SetTexture(texture)
-    
-    local iconSize = iconConfig.size or bar.height
-    icon:SetSize(iconSize, iconSize)
-    
-    icon:SetAlpha(iconConfig.alpha or 1)
-    
-    if iconConfig.zoom and iconConfig.zoom ~= 1.0 then
-        self:ApplyIconZoom(icon, iconConfig.zoom)
-    else
-        icon:SetTexCoord(0, 1, 0, 1)
-    end
-    
-    self:UpdateIconBorders(barId, slotIndex, icon, iconConfig)
-    self:PositionIcon(barId, slotIndex, slot, bar)
-    
-    icon:Show()
-end
-
-function module:GetIconTexture(iconConfig)
-    if iconConfig.source == "file" then
-        return iconConfig.texture or "Interface\\BUTTONS\\WHITE8X8"
-    elseif iconConfig.source == "libsharedmedia" and LibSharedMedia then
-        return LibSharedMedia:Fetch("icon", iconConfig.texture) or "Interface\\BUTTONS\\WHITE8X8"
-    elseif iconConfig.source == "preset" then
-        return self:GetIconPresetTexture(iconConfig.texture) or "Interface\\BUTTONS\\WHITE8X8"
-    elseif iconConfig.source == "wow" then
-        return iconConfig.texture or "Interface\\BUTTONS\\WHITE8X8"
-    else
-        return "Interface\\BUTTONS\\WHITE8X8"
-    end
-end
-
-function module:ApplyIconZoom(icon, zoom)
-    if zoom >= 1.0 then
-        local left = (zoom - 1) / (2 * zoom)
-        local right = (zoom + 1) / (2 * zoom)
-        left = math.max(0, math.min(1, left))
-        right = math.max(0, math.min(1, right))
-        icon:SetTexCoord(left, right, left, right)
-    else
-        icon:SetTexCoord(0, 1, 0, 1)
-    end
-end
-
-function module:UpdateIconBorders(barId, slotIndex, icon, iconConfig)
-    if not iconConfig.borders then
-        return
-    end
-    
-    local slotFrame = self.slotFrames[barId][slotIndex]
-    if not slotFrame then
-        return
-    end
-    
-    if not slotFrame.iconBorders then
-        slotFrame.iconBorders = {}
-    end
-    
-    local borderConfigs = {
-        top = {points = {{"TOPLEFT", icon, "TOPLEFT"}, {"TOPRIGHT", icon, "TOPRIGHT"}}, setSize = function(b, w) b:SetHeight(w) end},
-        bottom = {points = {{"BOTTOMLEFT", icon, "BOTTOMLEFT"}, {"BOTTOMRIGHT", icon, "BOTTOMRIGHT"}}, setSize = function(b, w) b:SetHeight(w) end},
-        left = {points = {{"TOPLEFT", icon, "TOPLEFT"}, {"BOTTOMLEFT", icon, "BOTTOMLEFT"}}, setSize = function(b, w) b:SetWidth(w) end},
-        right = {points = {{"TOPRIGHT", icon, "TOPRIGHT"}, {"BOTTOMRIGHT", icon, "BOTTOMRIGHT"}}, setSize = function(b, w) b:SetWidth(w) end},
-    }
-    
-    for side, config in pairs(iconConfig.borders) do
-        if config.enabled then
-            if not slotFrame.iconBorders[side] then
-                slotFrame.iconBorders[side] = slotFrame:CreateTexture(nil, "BORDER")
-            end
-            local border = slotFrame.iconBorders[side]
-            local c = config.color
-            border:SetColorTexture(c.r, c.g, c.b, 1)
-            
-            local borderConfig = borderConfigs[side]
-            if borderConfig then
-                for _, pointData in ipairs(borderConfig.points) do
-                    border:SetPoint(pointData[1], pointData[2], pointData[3], 0, 0)
-                end
-                borderConfig.setSize(border, config.width)
-            end
-            border:Show()
-        elseif slotFrame.iconBorders[side] then
-            slotFrame.iconBorders[side]:Hide()
-        end
-    end
-end
-
-function module:PositionIcon(barId, slotIndex, slot, bar)
-    local slotFrame = self.slotFrames[barId][slotIndex]
-    local icon = self.slotIcons[barId][slotIndex]
-    local text = self.slotTexts[barId][slotIndex]
-    
-    if not slotFrame or not text then
-        return
-    end
-    
-    if not icon then
-        text:ClearAllPoints()
-        text:SetPoint("LEFT", slotFrame, "LEFT", 4, 0)
-        text:SetJustifyH("LEFT")
-        text:SetJustifyV("MIDDLE")
-        return
-    end
-    
-    local iconConfig = slot.icon
-    local position = iconConfig.position or "left"
-    local textPosition = iconConfig.textPosition or "right"
-    
-    local iconPositions = {
-        left = {point = "LEFT", relativeTo = slotFrame, relativePoint = "LEFT", x = 0, y = 0},
-        right = {point = "RIGHT", relativeTo = slotFrame, relativePoint = "RIGHT", x = 0, y = 0},
-        center = {point = "CENTER", relativeTo = slotFrame, relativePoint = "CENTER", x = 0, y = 0},
-        background = {point = "ALL", relativeTo = slotFrame},
-    }
-    
-    local textPositions = {
-        left = {point = "RIGHT", relativeTo = icon, relativePoint = "LEFT", x = -4, y = 0, second = {point = "LEFT", relativeTo = slotFrame, relativePoint = "LEFT", x = 0, y = 0}},
-        right = {point = "LEFT", relativeTo = icon, relativePoint = "RIGHT", x = 4, y = 0, second = {point = "RIGHT", relativeTo = slotFrame, relativePoint = "RIGHT", x = 0, y = 0}},
-        over = {point = "CENTER", relativeTo = icon, relativePoint = "CENTER", x = 0, y = 0},
-        below = {point = "TOP", relativeTo = icon, relativePoint = "BOTTOM", x = 0, y = -4},
-    }
-    
-    if position == "background" then
-        icon:SetAllPoints(slotFrame)
-        text:SetPoint("CENTER", slotFrame, "CENTER", 0, 0)
-    else
-        local iconPos = iconPositions[position]
-        if iconPos then
-            icon:SetPoint(iconPos.point, iconPos.relativeTo, iconPos.relativePoint, iconPos.x, iconPos.y)
-        end
-        
-        local textPos = textPositions[textPosition]
-        if textPos then
-            text:SetPoint(textPos.point, textPos.relativeTo, textPos.relativePoint, textPos.x, textPos.y)
-            if textPos.second then
-                text:SetPoint(textPos.second.point, textPos.second.relativeTo, textPos.second.relativePoint, textPos.second.x, textPos.second.y)
-            end
-        end
-    end
-    
-    text:SetJustifyH("LEFT")
-    text:SetJustifyV("MIDDLE")
-end
 
 function module:LayoutSlots(barId, bar)
     local frame = self.barFrames[barId]
@@ -2072,10 +1805,6 @@ function module:LayoutSlots(barId, bar)
                 local text = module.slotTexts[barId][slotIndex]
                 if text then
                     local textWidth = text:GetStringWidth() or 0
-                    local icon = module.slotIcons[barId] and module.slotIcons[barId][slotIndex]
-                    if icon and icon:IsShown() then
-                        textWidth = textWidth + icon:GetWidth() + 4
-                    end
                     frame:SetWidth(math.max(1, textWidth + 8))
                 end
             end)
