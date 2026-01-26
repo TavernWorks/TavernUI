@@ -1,0 +1,8 @@
+## Interface: 120000
+## Title: TavernUI - CDM
+## Notes: Cooldown Display Manager for Essential and Utility cooldown viewers
+## Dependencies: TavernUI
+## LoadOnDemand: 1
+## SavedVariables: TavernUIConfig
+
+CDM.xml
