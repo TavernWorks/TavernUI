@@ -5,175 +5,66 @@ local TavernUI = LibStub("AceAddon-3.0"):GetAddon("TavernUI")
 local module = TavernUI:GetModule("CDM")
 local Anchor = LibStub("LibAnchorRegistry-1.0", true)
 
-local VIEWER_ESSENTIAL = "EssentialCooldownViewer"
-local VIEWER_UTILITY = "UtilityCooldownViewer"
+if not module then return end
 
-local CDM = module and module.CDM or {}
-if not module.CDM then
-    module.CDM = CDM
+local VIEWER_ESSENTIAL = module.VIEWER_ESSENTIAL or "EssentialCooldownViewer"
+local VIEWER_UTILITY = module.VIEWER_UTILITY or "UtilityCooldownViewer"
+
+local CDM = module.CDM
+if not CDM then
+    module.CDM = {}
+    CDM = module.CDM
 end
+
+CDM.anchorHandles = CDM.anchorHandles or {}
+CDM.anchorTimers = CDM.anchorTimers or {}
+-- Stores position when edit mode opens, to compare on save
+CDM.editModeStartPositions = CDM.editModeStartPositions or {}
 
 local function GetSettings(key)
-    if not module then return nil end
+    return module.GetSettings and module.GetSettings(key)
+end
+
+local function ReleaseAnchor(key)
+    local handle = CDM.anchorHandles[key]
+    if handle then
+        pcall(function() handle:Release() end)
+        CDM.anchorHandles[key] = nil
+    end
+end
+
+local function ClearAnchorConfig(key)
+    local settings = GetSettings(key)
+    if settings and settings.anchorConfig then
+        settings.anchorConfig.target = nil
+    end
+    -- Also clear the category selection so the UI resets properly
     local db = module:GetDB()
     if db and db[key] then
-        return db[key]
-    end
-    return nil
-end
-
-local function IncrementSettingsVersion(trackerKey)
-    if trackerKey then
-        CDM.settingsVersion = CDM.settingsVersion or {}
-        CDM.settingsVersion[trackerKey] = (CDM.settingsVersion[trackerKey] or 0) + 1
-    else
-        CDM.settingsVersion = CDM.settingsVersion or {}
-        CDM.settingsVersion.essential = (CDM.settingsVersion.essential or 0) + 1
-        CDM.settingsVersion.utility = (CDM.settingsVersion.utility or 0) + 1
+        db[key].anchorCategory = nil
     end
 end
 
-local function IsEditModeActive()
-    return C_EditMode and C_EditMode.IsEditModeActive and C_EditMode.IsEditModeActive()
+local function ShouldApplyAnchor(key)
+    local settings = GetSettings(key)
+    return settings and settings.anchorConfig and settings.anchorConfig.target and settings.anchorConfig.target ~= "" and settings.anchorConfig.target ~= "UIParent"
 end
 
-local function GetFramePositionRelativeToUIParent(frame, viewerName)
-    if not frame then return nil end
+local function ApplyAnchor(viewerName, key)
+    if not Anchor then return end
     
-    local point, relativeTo, relativePoint, xOfs, yOfs = frame:GetPoint(1)
-    if not point then return nil end
-    
-    if relativeTo == UIParent then
-        return point, relativePoint, xOfs, yOfs
-    end
-    
-    local left, bottom, width, height = frame:GetRect()
-    if not left or not bottom then return nil end
-    
-    local uiLeft, uiBottom, uiWidth, uiHeight = UIParent:GetRect()
-    if not uiLeft or not uiBottom then return nil end
-    
-    local frameCenterX = left + width / 2
-    local frameCenterY = bottom + height / 2
-    local uiCenterX = uiLeft + uiWidth / 2
-    local uiCenterY = uiBottom + uiHeight / 2
-    local offsetX = frameCenterX - uiCenterX
-    local offsetY = frameCenterY - uiCenterY
-    
-    return "CENTER", "CENTER", offsetX, offsetY
-end
-
-local function GetEditModePosition(frame)
-    if not frame or not C_EditMode then return nil end
-    
-    local frameName = frame:GetName()
-    if not frameName then return nil end
-    
-    local layoutInfo = C_EditMode.GetLayouts and C_EditMode.GetLayouts()
-    if not layoutInfo then return nil end
-    
-    local activeLayout = layoutInfo.activeLayout
-    if not activeLayout then return nil end
-    
-    local accountSettings = C_EditMode.GetAccountSettings and C_EditMode.GetAccountSettings()
-    if accountSettings and accountSettings.layoutSettings then
-        for layoutName, layoutData in pairs(accountSettings.layoutSettings) do
-            if layoutName == activeLayout and layoutData.frames then
-                for frameKey, frameData in pairs(layoutData.frames) do
-                    if frameKey == frameName and frameData.anchorInfo then
-                        local anchorInfo = frameData.anchorInfo
-                        if anchorInfo.point and anchorInfo.relativeTo == "UIParent" then
-                            return anchorInfo.point, anchorInfo.relativePoint or anchorInfo.point, 
-                                   anchorInfo.offsetX or 0, anchorInfo.offsetY or 0
-                        end
-                    end
-                end
-            end
-        end
-    end
-    
-    return nil
-end
-
-local function SavePosition(viewerName, key)
     local viewer = _G[viewerName]
     if not viewer then return end
     
-    local point, relativePoint, xOfs, yOfs
-    
-    local editModePos = GetEditModePosition(viewer)
-    if editModePos then
-        point, relativePoint, xOfs, yOfs = editModePos
-    else
-        local result = GetFramePositionRelativeToUIParent(viewer, viewerName)
-        if not result then return end
-        point, relativePoint, xOfs, yOfs = result
+    if not ShouldApplyAnchor(key) then
+        ReleaseAnchor(key)
+        return
     end
     
     local settings = GetSettings(key)
-    if not settings then return end
-    
-    if not settings.anchorConfig then
-        settings.anchorConfig = {}
-    end
-    
-    local handleKey = key == "essential" and "essential" or "utility"
-    if CDM.anchorHandles and CDM.anchorHandles[handleKey] then
-        pcall(function() CDM.anchorHandles[handleKey]:Release() end)
-        CDM.anchorHandles[handleKey] = nil
-    end
-    
-    if settings.anchorConfig.target and settings.anchorConfig.target ~= "UIParent" and settings.anchorConfig.target ~= "" then
-        settings.anchorConfig.offsetX = xOfs
-        settings.anchorConfig.offsetY = yOfs
-        if not settings.anchorConfig.point or settings.anchorConfig.point == "CENTER" then
-            settings.anchorConfig.point = point
-            settings.anchorConfig.relativePoint = relativePoint
-        end
-    else
-        settings.anchorConfig.target = "UIParent"
-        settings.anchorConfig.point = point
-        settings.anchorConfig.relativePoint = relativePoint
-        settings.anchorConfig.offsetX = xOfs
-        settings.anchorConfig.offsetY = yOfs
-    end
-    
-    if key == "utility" then
-        settings.anchorBelowEssential = false
-    end
-end
-
-local function SaveEssentialPosition()
-    SavePosition(VIEWER_ESSENTIAL, "essential")
-end
-
-local function SaveUtilityPosition()
-    SavePosition(VIEWER_UTILITY, "utility")
-end
-
-local function ApplyAnchor(viewerName, key, anchorHandleKey)
-    if InCombatLockdown() then
-        return
-    end
-    
-    if not CDM.applyingAnchors then
-        CDM.applyingAnchors = {}
-    end
-    
-    if CDM.applyingAnchors[anchorHandleKey] then
-        return
-    end
-    
-    CDM.applyingAnchors[anchorHandleKey] = true
-    
-    local viewer = _G[viewerName]
-    if not viewer then 
-        CDM.applyingAnchors[anchorHandleKey] = nil
-        return 
-    end
-    
-    if not Anchor then
-        CDM.applyingAnchors[anchorHandleKey] = nil
+    local config = settings.anchorConfig
+    if not config or not config.target then
+        ReleaseAnchor(key)
         return
     end
     
@@ -181,170 +72,29 @@ local function ApplyAnchor(viewerName, key, anchorHandleKey)
         module.RegisterAnchors()
     end
     
-    local settings = GetSettings(key)
-    if not settings then 
-        CDM.applyingAnchors[anchorHandleKey] = nil
-        return 
-    end
+    ReleaseAnchor(key)
     
-    if settings.anchorConfig and settings.anchorConfig.target and settings.anchorConfig.target ~= "" and settings.anchorConfig.target ~= "UIParent" then
-        local target = settings.anchorConfig.target
-        
-        if Anchor:Exists(target) then
-            local needsUpdate = true
-            if CDM.anchorHandles and CDM.anchorHandles[anchorHandleKey] then
-                local currentHandle = CDM.anchorHandles[anchorHandleKey]
-                local ok, currentConfig = pcall(function() return currentHandle and currentHandle.config end)
-                if ok and currentConfig and currentConfig.target then
-                    local currentTarget = currentConfig.target
-                    local currentPoint = currentConfig.point
-                    local currentRelativePoint = currentConfig.relativePoint
-                    local currentOffsetX = currentConfig.offsetX
-                    local currentOffsetY = currentConfig.offsetY
-                    
-                    local newPoint = settings.anchorConfig.point or "CENTER"
-                    local newRelativePoint = settings.anchorConfig.relativePoint or "CENTER"
-                    local newOffsetX = settings.anchorConfig.offsetX or 0
-                    local newOffsetY = settings.anchorConfig.offsetY or 0
-                    
-                    if currentTarget == target and 
-                       currentPoint == newPoint and 
-                       currentRelativePoint == newRelativePoint and
-                       math.abs((currentOffsetX or 0) - newOffsetX) < 0.1 and
-                       math.abs((currentOffsetY or 0) - newOffsetY) < 0.1 then
-                        needsUpdate = false
-                    else
-                        pcall(function() currentHandle:Release() end)
-                        CDM.anchorHandles[anchorHandleKey] = nil
-                    end
-                else
-                    CDM.anchorHandles[anchorHandleKey] = nil
-                end
-            end
-            
-            if needsUpdate then
-                if not CDM.anchorHandles then
-                    CDM.anchorHandles = {}
-                end
-                local handle = Anchor:AnchorTo(viewer, {
-                    target = target,
-                    point = settings.anchorConfig.point or "CENTER",
-                    relativePoint = settings.anchorConfig.relativePoint or "CENTER",
-                    offsetX = settings.anchorConfig.offsetX or 0,
-                    offsetY = settings.anchorConfig.offsetY or 0,
-                    deferred = false,
-                })
-                
-                if handle then
-                    CDM.anchorHandles[anchorHandleKey] = handle
-                end
-            end
-            CDM.applyingAnchors[anchorHandleKey] = nil
-            return
-        end
-    end
+    local handle = Anchor:AnchorTo(viewer, {
+        target = config.target,
+        point = config.point or "CENTER",
+        relativePoint = config.relativePoint or "CENTER",
+        offsetX = config.offsetX or 0,
+        offsetY = config.offsetY or 0,
+        deferred = false,
+    })
     
-    if key == "utility" and (not settings.anchorConfig or not settings.anchorConfig.target or settings.anchorConfig.target == "" or settings.anchorConfig.target == "UIParent") and settings.anchorBelowEssential ~= false then
-        local target = "TavernUI.CDM.Essential"
-        local essentialViewer = _G[VIEWER_ESSENTIAL]
-        
-        if not essentialViewer then
-            CDM.applyingAnchors[anchorHandleKey] = nil
-            return
-        end
-        
-        if not Anchor:Exists(target) then
-            CDM.applyingAnchors[anchorHandleKey] = nil
-            return
-        end
-        
-        if module.UpdateCDMAnchorMetadata then
-            module.UpdateCDMAnchorMetadata(VIEWER_ESSENTIAL, essentialViewer)
-        end
-        
-        do
-            local needsUpdate = true
-            if CDM.anchorHandles and CDM.anchorHandles[anchorHandleKey] then
-                local currentHandle = CDM.anchorHandles[anchorHandleKey]
-                local ok, currentConfig = pcall(function() return currentHandle and currentHandle.config end)
-                if ok and currentConfig and currentConfig.target then
-                    local currentTarget = currentConfig.target
-                    local currentPoint = currentConfig.point
-                    local currentRelativePoint = currentConfig.relativePoint
-                    local currentOffsetX = currentConfig.offsetX
-                    local currentOffsetY = currentConfig.offsetY
-                    
-                    local newPoint = settings.anchorPoint or "TOP"
-                    local newRelativePoint = settings.anchorRelativePoint or "BOTTOM"
-                    local newOffsetX = settings.anchorOffsetX or 0
-                    local newOffsetY = -(settings.anchorGap or 5)
-                    
-                    if currentTarget == target and 
-                       currentPoint == newPoint and 
-                       currentRelativePoint == newRelativePoint and
-                       math.abs((currentOffsetX or 0) - newOffsetX) < 0.1 and
-                       math.abs((currentOffsetY or 0) - newOffsetY) < 0.1 then
-                        needsUpdate = false
-                    else
-                        pcall(function() currentHandle:Release() end)
-                        CDM.anchorHandles[anchorHandleKey] = nil
-                    end
-                else
-                    CDM.anchorHandles[anchorHandleKey] = nil
-                end
-            end
-            
-            if needsUpdate then
-                if not CDM.anchorHandles then
-                    CDM.anchorHandles = {}
-                end
-                local handle = Anchor:AnchorTo(viewer, {
-                    target = target,
-                    point = settings.anchorPoint or "TOP",
-                    relativePoint = settings.anchorRelativePoint or "BOTTOM",
-                    offsetX = settings.anchorOffsetX or 0,
-                    offsetY = -(settings.anchorGap or 5),
-                    deferred = false,
-                })
-                
-                if handle then
-                    CDM.anchorHandles[anchorHandleKey] = handle
-                end
-            end
-        end
-        CDM.applyingAnchors[anchorHandleKey] = nil
-        return
+    if handle then
+        CDM.anchorHandles[key] = handle
     end
-    
-    if CDM.anchorHandles and CDM.anchorHandles[anchorHandleKey] then
-        pcall(function() CDM.anchorHandles[anchorHandleKey]:Release() end)
-        CDM.anchorHandles[anchorHandleKey] = nil
-    end
-    
-    CDM.applyingAnchors[anchorHandleKey] = nil
 end
 
-if not CDM.anchorTimers then
-    CDM.anchorTimers = {}
-end
-
-local function ApplyEssentialAnchor()
-    if CDM.anchorTimers.essential then
-        CDM.anchorTimers.essential:Cancel()
-    end
-    CDM.anchorTimers.essential = C_Timer.NewTimer(0.05, function()
-        CDM.anchorTimers.essential = nil
-        ApplyAnchor(VIEWER_ESSENTIAL, "essential", "essential")
-    end)
-end
-
-local function ApplyUtilityAnchor()
-    if CDM.anchorTimers.utility then
-        CDM.anchorTimers.utility:Cancel()
-    end
-    CDM.anchorTimers.utility = C_Timer.NewTimer(0.05, function()
-        CDM.anchorTimers.utility = nil
-        ApplyAnchor(VIEWER_UTILITY, "utility", "utility")
+local function ApplyAnchorWithTimer(key, viewerName)
+    local timer = CDM.anchorTimers[key]
+    if timer then timer:Cancel() end
+    
+    CDM.anchorTimers[key] = C_Timer.NewTimer(0.05, function()
+        CDM.anchorTimers[key] = nil
+        ApplyAnchor(viewerName, key)
     end)
 end
 
@@ -369,92 +119,228 @@ local function RegisterAnchors()
     end
 end
 
-local function UpdateCDMAnchorMetadata(viewerName, viewer)
-    if not Anchor then return end
+-- Store current position of a viewer frame
+local function GetViewerPosition(viewer)
+    if not viewer or not viewer.GetPoint then return nil end
     
-    local anchorName = viewerName == VIEWER_ESSENTIAL and "TavernUI.CDM.Essential" or "TavernUI.CDM.Utility"
+    local point, relativeTo, relativePoint, x, y = viewer:GetPoint(1)
+    if not point then return nil end
     
-    if not Anchor:Exists(anchorName) then
+    -- Store relativeTo as a name if it's a frame, to avoid stale references
+    local relativeToName = nil
+    if relativeTo then
+        if relativeTo.GetName then
+            relativeToName = relativeTo:GetName()
+        elseif relativeTo == UIParent then
+            relativeToName = "UIParent"
+        end
+    end
+    
+    return {
+        point = point,
+        relativeToName = relativeToName,
+        relativePoint = relativePoint,
+        x = x or 0,
+        y = y or 0,
+    }
+end
+
+-- Check if position has changed significantly
+local function HasPositionChanged(key, startPos)
+    if not startPos then return false end
+    
+    local viewerName = key == "essential" and VIEWER_ESSENTIAL or VIEWER_UTILITY
+    local viewer = _G[viewerName]
+    if not viewer then return false end
+    
+    local currentPos = GetViewerPosition(viewer)
+    if not currentPos then return true end -- Can't get position, assume changed
+    
+    -- Check if offsets changed significantly (more than 1 pixel)
+    local xDiff = math.abs(currentPos.x - startPos.x)
+    local yDiff = math.abs(currentPos.y - startPos.y)
+    
+    if xDiff > 1 or yDiff > 1 then
+        return true
+    end
+    
+    -- Check if anchor points changed
+    if currentPos.point ~= startPos.point then
+        return true
+    end
+    
+    if currentPos.relativePoint ~= startPos.relativePoint then
+        return true
+    end
+    
+    -- Check if relative frame changed
+    if currentPos.relativeToName ~= startPos.relativeToName then
+        return true
+    end
+    
+    return false
+end
+
+-- Called when Edit Mode opens
+local function OnEditModeEnter()
+    if not module:IsEnabled() then return end
+    
+    CDM.editModeStartPositions = {}
+    
+    -- Store positions for frames that have anchoring enabled
+    for _, key in ipairs({"essential", "utility"}) do
+        if ShouldApplyAnchor(key) then
+            local viewerName = key == "essential" and VIEWER_ESSENTIAL or VIEWER_UTILITY
+            local viewer = _G[viewerName]
+            if viewer then
+                CDM.editModeStartPositions[key] = GetViewerPosition(viewer)
+            end
+        end
+    end
+end
+
+-- Called when Edit Mode saves/closes
+local function OnEditModeSave()
+    if not module:IsEnabled() then return end
+    
+    -- Check each viewer that had anchoring
+    for _, key in ipairs({"essential", "utility"}) do
+        local startPos = CDM.editModeStartPositions[key]
+        
+        -- Only check if we had a start position (meaning anchoring was enabled)
+        if startPos then
+            if HasPositionChanged(key, startPos) then
+                -- User moved the frame in edit mode - disconnect anchoring
+                ReleaseAnchor(key)
+                ClearAnchorConfig(key)
+                
+                -- Notify about the change
+                if DEFAULT_CHAT_FRAME then
+                    DEFAULT_CHAT_FRAME:AddMessage("|cFFFFAA00CDM:|r " .. (key == "essential" and "Essential" or "Utility") .. " anchoring disabled (frame moved in Edit Mode)")
+                end
+                
+                -- Refresh the options UI if it's open
+                if module.RefreshOptions then
+                    C_Timer.After(0.1, function()
+                        module:RefreshOptions(false)
+                    end)
+                end
+            else
+                -- Position didn't change, re-apply anchor to maintain the connection
+                local viewerName = key == "essential" and VIEWER_ESSENTIAL or VIEWER_UTILITY
+                ApplyAnchorWithTimer(key, viewerName)
+            end
+        end
+    end
+    
+    -- Clear stored positions
+    CDM.editModeStartPositions = {}
+end
+
+local function HookEditMode()
+    if CDM.editModeHooked then return end
+    
+    local EditModeManagerFrame = _G.EditModeManagerFrame
+    if EditModeManagerFrame then
+        -- When edit mode opens, store positions
+        EditModeManagerFrame:HookScript("OnShow", function()
+            C_Timer.After(0.1, OnEditModeEnter)
+        end)
+        
+        -- When edit mode closes, check for changes
+        EditModeManagerFrame:HookScript("OnHide", function()
+            C_Timer.After(0.1, OnEditModeSave)
+        end)
+    end
+    
+    -- Also hook the save event
+    local eventFrame = CreateFrame("Frame")
+    eventFrame:RegisterEvent("EDIT_MODE_LAYOUTS_UPDATED")
+    eventFrame:SetScript("OnEvent", function(self, event)
+        if event == "EDIT_MODE_LAYOUTS_UPDATED" then
+            C_Timer.After(0.1, OnEditModeSave)
+        end
+    end)
+    
+    -- Hook C_EditMode.SaveLayouts if available
+    local C_EditMode = _G.C_EditMode
+    if C_EditMode and C_EditMode.SaveLayouts then
+        hooksecurefunc(C_EditMode, "SaveLayouts", function()
+            C_Timer.After(0.1, OnEditModeSave)
+        end)
+    end
+    
+    CDM.editModeHooked = true
+end
+
+local function InitializeEditMode()
+    if not module:IsEnabled() then return end
+    HookEditMode()
+end
+
+local function ApplyAnchorsAfterLayout(trackerKey)
+    if InCombatLockdown() then return end
+    
+    -- Don't apply anchors if we're in edit mode
+    local EditModeManagerFrame = _G.EditModeManagerFrame
+    if EditModeManagerFrame and EditModeManagerFrame:IsShown() then
         return
     end
     
-    local GetFrameData = module.GetFrameData
-    if not GetFrameData then return end
-    
-    local data = GetFrameData(viewer)
-    
-    Anchor:UpdateMetadata(anchorName, {
-        row1Width = data.row1Width,
-        totalHeight = data.totalHeight,
-    })
+    if trackerKey == "essential" then
+        if ShouldApplyAnchor("essential") then
+            ApplyAnchorWithTimer("essential", VIEWER_ESSENTIAL)
+        end
+        if ShouldApplyAnchor("utility") then
+            ApplyAnchorWithTimer("utility", VIEWER_UTILITY)
+        end
+    elseif trackerKey == "utility" then
+        if ShouldApplyAnchor("utility") then
+            ApplyAnchorWithTimer("utility", VIEWER_UTILITY)
+        end
+    end
 end
 
-local function HookViewerForEditMode(viewerName, viewer)
-    if not viewer or viewer.__cdmEditModeHooked then return end
-    
-    local key = viewerName == VIEWER_ESSENTIAL and "essential" or "utility"
-    
-    local originalOnDragStart = viewer:GetScript("OnDragStart")
-    local originalOnDragStop = viewer:GetScript("OnDragStop")
-    
-    viewer:SetScript("OnDragStart", function(self)
-        if originalOnDragStart then
-            originalOnDragStart(self)
-        end
-        
-        if IsEditModeActive() then
-            local point, relativeTo, relativePoint, x, y = self:GetPoint()
-            self._cdmDragStartPoint = {
-                point = point,
-                relativeTo = relativeTo,
-                relativePoint = relativePoint,
-                x = x,
-                y = y
-            }
-        end
-    end)
-    
-    viewer:SetScript("OnDragStop", function(self)
-        if originalOnDragStop then
-            originalOnDragStop(self)
-        end
-        
-        if IsEditModeActive() and self._cdmDragStartPoint then
-            local newPoint, newRelativeTo, newRelativePoint, newX, newY = self:GetPoint()
-            local startPoint = self._cdmDragStartPoint
-            
-            local moved = false
-            if newRelativeTo ~= startPoint.relativeTo then
-                moved = true
-            elseif math.abs(newX - startPoint.x) > 1 or math.abs(newY - startPoint.y) > 1 then
-                moved = true
-            end
-            
-            if moved then
-                local anchorHandle = CDM.anchorHandles and CDM.anchorHandles[key]
-                if anchorHandle then
-                    local ok, isReleased = pcall(function() return anchorHandle.released end)
-                    if ok and not isReleased then
-                        pcall(function() anchorHandle:Release() end)
-                        CDM.anchorHandles[key] = nil
-                    end
-                end
-            end
-            
-            self._cdmDragStartPoint = nil
-        end
-    end)
-    
-    viewer.__cdmEditModeHooked = true
+module.ApplyEssentialAnchor = function()
+    ApplyAnchorWithTimer("essential", VIEWER_ESSENTIAL)
 end
 
-if module then
-    module.SaveEssentialPosition = SaveEssentialPosition
-    module.SaveUtilityPosition = SaveUtilityPosition
-    module.ApplyEssentialAnchor = ApplyEssentialAnchor
-    module.ApplyUtilityAnchor = ApplyUtilityAnchor
-    module.RegisterAnchors = RegisterAnchors
-    module.UpdateCDMAnchorMetadata = UpdateCDMAnchorMetadata
-    module.HookViewerForEditMode = HookViewerForEditMode
-    module.IsEditModeActive = IsEditModeActive
+module.ApplyUtilityAnchor = function()
+    ApplyAnchorWithTimer("utility", VIEWER_UTILITY)
+end
+
+module.RegisterAnchors = RegisterAnchors
+module.InitializeEditMode = InitializeEditMode
+module.ShouldApplyAnchors = ShouldApplyAnchor
+module.ApplyAnchorsAfterLayout = ApplyAnchorsAfterLayout
+
+local function CleanupAnchors()
+    local Anchor = LibStub("LibAnchorRegistry-1.0", true)
+    
+    if Anchor then
+        Anchor:Unregister("TavernUI.CDM.Essential")
+        Anchor:Unregister("TavernUI.CDM.Utility")
+    end
+    
+    for key, handle in pairs(CDM.anchorHandles) do
+        if handle then
+            pcall(function() handle:Release() end)
+        end
+        CDM.anchorHandles[key] = nil
+    end
+    
+    for key, timer in pairs(CDM.anchorTimers) do
+        if timer then
+            timer:Cancel()
+        end
+        CDM.anchorTimers[key] = nil
+    end
+    
+    CDM.editModeStartPositions = {}
+end
+
+module.CleanupAnchors = CleanupAnchors
+
+if module:IsEnabled() then
+    InitializeEditMode()
 end

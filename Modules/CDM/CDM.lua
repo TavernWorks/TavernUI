@@ -1,14 +1,19 @@
 -- TavernUI CDM Module
+-- Core layout engine for cooldown viewers
 
 local TavernUI = LibStub("AceAddon-3.0"):GetAddon("TavernUI")
 local module = TavernUI:NewModule("CDM", "AceEvent-3.0")
-
-local Anchor = LibStub("LibAnchorRegistry-1.0", true)
 
 local defaults = {
     essential = {
         enabled = true,
         anchorConfig = nil,
+        showKeybinds = false,
+        keybindSize = 10,
+        keybindPoint = "TOPLEFT",
+        keybindOffsetX = 2,
+        keybindOffsetY = -2,
+        keybindColor = {r = 1, g = 1, b = 1, a = 1},
         rows = {
             {iconCount = 4, iconSize = 50, padding = -8, yOffset = 0, aspectRatioCrop = 1.0, zoom = 0, iconBorderSize = 0, iconBorderColor = {r = 0, g = 0, b = 0, a = 1}, rowBorderSize = 0, rowBorderColor = {r = 0, g = 0, b = 0, a = 1}, durationSize = 18, durationPoint = "CENTER", durationOffsetX = 0, durationOffsetY = 0, stackSize = 16, stackPoint = "BOTTOMRIGHT", stackOffsetX = 0, stackOffsetY = 0},
             {iconCount = 4, iconSize = 50, padding = -8, yOffset = 0, aspectRatioCrop = 1.0, zoom = 0, iconBorderSize = 0, iconBorderColor = {r = 0, g = 0, b = 0, a = 1}, rowBorderSize = 0, rowBorderColor = {r = 0, g = 0, b = 0, a = 1}, durationSize = 18, durationPoint = "CENTER", durationOffsetX = 0, durationOffsetY = 0, stackSize = 16, stackPoint = "BOTTOMRIGHT", stackOffsetX = 0, stackOffsetY = 0},
@@ -22,6 +27,12 @@ local defaults = {
         anchorOffsetX = 0,
         anchorGap = 5,
         anchorConfig = nil,
+        showKeybinds = false,
+        keybindSize = 10,
+        keybindPoint = "TOPLEFT",
+        keybindOffsetX = 2,
+        keybindOffsetY = -2,
+        keybindColor = {r = 1, g = 1, b = 1, a = 1},
         rows = {
             {iconCount = 6, iconSize = 42, padding = -8, yOffset = 0, aspectRatioCrop = 1.0, zoom = 0, iconBorderSize = 0, iconBorderColor = {r = 0, g = 0, b = 0, a = 1}, rowBorderSize = 0, rowBorderColor = {r = 0, g = 0, b = 0, a = 1}, durationSize = 18, durationPoint = "CENTER", durationOffsetX = 0, durationOffsetY = 0, stackSize = 16, stackPoint = "BOTTOMRIGHT", stackOffsetX = 0, stackOffsetY = 0},
         }
@@ -30,31 +41,30 @@ local defaults = {
 
 TavernUI:RegisterModuleDefaults("CDM", defaults, true)
 
-local VIEWER_ESSENTIAL = "EssentialCooldownViewer"
-local VIEWER_UTILITY = "UtilityCooldownViewer"
+module.VIEWER_ESSENTIAL = "EssentialCooldownViewer"
+module.VIEWER_UTILITY = "UtilityCooldownViewer"
+
+local VIEWERS = {
+    {name = module.VIEWER_ESSENTIAL, key = "essential"},
+    {name = module.VIEWER_UTILITY, key = "utility"},
+}
 
 local CDM = {
     frameData = {},
     applying = {},
     settingsVersion = {},
-    anchorHandles = {},
     hooked = {},
     initialized = false,
 }
 
 module.CDM = CDM
 
-local function GetDB()
-    return module:GetDB()
+local function GetSettings(key)
+    local db = module:GetDB()
+    return db and db[key]
 end
 
-local function GetSettings(key)
-    local db = GetDB()
-    if db and db[key] then
-        return db[key]
-    end
-    return nil
-end
+module.GetSettings = GetSettings
 
 local function IsIcon(child)
     if not child then return false end
@@ -88,7 +98,7 @@ local function GetActiveRows(settings)
     local activeRows = {}
     if not settings or not settings.rows then return activeRows end
     
-    for i, row in ipairs(settings.rows) do
+    for _, row in ipairs(settings.rows) do
         if row.iconCount and row.iconCount > 0 then
             table.insert(activeRows, row)
         end
@@ -101,7 +111,7 @@ local function GetCapacity(settings)
     local total = 0
     if not settings or not settings.rows then return total end
     
-    for i, row in ipairs(settings.rows) do
+    for _, row in ipairs(settings.rows) do
         total = total + (row.iconCount or 0)
     end
     
@@ -114,6 +124,8 @@ local function GetFrameData(viewer)
     end
     return CDM.frameData[viewer]
 end
+
+module.GetFrameData = GetFrameData
 
 local function SetupIconOnce(icon)
     if not icon or icon.__cdmSetup then return end
@@ -215,6 +227,16 @@ local function ApplyIconBorder(icon, borderSize, borderColor)
     end
 end
 
+local FONT_PATH = "Fonts\\FRIZQT__.TTF"
+
+local function SetFontStringPoint(fs, point, relativeTo, relativePoint, offsetX, offsetY)
+    if not fs or not fs.SetFont then return end
+    pcall(function()
+        fs:ClearAllPoints()
+        fs:SetPoint(point, relativeTo, relativePoint, offsetX, offsetY)
+    end)
+end
+
 local function ApplyIconTextSettings(icon, rowConfig)
     if not icon then return end
     
@@ -227,51 +249,39 @@ local function ApplyIconTextSettings(icon, rowConfig)
     local stackOffsetX = rowConfig.stackOffsetX or 0
     local stackOffsetY = rowConfig.stackOffsetY or 0
     
-    if durationSize and durationSize > 0 then
+    if durationSize > 0 then
         local cooldown = icon.Cooldown or icon.cooldown
         if cooldown then
             if cooldown.text then
-                cooldown.text:SetFont("Fonts\\FRIZQT__.TTF", durationSize, "OUTLINE")
-                pcall(function()
-                    cooldown.text:ClearAllPoints()
-                    cooldown.text:SetPoint(durationPoint, icon, durationPoint, durationOffsetX, durationOffsetY)
-                end)
+                cooldown.text:SetFont(FONT_PATH, durationSize, "OUTLINE")
+                SetFontStringPoint(cooldown.text, durationPoint, icon, durationPoint, durationOffsetX, durationOffsetY)
             end
             local ok, regions = pcall(function() return { cooldown:GetRegions() } end)
             if ok and regions then
                 for _, region in ipairs(regions) do
                     if region and region.GetObjectType and region:GetObjectType() == "FontString" then
-                        region:SetFont("Fonts\\FRIZQT__.TTF", durationSize, "OUTLINE")
-                        pcall(function()
-                            region:ClearAllPoints()
-                            region:SetPoint(durationPoint, icon, durationPoint, durationOffsetX, durationOffsetY)
-                        end)
+                        region:SetFont(FONT_PATH, durationSize, "OUTLINE")
+                        SetFontStringPoint(region, durationPoint, icon, durationPoint, durationOffsetX, durationOffsetY)
                     end
                 end
             end
         end
     end
     
-    if stackSize and stackSize > 0 then
+    if stackSize > 0 then
         local chargeFrame = icon.ChargeCount
         if chargeFrame then
             local fs = chargeFrame.Current or chargeFrame.Count or chargeFrame.count
-            if fs and fs.SetFont then
-                fs:SetFont("Fonts\\FRIZQT__.TTF", stackSize, "OUTLINE")
-                pcall(function()
-                    fs:ClearAllPoints()
-                    fs:SetPoint(stackPoint, icon, stackPoint, stackOffsetX, stackOffsetY)
-                end)
+            if fs then
+                fs:SetFont(FONT_PATH, stackSize, "OUTLINE")
+                SetFontStringPoint(fs, stackPoint, icon, stackPoint, stackOffsetX, stackOffsetY)
             end
         end
         
         local countText = icon.Count or icon.count
-        if countText and countText.SetFont then
-            countText:SetFont("Fonts\\FRIZQT__.TTF", stackSize, "OUTLINE")
-            pcall(function()
-                countText:ClearAllPoints()
-                countText:SetPoint(stackPoint, icon, stackPoint, stackOffsetX, stackOffsetY)
-            end)
+        if countText then
+            countText:SetFont(FONT_PATH, stackSize, "OUTLINE")
+            SetFontStringPoint(countText, stackPoint, icon, stackPoint, stackOffsetX, stackOffsetY)
         end
     end
 end
@@ -285,7 +295,6 @@ local function StyleIcon(icon, rowConfig)
     local zoom = rowConfig.zoom or 0
     local iconBorderSize = rowConfig.iconBorderSize or 0
     local iconBorderColor = rowConfig.iconBorderColor or {r = 0, g = 0, b = 0, a = 1}
-    
     local iconSize = rowConfig.size or 50
     local width = iconSize
     local height = iconSize / aspectRatioCrop
@@ -303,15 +312,15 @@ local function ApplyRowBorder(viewer, rowNum, rowConfig, rowWidth, rowHeight, ro
     if not viewer or not rowConfig then return end
     
     local rowBorderSize = rowConfig.rowBorderSize or 0
+    local borderKey = "__cdmRowBorder" .. rowNum
+    
     if rowBorderSize <= 0 then
-        local borderKey = "__cdmRowBorder" .. rowNum
         if viewer[borderKey] then
             viewer[borderKey]:Hide()
         end
         return
     end
     
-    local borderKey = "__cdmRowBorder" .. rowNum
     if not viewer[borderKey] then
         viewer[borderKey] = viewer:CreateTexture(nil, "BACKGROUND", nil, -7)
     end
@@ -328,20 +337,113 @@ local function ApplyRowBorder(viewer, rowNum, rowConfig, rowWidth, rowHeight, ro
     viewer[borderKey]:Show()
 end
 
-local function UpdateCDMAnchorMetadata(viewerName, viewer)
-    if module.UpdateCDMAnchorMetadata then
-        module.UpdateCDMAnchorMetadata(viewerName, viewer)
-    end
-end
-
-module.GetFrameData = GetFrameData
-
 local function IncrementSettingsVersion(trackerKey)
     if trackerKey then
         CDM.settingsVersion[trackerKey] = (CDM.settingsVersion[trackerKey] or 0) + 1
     else
         CDM.settingsVersion.essential = (CDM.settingsVersion.essential or 0) + 1
         CDM.settingsVersion.utility = (CDM.settingsVersion.utility or 0) + 1
+    end
+end
+
+local function BuildRowConfigs(activeRows, iconsToLayout)
+    local rowConfigs = {}
+    local iconIndex = 1
+    
+    for _, row in ipairs(activeRows) do
+        local iconsInRow = math.min(row.iconCount, #iconsToLayout - iconIndex + 1)
+        if iconsInRow > 0 then
+            table.insert(rowConfigs, {
+                count = row.iconCount,
+                size = row.iconSize or 50,
+                padding = row.padding or 0,
+                yOffset = row.yOffset or 0,
+                iconsInRow = iconsInRow,
+                aspectRatioCrop = row.aspectRatioCrop or 1.0,
+                zoom = row.zoom or 0,
+                iconBorderSize = row.iconBorderSize or 0,
+                iconBorderColor = row.iconBorderColor or {r = 0, g = 0, b = 0, a = 1},
+                rowBorderSize = row.rowBorderSize or 0,
+                rowBorderColor = row.rowBorderColor or {r = 0, g = 0, b = 0, a = 1},
+                durationSize = row.durationSize or 18,
+                durationPoint = row.durationPoint or "CENTER",
+                durationOffsetX = row.durationOffsetX or 0,
+                durationOffsetY = row.durationOffsetY or 0,
+                stackSize = row.stackSize or 16,
+                stackPoint = row.stackPoint or "BOTTOMRIGHT",
+                stackOffsetX = row.stackOffsetX or 0,
+                stackOffsetY = row.stackOffsetY or 0,
+            })
+            iconIndex = iconIndex + iconsInRow
+        end
+    end
+    
+    return rowConfigs
+end
+
+local function CalculateRowDimensions(rowConfigs)
+    local maxRowWidth = 0
+    local totalHeight = 0
+    local rowWidths = {}
+    local rowGap = 5
+    
+    for rowNum, rowConfig in ipairs(rowConfigs) do
+        local iconsInRow = rowConfig.iconsInRow
+        local iconSize = rowConfig.size
+        local aspectRatio = rowConfig.aspectRatioCrop or 1.0
+        local iconHeight = iconSize / aspectRatio
+        
+        local rowWidth = (iconsInRow * iconSize) + ((iconsInRow - 1) * rowConfig.padding)
+        rowWidths[rowNum] = rowWidth
+        maxRowWidth = math.max(maxRowWidth, rowWidth)
+        
+        totalHeight = totalHeight + iconHeight
+        if rowNum > 1 then
+            totalHeight = totalHeight + rowGap
+        end
+    end
+    
+    return maxRowWidth, totalHeight, rowWidths, rowGap
+end
+
+local function LayoutIcons(viewer, iconsToLayout, rowConfigs, rowWidths, rowGap, totalHeight)
+    local currentY = totalHeight / 2
+    local iconIndex = 1
+    
+    for rowNum, rowConfig in ipairs(rowConfigs) do
+        local iconsInRow = rowConfig.iconsInRow
+        local iconSize = rowConfig.size
+        local aspectRatio = rowConfig.aspectRatioCrop or 1.0
+        local iconHeight = iconSize / aspectRatio
+        local rowWidth = rowWidths[rowNum]
+        
+        local halfRowWidth = rowWidth / 2
+        local rowStartX = -halfRowWidth + (iconSize / 2)
+        local rowCenterY = currentY - (iconHeight / 2) + rowConfig.yOffset
+        
+        for i = 1, iconsInRow do
+            local icon = iconsToLayout[iconIndex]
+            local iconOffsetX = rowStartX + ((i - 1) * (iconSize + rowConfig.padding))
+            
+            pcall(function()
+                StyleIcon(icon, rowConfig)
+                icon:ClearAllPoints()
+                icon:SetPoint("CENTER", viewer, "CENTER", iconOffsetX, rowCenterY)
+            end)
+            
+            if module.ApplyKeybindToIcon then
+                pcall(function() module.ApplyKeybindToIcon(icon, viewer:GetName()) end)
+            end
+            
+            icon:Show()
+            iconIndex = iconIndex + 1
+        end
+        
+        pcall(function()
+            ApplyRowBorder(viewer, rowNum, rowConfig, rowWidth, iconHeight, 0, rowCenterY)
+        end)
+        
+        currentY = currentY - iconHeight - rowGap
     end
 end
 
@@ -388,94 +490,10 @@ local function LayoutViewer(viewerName, trackerKey)
         return
     end
     
-    local rowConfigs = {}
-    local iconIndex = 1
-    for rowNum, row in ipairs(activeRows) do
-        local iconsInRow = math.min(row.iconCount, #iconsToLayout - iconIndex + 1)
-        if iconsInRow > 0 then
-            table.insert(rowConfigs, {
-                count = row.iconCount,
-                size = row.iconSize or 50,
-                padding = row.padding or 0,
-                yOffset = row.yOffset or 0,
-                iconsInRow = iconsInRow,
-                aspectRatioCrop = row.aspectRatioCrop or 1.0,
-                zoom = row.zoom or 0,
-                iconBorderSize = row.iconBorderSize or 0,
-                iconBorderColor = row.iconBorderColor or {r = 0, g = 0, b = 0, a = 1},
-                rowBorderSize = row.rowBorderSize or 0,
-                rowBorderColor = row.rowBorderColor or {r = 0, g = 0, b = 0, a = 1},
-                durationSize = row.durationSize or 18,
-                durationPoint = row.durationPoint or "CENTER",
-                durationOffsetX = row.durationOffsetX or 0,
-                durationOffsetY = row.durationOffsetY or 0,
-                stackSize = row.stackSize or 16,
-                stackPoint = row.stackPoint or "BOTTOMRIGHT",
-                stackOffsetX = row.stackOffsetX or 0,
-                stackOffsetY = row.stackOffsetY or 0,
-            })
-            iconIndex = iconIndex + iconsInRow
-        end
-    end
+    local rowConfigs = BuildRowConfigs(activeRows, iconsToLayout)
+    local maxRowWidth, totalHeight, rowWidths, rowGap = CalculateRowDimensions(rowConfigs)
     
-    local maxRowWidth = 0
-    local totalHeight = 0
-    local rowWidths = {}
-    local rowGap = 5
-    
-    for rowNum, rowConfig in ipairs(rowConfigs) do
-        local iconsInRow = rowConfig.iconsInRow
-        local iconSize = rowConfig.size
-        local aspectRatio = rowConfig.aspectRatioCrop or 1.0
-        local iconHeight = iconSize / aspectRatio
-        
-        local rowWidth = (iconsInRow * iconSize) + ((iconsInRow - 1) * rowConfig.padding)
-        rowWidths[rowNum] = rowWidth
-        maxRowWidth = math.max(maxRowWidth, rowWidth)
-        
-        totalHeight = totalHeight + iconHeight
-        if rowNum > 1 then
-            totalHeight = totalHeight + rowGap
-        end
-    end
-    
-    local currentY = totalHeight / 2
-    iconIndex = 1
-    
-    for rowNum, rowConfig in ipairs(rowConfigs) do
-        local iconsInRow = rowConfig.iconsInRow
-        local iconSize = rowConfig.size
-        local aspectRatio = rowConfig.aspectRatioCrop or 1.0
-        local iconHeight = iconSize / aspectRatio
-        local rowWidth = rowWidths[rowNum]
-        
-        local halfRowWidth = rowWidth / 2
-        local rowStartX = -halfRowWidth + (iconSize / 2)
-        local rowCenterY = currentY - (iconHeight / 2) + rowConfig.yOffset
-        
-        for i = 1, iconsInRow do
-            local icon = iconsToLayout[iconIndex]
-            local iconOffsetX = rowStartX + ((i - 1) * (iconSize + rowConfig.padding))
-            local iconOffsetY = rowCenterY
-            
-            pcall(function()
-                StyleIcon(icon, rowConfig)
-                icon:ClearAllPoints()
-                icon:SetPoint("CENTER", viewer, "CENTER", iconOffsetX, iconOffsetY)
-            end)
-            icon:Show()
-            iconIndex = iconIndex + 1
-        end
-        
-        local aspectRatio = rowConfig.aspectRatioCrop or 1.0
-        local iconHeight = iconSize / aspectRatio
-        
-        pcall(function()
-            ApplyRowBorder(viewer, rowNum, rowConfig, rowWidth, iconHeight, 0, rowCenterY)
-        end)
-        
-        currentY = currentY - iconHeight - rowGap
-    end
+    LayoutIcons(viewer, iconsToLayout, rowConfigs, rowWidths, rowGap, totalHeight)
     
     local data = GetFrameData(viewer)
     data.row1Width = rowWidths[1] or maxRowWidth
@@ -497,85 +515,49 @@ local function LayoutViewer(viewerName, trackerKey)
     CDM.applying[trackerKey] = false
     viewer.__cdmLayoutRunning = nil
     
-    UpdateCDMAnchorMetadata(viewerName, viewer)
-    
-    if not InCombatLockdown() then
-        if trackerKey == "essential" then
-            if module.ApplyEssentialAnchor then module.ApplyEssentialAnchor() end
-            if module.ApplyUtilityAnchor then module.ApplyUtilityAnchor() end
-        elseif trackerKey == "utility" then
-            if module.ApplyUtilityAnchor then module.ApplyUtilityAnchor() end
-        end
+    if module.ApplyAnchorsAfterLayout then
+        module.ApplyAnchorsAfterLayout(trackerKey)
     end
 end
 
-local function HookViewer(viewerName, trackerKey)
-    local viewer = _G[viewerName]
-    if not viewer then return end
-    if CDM.hooked[trackerKey] then return end
+local function ScheduleLayoutCheck(viewer, viewerName, trackerKey, immediate)
+    if viewer.__cdmTimer then
+        viewer.__cdmTimer:Cancel()
+        viewer.__cdmTimer = nil
+    end
     
-    CDM.hooked[trackerKey] = true
+    if not viewer:IsShown() or not module:IsEnabled() then
+        return
+    end
     
-    viewer:HookScript("OnShow", function(self)
-        if not module:IsEnabled() then return end
-        if self.__cdmUpdateFrame then
-            self.__cdmUpdateFrame:Show()
-        end
-        C_Timer.After(0.02, function()
-            if module:IsEnabled() and self:IsShown() then
-                LayoutViewer(viewerName, trackerKey)
-            end
-        end)
-    end)
+    local delay = immediate and 0 or (UnitAffectingCombat("player") and 1.0 or 0.5)
     
-    viewer:HookScript("OnHide", function(self)
-        if self.__cdmUpdateFrame then
-            self.__cdmUpdateFrame:Hide()
-        end
-    end)
-    
-    viewer:HookScript("OnSizeChanged", function(self)
-        if not module:IsEnabled() then return end
-        self.__cdmBlizzardCount = (self.__cdmBlizzardCount or 0) + 1
-        if self.__cdmLayoutSuppressed or self.__cdmLayoutRunning then
+    viewer.__cdmTimer = C_Timer.NewTimer(delay, function()
+        viewer.__cdmTimer = nil
+        
+        if not module:IsEnabled() or not viewer:IsShown() then
             return
         end
-        LayoutViewer(viewerName, trackerKey)
-    end)
-    
-    local updateFrame = CreateFrame("Frame")
-    viewer.__cdmUpdateFrame = updateFrame
-    
-    local lastIconCount = 0
-    local lastSettingsVersion = 0
-    local lastBlizzardLayoutCount = 0
-    
-    updateFrame:SetScript("OnUpdate", function(self, elapsed)
-        if not module:IsEnabled() then return end
         
-        viewer.__cdmElapsed = (viewer.__cdmElapsed or 0) + elapsed
-        
-        local updateInterval = UnitAffectingCombat("player") and 1.0 or 0.5
-        
-        if viewer.__cdmEventFired then
-            viewer.__cdmEventFired = nil
-            viewer.__cdmElapsed = 0
-        elseif viewer.__cdmElapsed < updateInterval then
+        if CDM.applying[trackerKey] then
+            ScheduleLayoutCheck(viewer, viewerName, trackerKey, false)
             return
-        else
-            viewer.__cdmElapsed = 0
         end
         
-        if CDM.applying[trackerKey] then return end
-        
-        if InCombatLockdown() then return end
+        if InCombatLockdown() then
+            ScheduleLayoutCheck(viewer, viewerName, trackerKey, false)
+            return
+        end
         
         local currentBlizzardCount = viewer.__cdmBlizzardCount or 0
         local currentVersion = CDM.settingsVersion[trackerKey] or 0
+        local lastBlizzardCount = viewer.__cdmLastBlizzardCount or 0
+        local lastVersion = viewer.__cdmLastVersion or 0
         
         local inGracePeriod = viewer.__cdmGraceUntil and GetTime() < viewer.__cdmGraceUntil
         if not inGracePeriod then
-            if currentBlizzardCount == lastBlizzardLayoutCount and currentVersion == lastSettingsVersion then
+            if currentBlizzardCount == lastBlizzardCount and currentVersion == lastVersion then
+                ScheduleLayoutCheck(viewer, viewerName, trackerKey, false)
                 return
             end
         end
@@ -583,14 +565,17 @@ local function HookViewer(viewerName, trackerKey)
         if viewer.__cdmGraceUntil and GetTime() >= viewer.__cdmGraceUntil then
             viewer.__cdmGraceUntil = nil
         end
-        lastBlizzardLayoutCount = currentBlizzardCount
+        
+        viewer.__cdmLastBlizzardCount = currentBlizzardCount
+        viewer.__cdmLastVersion = currentVersion
         
         local icons = CollectIcons(viewer)
         local count = #icons
+        local lastCount = viewer.__cdmLastIconCount or 0
         
         local needsLayout = false
         
-        if count ~= lastIconCount or currentVersion ~= lastSettingsVersion then
+        if count ~= lastCount or currentVersion ~= lastVersion then
             needsLayout = true
         end
         
@@ -605,17 +590,46 @@ local function HookViewer(viewerName, trackerKey)
         end
         
         if needsLayout then
-            lastIconCount = count
-            lastSettingsVersion = currentVersion
+            viewer.__cdmLastIconCount = count
             LayoutViewer(viewerName, trackerKey)
+        end
+        
+        ScheduleLayoutCheck(viewer, viewerName, trackerKey, false)
+    end)
+end
+
+local function HookViewer(viewerName, trackerKey)
+    local viewer = _G[viewerName]
+    if not viewer then return end
+    if CDM.hooked[trackerKey] then return end
+    
+    CDM.hooked[trackerKey] = true
+    
+    viewer:HookScript("OnShow", function(self)
+        if not module:IsEnabled() then return end
+        ScheduleLayoutCheck(self, viewerName, trackerKey, true)
+        C_Timer.After(0.02, function()
+            if module:IsEnabled() and self:IsShown() then
+                LayoutViewer(viewerName, trackerKey)
+            end
+        end)
+    end)
+    
+    viewer:HookScript("OnHide", function(self)
+        if self.__cdmTimer then
+            self.__cdmTimer:Cancel()
+            self.__cdmTimer = nil
         end
     end)
     
-    if viewer:IsShown() then
-        updateFrame:Show()
-    else
-        updateFrame:Hide()
-    end
+    viewer:HookScript("OnSizeChanged", function(self)
+        if not module:IsEnabled() then return end
+        self.__cdmBlizzardCount = (self.__cdmBlizzardCount or 0) + 1
+        if self.__cdmLayoutSuppressed or self.__cdmLayoutRunning then
+            return
+        end
+        LayoutViewer(viewerName, trackerKey)
+    end)
     
     local eventFrame = CreateFrame("Frame")
     eventFrame:RegisterEvent("SPELL_UPDATE_COOLDOWN")
@@ -625,9 +639,13 @@ local function HookViewer(viewerName, trackerKey)
         if not module:IsEnabled() then return end
         if InCombatLockdown() then return end
         if viewer:IsShown() then
-            viewer.__cdmEventFired = true
+            ScheduleLayoutCheck(viewer, viewerName, trackerKey, true)
         end
     end)
+    
+    if viewer:IsShown() then
+        ScheduleLayoutCheck(viewer, viewerName, trackerKey, false)
+    end
     
     C_Timer.After(0.02, function()
         if module:IsEnabled() and viewer:IsShown() then
@@ -641,12 +659,10 @@ local function Initialize()
     if CDM.initialized then return end
     CDM.initialized = true
     
-    if _G[VIEWER_ESSENTIAL] then
-        HookViewer(VIEWER_ESSENTIAL, "essential")
-    end
-    
-    if _G[VIEWER_UTILITY] then
-        HookViewer(VIEWER_UTILITY, "utility")
+    for _, viewerInfo in ipairs(VIEWERS) do
+        if _G[viewerInfo.name] then
+            HookViewer(viewerInfo.name, viewerInfo.key)
+        end
     end
     
     if module.RegisterAnchors then
@@ -679,8 +695,8 @@ function module:OnEnable()
             elseif event == "PLAYER_ENTERING_WORLD" then
                 local isLogin, isReload = ...
                 if not isLogin and not isReload then
-                    for _, viewerName in ipairs({VIEWER_ESSENTIAL, VIEWER_UTILITY}) do
-                        local viewer = _G[viewerName]
+                    for _, viewerInfo in ipairs(VIEWERS) do
+                        local viewer = _G[viewerInfo.name]
                         if viewer then
                             viewer.__cdmGraceUntil = GetTime() + 2.0
                         end
@@ -695,43 +711,22 @@ function module:OnEnable()
         end)
     end
     
-    if _G.EditModeManagerFrame and not CDM.editModeHooked then
-        _G.EditModeManagerFrame:HookScript("OnHide", function()
-            if module:IsEnabled() then
-                C_Timer.After(0.5, function()
-                    if not module:IsEnabled() or (module.IsEditModeActive and module.IsEditModeActive()) then return end
-                    
-                    if module.SaveEssentialPosition then module.SaveEssentialPosition() end
-                    if module.SaveUtilityPosition then module.SaveUtilityPosition() end
-                    
-                    C_Timer.After(0.1, function()
-                        if not module:IsEnabled() or (module.IsEditModeActive and module.IsEditModeActive()) then return end
-                        if module.ApplyEssentialAnchor then module.ApplyEssentialAnchor() end
-                        if module.ApplyUtilityAnchor then module.ApplyUtilityAnchor() end
-                    end)
-                end)
-            end
-        end)
-        CDM.editModeHooked = true
+    if module.InitializeEditMode then
+        module.InitializeEditMode()
     end
     
-    C_Timer.After(0.5, function()
-        if module:IsEnabled() then
-            local essentialViewer = _G[VIEWER_ESSENTIAL]
-            local utilityViewer = _G[VIEWER_UTILITY]
-            
-            if essentialViewer and module.HookViewerForEditMode then
-                module.HookViewerForEditMode(VIEWER_ESSENTIAL, essentialViewer)
-            end
-            if utilityViewer and module.HookViewerForEditMode then
-                module.HookViewerForEditMode(VIEWER_UTILITY, utilityViewer)
-            end
-        end
-    end)
-    
     C_Timer.After(0, function()
-        if module:IsEnabled() and (_G[VIEWER_ESSENTIAL] or _G[VIEWER_UTILITY]) then
-            Initialize()
+        if module:IsEnabled() then
+            local hasViewer = false
+            for _, viewerInfo in ipairs(VIEWERS) do
+                if _G[viewerInfo.name] then
+                    hasViewer = true
+                    break
+                end
+            end
+            if hasViewer then
+                Initialize()
+            end
         end
     end)
 end
@@ -744,29 +739,16 @@ function module:OnDisable()
         self.eventFrame:SetScript("OnEvent", nil)
     end
     
-    for _, viewerName in ipairs({VIEWER_ESSENTIAL, VIEWER_UTILITY}) do
-        local viewer = _G[viewerName]
-        if viewer then
-            if viewer.__cdmUpdateFrame then
-                viewer.__cdmUpdateFrame:Hide()
-                viewer.__cdmUpdateFrame:SetScript("OnUpdate", nil)
-            end
+    for _, viewerInfo in ipairs(VIEWERS) do
+        local viewer = _G[viewerInfo.name]
+        if viewer and viewer.__cdmTimer then
+            viewer.__cdmTimer:Cancel()
+            viewer.__cdmTimer = nil
         end
     end
     
-    if Anchor then
-        Anchor:Unregister("TavernUI.CDM.Essential")
-        Anchor:Unregister("TavernUI.CDM.Utility")
-    end
-    
-    if CDM.anchorHandles.utility then
-        CDM.anchorHandles.utility:Release()
-        CDM.anchorHandles.utility = nil
-    end
-    
-    if CDM.anchorHandles.essential then
-        CDM.anchorHandles.essential:Release()
-        CDM.anchorHandles.essential = nil
+    if module.CleanupAnchors then
+        module.CleanupAnchors()
     end
     
     for trackerKey in pairs(CDM.hooked) do
@@ -775,22 +757,6 @@ function module:OnDisable()
     
     CDM.applying.essential = false
     CDM.applying.utility = false
-    
-    if CDM.anchorTimers then
-        if CDM.anchorTimers.essential then
-            CDM.anchorTimers.essential:Cancel()
-            CDM.anchorTimers.essential = nil
-        end
-        if CDM.anchorTimers.utility then
-            CDM.anchorTimers.utility:Cancel()
-            CDM.anchorTimers.utility = nil
-        end
-    end
-    
-    if CDM.applyingAnchors then
-        CDM.applyingAnchors.essential = nil
-        CDM.applyingAnchors.utility = nil
-    end
 end
 
 function module:OnProfileChanged()
@@ -808,8 +774,12 @@ function module:RefreshAll()
     IncrementSettingsVersion()
     C_Timer.After(0.01, function()
         if module:IsEnabled() then
-            LayoutViewer(VIEWER_ESSENTIAL, "essential")
-            LayoutViewer(VIEWER_UTILITY, "utility")
+            for _, viewerInfo in ipairs(VIEWERS) do
+                LayoutViewer(viewerInfo.name, viewerInfo.key)
+            end
+            if module.UpdateAllKeybinds then
+                module.UpdateAllKeybinds()
+            end
         end
     end)
 end
