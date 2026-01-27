@@ -1,13 +1,17 @@
 -- TavernUI Core.lua
 
-local AF = LibStub("AbstractFramework", true) or _G.AbstractFramework
+local AceAddon         = LibStub("AceAddon-3.0")
+local AceDB            = LibStub("AceDB-3.0")
+local AceDBOptions     = LibStub("AceDBOptions-3.0")
+local AceConfig        = LibStub("AceConfig-3.0")
+local AceConfigDialog  = LibStub("AceConfigDialog-3.0")
+local AceConfigRegistry = LibStub("AceConfigRegistry-3.0")
 
-local TavernUI = LibStub("AceAddon-3.0"):NewAddon("TavernUI",
+local TavernUI = AceAddon:NewAddon("TavernUI",
     "AceConsole-3.0",
     "AceEvent-3.0"
 )
 
-TavernUI.AF = AF
 _G.TavernUI = TavernUI
 
 TavernUI.name = "TavernUI"
@@ -64,7 +68,7 @@ end
 
 function TavernUI:OnInitialize()
     -- Create DB with the complete defaults table (modules have already registered their defaults)
-    self.db = LibStub("AceDB-3.0"):New("TavernUIConfig", self.defaults, true)
+    self.db = AceDB:New("TavernUIConfig", self.defaults, true)
     -- Do NOT call RegisterDefaults again - it's already set via New()
     
     self.db.RegisterCallback(self, "OnProfileChanged", "RefreshConfig")
@@ -181,14 +185,14 @@ function TavernUI:InitializeOptions()
     local function getOptions()
         local options = self:GetOptions()
         if not options.args.profiles then
-            options.args.profiles = LibStub("AceDBOptions-3.0"):GetOptionsTable(self.db)
+            options.args.profiles = AceDBOptions:GetOptionsTable(self.db)
             options.args.profiles.order = 100
         end
         return options
     end
     
-    LibStub("AceConfig-3.0"):RegisterOptionsTable("TavernUI", getOptions)
-    self.optionsFrame = LibStub("AceConfigDialog-3.0"):AddToBlizOptions("TavernUI", "TavernUI")
+    AceConfig:RegisterOptionsTable("TavernUI", getOptions)
+    self.optionsFrame = AceConfigDialog:AddToBlizOptions("TavernUI", "TavernUI")
 end
 
 function TavernUI:RegisterModuleOptions(moduleName, moduleOptions, displayName)
@@ -236,29 +240,29 @@ function TavernUI:RegisterModuleOptions(moduleName, moduleOptions, displayName)
         end
     end
     
-    LibStub("AceConfigRegistry-3.0"):NotifyChange("TavernUI")
+    AceConfigRegistry:NotifyChange("TavernUI")
+end
+
+function TavernUI:FindModuleByName(searchName)
+    searchName = searchName:lower()
+    for name, module in self:IterateModules() do
+        if name:lower() == searchName then
+            return name
+        end
+    end
+    return nil
 end
 
 function TavernUI:OpenOptions(panel)
     panel = panel or "TavernUI"
-    LibStub("AceConfigDialog-3.0"):Open(panel)
+    AceConfigDialog:Open(panel)
 end
 
 function TavernUI:SlashCommand(input)
     input = input and input:gsub("^%s+", ""):gsub("%s+$", ""):lower() or ""
     
-    if input == "" or input == "help" then
-        self:PrintHelp()
-    elseif input == "config" or input == "options" then
+    if input == "" then
         self:OpenOptions()
-    elseif input == "modules" then
-        self:PrintModuleStatus()
-    elseif input:match("^enable%s+(.+)$") then
-        local moduleName = input:match("^enable%s+(.+)$")
-        self:ToggleModule(moduleName, true)
-    elseif input:match("^disable%s+(.+)$") then
-        local moduleName = input:match("^disable%s+(.+)$")
-        self:ToggleModule(moduleName, false)
     elseif input == "debug" then
         if self.db then
             self.db.profile.general.debug = not self.db.profile.general.debug
@@ -273,7 +277,18 @@ function TavernUI:SlashCommand(input)
             self:Print("Database not initialized.")
         end
     else
-        self:Print("Unknown command. Type /tui help for commands.")
+        local moduleName = self:FindModuleByName(input)
+        if moduleName then
+            local options = self:GetOptions()
+            if options.args.modules.args[moduleName] then
+                self:OpenOptions("TavernUI")
+                AceConfigDialog:SelectGroup("TavernUI", "modules", moduleName)
+            else
+                self:Print("Module found but has no options panel.")
+            end
+        else
+            self:Print("Unknown command. Use /tui to open config, /tui debug to toggle debug mode, or /tui reset to reset settings.")
+        end
     end
 end
 

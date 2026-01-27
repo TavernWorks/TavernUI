@@ -1,4 +1,4 @@
-﻿package-as: TavernUI
+package-as: TavernUI
 enable-nolib-creation: no
 
 curse-id: 1443486
@@ -15,8 +15,6 @@ externals:
     url: https://github.com/oUF-wow/oUF.git
   libs/LibDualSpec-1.0:
     url: https://github.com/AdiAddons/LibDualSpec-1.0.git
-  libs/AbstractFramework:
-    url: https://github.com/enderneko/AbstractFramework.git
   libs/OpenRaidLibrary:
     url: https://github.com/Tercioo/Open-Raid-Library.git
   libs/LibDogTag-3.0:
