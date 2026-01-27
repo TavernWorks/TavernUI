@@ -15,8 +15,7 @@ local defaults = {
         keybindOffsetY = -2,
         keybindColor = {r = 1, g = 1, b = 1, a = 1},
         rows = {
-            {iconCount = 4, iconSize = 50, padding = -8, yOffset = 0, aspectRatioCrop = 1.0, zoom = 0, iconBorderSize = 0, iconBorderColor = {r = 0, g = 0, b = 0, a = 1}, rowBorderSize = 0, rowBorderColor = {r = 0, g = 0, b = 0, a = 1}, durationSize = 18, durationPoint = "CENTER", durationOffsetX = 0, durationOffsetY = 0, stackSize = 16, stackPoint = "BOTTOMRIGHT", stackOffsetX = 0, stackOffsetY = 0},
-            {iconCount = 4, iconSize = 50, padding = -8, yOffset = 0, aspectRatioCrop = 1.0, zoom = 0, iconBorderSize = 0, iconBorderColor = {r = 0, g = 0, b = 0, a = 1}, rowBorderSize = 0, rowBorderColor = {r = 0, g = 0, b = 0, a = 1}, durationSize = 18, durationPoint = "CENTER", durationOffsetX = 0, durationOffsetY = 0, stackSize = 16, stackPoint = "BOTTOMRIGHT", stackOffsetX = 0, stackOffsetY = 0},
+            {name = "Default", iconCount = 4, iconSize = 50, padding = -8, yOffset = 0, aspectRatioCrop = 1.0, zoom = 0, iconBorderSize = 0, iconBorderColor = {r = 0, g = 0, b = 0, a = 1}, rowBorderSize = 0, rowBorderColor = {r = 0, g = 0, b = 0, a = 1}, durationSize = 18, durationPoint = "CENTER", durationOffsetX = 0, durationOffsetY = 0, stackSize = 16, stackPoint = "BOTTOMRIGHT", stackOffsetX = 0, stackOffsetY = 0},
         }
     },
     utility = {
@@ -34,7 +33,7 @@ local defaults = {
         keybindOffsetY = -2,
         keybindColor = {r = 1, g = 1, b = 1, a = 1},
         rows = {
-            {iconCount = 6, iconSize = 42, padding = -8, yOffset = 0, aspectRatioCrop = 1.0, zoom = 0, iconBorderSize = 0, iconBorderColor = {r = 0, g = 0, b = 0, a = 1}, rowBorderSize = 0, rowBorderColor = {r = 0, g = 0, b = 0, a = 1}, durationSize = 18, durationPoint = "CENTER", durationOffsetX = 0, durationOffsetY = 0, stackSize = 16, stackPoint = "BOTTOMRIGHT", stackOffsetX = 0, stackOffsetY = 0},
+            {name = "Default", iconCount = 6, iconSize = 42, padding = -8, yOffset = 0, aspectRatioCrop = 1.0, zoom = 0, iconBorderSize = 0, iconBorderColor = {r = 0, g = 0, b = 0, a = 1}, rowBorderSize = 0, rowBorderColor = {r = 0, g = 0, b = 0, a = 1}, durationSize = 18, durationPoint = "CENTER", durationOffsetX = 0, durationOffsetY = 0, stackSize = 16, stackPoint = "BOTTOMRIGHT", stackOffsetX = 0, stackOffsetY = 0},
         }
     },
     buff = {
@@ -47,7 +46,7 @@ local defaults = {
         keybindOffsetY = -2,
         keybindColor = {r = 1, g = 1, b = 1, a = 1},
         rows = {
-            {iconCount = 6, iconSize = 42, padding = -8, yOffset = 0, aspectRatioCrop = 1.0, zoom = 0, iconBorderSize = 0, iconBorderColor = {r = 0, g = 0, b = 0, a = 1}, rowBorderSize = 0, rowBorderColor = {r = 0, g = 0, b = 0, a = 1}, durationSize = 18, durationPoint = "CENTER", durationOffsetX = 0, durationOffsetY = 0, stackSize = 16, stackPoint = "BOTTOMRIGHT", stackOffsetX = 0, stackOffsetY = 0},
+            {name = "Default", iconCount = 6, iconSize = 42, padding = -8, yOffset = 0, aspectRatioCrop = 1.0, zoom = 0, iconBorderSize = 0, iconBorderColor = {r = 0, g = 0, b = 0, a = 1}, rowBorderSize = 0, rowBorderColor = {r = 0, g = 0, b = 0, a = 1}, durationSize = 18, durationPoint = "CENTER", durationOffsetX = 0, durationOffsetY = 0, stackSize = 16, stackPoint = "BOTTOMRIGHT", stackOffsetX = 0, stackOffsetY = 0},
         }
     },
 }

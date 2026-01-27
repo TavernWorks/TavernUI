@@ -1,6 +1,10 @@
 TavernUI Changelog
 ==================
 
+v1.0.0-beta-1c (2026-01-27)
+ - Fix ace includes wrapper xmls
+ - Feature namable rows, and defaults to one row of each type
+
 v1.0.0-beta-1a (2026-01-27)
  - Fix saving of buff settings
  - Fix sizing of KB in real time

@@ -69,6 +69,7 @@ local function MakeRowOption(key, rowIndex, optionKey, optionType, config)
         option.values = config.values or ANCHOR_POINTS
     elseif optionType == "color" then
         option.hasAlpha = config.hasAlpha or false
+    elseif optionType == "input" then
     end
 
     option.get = function()
@@ -135,6 +136,10 @@ local function MakeRowOption(key, rowIndex, optionKey, optionType, config)
             end
         end
         
+        if setPath == "name" then
+            module:RefreshOptions(true)
+        end
+        
         IncrementSettingsVersion(key)
         
         if module:IsEnabled() and not (module.CDM and module.CDM.refreshing) then
@@ -182,6 +187,12 @@ end
 local function BuildRowOptions(key, rowIndex, orderBase)
     local args = {}
     local order = orderBase or 1
+
+    args.rowName = MakeRowOption(key, rowIndex, "name", "input", {
+        order = order, name = "Row Name", desc = "Optional name for this row",
+        default = ""
+    })
+    order = order + 1
 
     args.iconCount = MakeRowOption(key, rowIndex, "iconCount", "range", {
         order = order, name = "Icon Count", desc = "Number of icons in this row",
@@ -312,6 +323,54 @@ local function BuildRowOptions(key, rowIndex, orderBase)
     order = order + 1
 
     args.actionsHeader = {type = "header", name = "Actions", order = order}
+    order = order + 1
+
+    args.moveUp = {
+        type = "execute",
+        name = "Move Up",
+        desc = "Move this row up",
+        order = order,
+        disabled = function()
+            return rowIndex == 1
+        end,
+        func = function()
+            local db = module:GetDB()
+            if db[key] and db[key].rows and rowIndex > 1 then
+                local rows = db[key].rows
+                rows[rowIndex], rows[rowIndex - 1] = rows[rowIndex - 1], rows[rowIndex]
+                IncrementSettingsVersion(key)
+                if module:IsEnabled() then
+                    module:RefreshAll()
+                end
+                module:RefreshOptions(true)
+            end
+        end,
+    }
+    order = order + 1
+
+    args.moveDown = {
+        type = "execute",
+        name = "Move Down",
+        desc = "Move this row down",
+        order = order,
+        disabled = function()
+            local db = module:GetDB()
+            if not db[key] or not db[key].rows then return true end
+            return rowIndex >= #db[key].rows
+        end,
+        func = function()
+            local db = module:GetDB()
+            if db[key] and db[key].rows and rowIndex < #db[key].rows then
+                local rows = db[key].rows
+                rows[rowIndex], rows[rowIndex + 1] = rows[rowIndex + 1], rows[rowIndex]
+                IncrementSettingsVersion(key)
+                if module:IsEnabled() then
+                    module:RefreshAll()
+                end
+                module:RefreshOptions(true)
+            end
+        end,
+    }
     order = order + 1
 
     args.removeRow = {
@@ -973,6 +1032,7 @@ local function BuildViewerOptions(key, viewerName, orderBase)
                 db[key].rows = {}
             end
             table.insert(db[key].rows, {
+                name = "",
                 iconCount = defaultIconCount,
                 iconSize = defaultIconSize,
                 padding = -8,
@@ -1007,11 +1067,12 @@ local function BuildViewerOptions(key, viewerName, orderBase)
         for i, row in ipairs(section.rows) do
             local rowKey = "row" .. i
             local rowOrderBase = key == "essential" and 20 or (key == "utility" and 30) or 40
+            local rowName = row.name and row.name ~= "" and row.name or ("Row " .. i)
             args[rowKey] = {
                 type = "group",
-                name = "Row " .. i,
+                name = rowName,
                 order = rowOrderBase + i,
-                inline = true,
+                inline = false,
                 args = BuildRowOptions(key, i, 1),
             }
         end
