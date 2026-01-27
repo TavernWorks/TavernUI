@@ -711,7 +711,7 @@ local function ApplyKeybindDisplay(icon, keybind, settings)
     end
 end
 
-local function ApplyKeybindToIcon(icon, viewerName)
+local function ApplyKeybindToIcon(icon, viewerName, forceRefresh)
     if not module:IsEnabled() then return end
     
     local trackerKey = (viewerName == VIEWER_ESSENTIAL and "essential") or 
@@ -731,45 +731,45 @@ local function ApplyKeybindToIcon(icon, viewerName)
     local spellID = GetSpellIDFromIcon(icon)
     local spellName = GetSpellNameFromIcon(icon, spellID)
     
-    if spellID and IsCachedSpellIDValid(icon, spellID) and icon._lastKeybind then
-        if icon.keybindText and not icon.keybindText:IsShown() then
-            ApplyKeybindDisplay(icon, icon._lastKeybind, settings)
-        end
-        return
+    local keybind = nil
+    if spellID and IsCachedSpellIDValid(icon, spellID) and icon._lastKeybind and not forceRefresh then
+        keybind = icon._lastKeybind
+    else
+        keybind = ResolveKeybind(icon, spellID, spellName)
     end
     
-    local keybind = ResolveKeybind(icon, spellID, spellName)
-    
-    if keybind ~= icon._lastKeybind or not icon.keybindText or (icon.keybindText and not icon.keybindText:IsShown()) then
+    if forceRefresh or keybind ~= icon._lastKeybind or not icon.keybindText or (icon.keybindText and not icon.keybindText:IsShown()) then
         ApplyKeybindDisplay(icon, keybind, settings)
     end
 end
 
 -- Update keybinds on all icons in a viewer
-local function UpdateViewerKeybinds(viewerName)
+local function UpdateViewerKeybinds(viewerName, forceRefresh)
     local viewer = _G[viewerName]
     if not viewer then return end
     
     local numChildren = viewer:GetNumChildren()
     for i = 1, numChildren do
         local child = select(i, viewer:GetChildren())
-        if child and child ~= viewer.Selection and child:IsShown() then
+        if child and child ~= viewer.Selection then
             if (child.Icon or child.icon) and (child.Cooldown or child.cooldown) then
-                ApplyKeybindToIcon(child, viewerName)
+                if child:IsShown() or forceRefresh then
+                    ApplyKeybindToIcon(child, viewerName, forceRefresh)
+                end
             end
         end
     end
 end
 
 -- Update keybinds on Essential, Utility, and Buff viewers
-local function UpdateAllKeybinds(forceRebuild)
+local function UpdateAllKeybinds(forceRebuild, forceRefresh)
     if forceRebuild then
         RebuildCache(true)
     end
     
-    UpdateViewerKeybinds(VIEWER_ESSENTIAL)
-    UpdateViewerKeybinds(VIEWER_UTILITY)
-    UpdateViewerKeybinds(VIEWER_BUFF)
+    UpdateViewerKeybinds(VIEWER_ESSENTIAL, forceRefresh)
+    UpdateViewerKeybinds(VIEWER_UTILITY, forceRefresh)
+    UpdateViewerKeybinds(VIEWER_BUFF, forceRefresh)
 end
 
 -- Throttle for event-driven updates

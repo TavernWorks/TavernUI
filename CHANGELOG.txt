@@ -1,5 +1,10 @@
 TavernUI Changelog
 ==================
+
+v1.0.0-beta-1a (2026-01-27)
+ - Fix saving of buff settings
+ - Fix sizing of KB in real time
+
 v1.0.0-beta-1 (2026-01-27)
  - Performance tune showing KBs on Cooldown Manager
  - Add Cooldown Manager Buff Support

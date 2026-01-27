@@ -78,7 +78,36 @@ module.CDM = CDM
 
 local function GetSettings(key)
     local db = module:GetDB()
-    return db and db[key]
+    if not db then return nil end
+    
+    if not db[key] then
+        db[key] = {}
+    end
+    
+    if defaults[key] then
+        for k, v in pairs(defaults[key]) do
+            if db[key][k] == nil then
+                if type(v) == "table" and k == "rows" then
+                    db[key][k] = {}
+                    for i, rowDefault in ipairs(v) do
+                        db[key][k][i] = {}
+                        for rowKey, rowValue in pairs(rowDefault) do
+                            db[key][k][i][rowKey] = rowValue
+                        end
+                    end
+                elseif type(v) == "table" then
+                    db[key][k] = {}
+                    for subKey, subValue in pairs(v) do
+                        db[key][k][subKey] = subValue
+                    end
+                else
+                    db[key][k] = v
+                end
+            end
+        end
+    end
+    
+    return db[key]
 end
 
 module.GetSettings = GetSettings
@@ -1091,3 +1120,76 @@ function module:RefreshAll()
         end)
     end)
 end
+
+local function RefreshAllIconsForViewer(trackerKey)
+    if not module:IsEnabled() then return end
+    
+    local viewerName = (trackerKey == "essential" and module.VIEWER_ESSENTIAL) or 
+                       (trackerKey == "utility" and module.VIEWER_UTILITY) or 
+                       (trackerKey == "buff" and module.VIEWER_BUFF)
+    
+    if not viewerName then return end
+    
+    local viewer = _G[viewerName]
+    if not viewer then return end
+    
+    local settings = GetSettings(trackerKey)
+    if not settings or not settings.rows then return end
+    
+    local activeRows = {}
+    for _, row in ipairs(settings.rows) do
+        if row.iconCount and row.iconCount > 0 then
+            table.insert(activeRows, row)
+        end
+    end
+    
+    if #activeRows == 0 then return end
+    
+    local rowConfigs = BuildRowConfigs(activeRows, {})
+    
+    local numChildren = viewer:GetNumChildren()
+    for i = 1, numChildren do
+        local child = select(i, viewer:GetChildren())
+        if child and child ~= viewer.Selection and (child.Icon or child.icon) and (child.Cooldown or child.cooldown) then
+            local rowIndex = 1
+            
+            if trackerKey == "buff" then
+                local slot = child.__cdmSlot or child.layoutIndex
+                if not slot or slot < 1 then
+                    slot = i
+                end
+                
+                local slotCount = 0
+                for j, row in ipairs(activeRows) do
+                    local rowCapacity = row.iconCount or 0
+                    if slot <= slotCount + rowCapacity then
+                        rowIndex = j
+                        break
+                    end
+                    slotCount = slotCount + rowCapacity
+                end
+            else
+                local iconIndex = i
+                local slotCount = 0
+                for j, row in ipairs(activeRows) do
+                    local rowCapacity = row.iconCount or 0
+                    if iconIndex <= slotCount + rowCapacity then
+                        rowIndex = j
+                        break
+                    end
+                    slotCount = slotCount + rowCapacity
+                end
+            end
+            
+            if rowConfigs[rowIndex] then
+                pcall(function()
+                    StyleIcon(child, rowConfigs[rowIndex])
+                end)
+            end
+        end
+    end
+end
+
+module.LayoutViewer = LayoutViewer
+module.ApplyIconTextSettings = ApplyIconTextSettings
+module.RefreshAllIconsForViewer = RefreshAllIconsForViewer

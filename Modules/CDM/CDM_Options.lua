@@ -26,6 +26,7 @@ local function IncrementSettingsVersion(trackerKey)
         CDM.settingsVersion = CDM.settingsVersion or {}
         CDM.settingsVersion.essential = (CDM.settingsVersion.essential or 0) + 1
         CDM.settingsVersion.utility = (CDM.settingsVersion.utility or 0) + 1
+        CDM.settingsVersion.buff = (CDM.settingsVersion.buff or 0) + 1
     end
 end
 
@@ -137,6 +138,26 @@ local function MakeRowOption(key, rowIndex, optionKey, optionType, config)
         IncrementSettingsVersion(key)
         
         if module:IsEnabled() and not (module.CDM and module.CDM.refreshing) then
+            local viewer = (key == "essential" and _G[module.VIEWER_ESSENTIAL or "EssentialCooldownViewer"]) or
+                          (key == "utility" and _G[module.VIEWER_UTILITY or "UtilityCooldownViewer"]) or
+                          (key == "buff" and _G[module.VIEWER_BUFF or "BuffIconCooldownViewer"])
+            
+            if viewer then
+                viewer.__cdmLastVersion = nil
+                viewer.__cdmLastIconCount = nil
+                viewer.__cdmLastBlizzardCount = nil
+                if viewer.__cdmTimer then
+                    viewer.__cdmTimer:Cancel()
+                    viewer.__cdmTimer = nil
+                end
+            end
+            
+            C_Timer.After(0.2, function()
+                if module:IsEnabled() and module.RefreshAllIconsForViewer then
+                    module.RefreshAllIconsForViewer(key)
+                end
+            end)
+            
             C_Timer.After(0.15, function()
                 if module:IsEnabled() and not (module.CDM and module.CDM.refreshing) then
                     module:RefreshAll()
@@ -771,7 +792,7 @@ local function BuildViewerOptions(key, viewerName, orderBase)
             IncrementSettingsVersion(key)
             if module:IsEnabled() then
                 if module.UpdateAllKeybinds then
-                    module.UpdateAllKeybinds()
+                    module.UpdateAllKeybinds(false, true)
                 end
                 module:RefreshAll()
             end
@@ -802,7 +823,7 @@ local function BuildViewerOptions(key, viewerName, orderBase)
             IncrementSettingsVersion(key)
             if module:IsEnabled() then
                 if module.UpdateAllKeybinds then
-                    module.UpdateAllKeybinds()
+                    module.UpdateAllKeybinds(false, true)
                 end
                 module:RefreshAll()
             end
@@ -831,7 +852,7 @@ local function BuildViewerOptions(key, viewerName, orderBase)
             IncrementSettingsVersion(key)
             if module:IsEnabled() then
                 if module.UpdateAllKeybinds then
-                    module.UpdateAllKeybinds()
+                    module.UpdateAllKeybinds(false, true)
                 end
                 module:RefreshAll()
             end
@@ -862,7 +883,7 @@ local function BuildViewerOptions(key, viewerName, orderBase)
             IncrementSettingsVersion(key)
             if module:IsEnabled() then
                 if module.UpdateAllKeybinds then
-                    module.UpdateAllKeybinds()
+                    module.UpdateAllKeybinds(false, true)
                 end
                 module:RefreshAll()
             end
@@ -893,7 +914,7 @@ local function BuildViewerOptions(key, viewerName, orderBase)
             IncrementSettingsVersion(key)
             if module:IsEnabled() then
                 if module.UpdateAllKeybinds then
-                    module.UpdateAllKeybinds()
+                    module.UpdateAllKeybinds(false, true)
                 end
                 module:RefreshAll()
             end
@@ -929,7 +950,7 @@ local function BuildViewerOptions(key, viewerName, orderBase)
             IncrementSettingsVersion(key)
             if module:IsEnabled() then
                 if module.UpdateAllKeybinds then
-                    module.UpdateAllKeybinds()
+                    module.UpdateAllKeybinds(false, true)
                 end
                 module:RefreshAll()
             end
