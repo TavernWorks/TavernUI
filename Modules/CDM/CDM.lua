@@ -37,16 +37,31 @@ local defaults = {
             {iconCount = 6, iconSize = 42, padding = -8, yOffset = 0, aspectRatioCrop = 1.0, zoom = 0, iconBorderSize = 0, iconBorderColor = {r = 0, g = 0, b = 0, a = 1}, rowBorderSize = 0, rowBorderColor = {r = 0, g = 0, b = 0, a = 1}, durationSize = 18, durationPoint = "CENTER", durationOffsetX = 0, durationOffsetY = 0, stackSize = 16, stackPoint = "BOTTOMRIGHT", stackOffsetX = 0, stackOffsetY = 0},
         }
     },
+    buff = {
+        enabled = true,
+        anchorConfig = nil,
+        showKeybinds = false,
+        keybindSize = 10,
+        keybindPoint = "TOPLEFT",
+        keybindOffsetX = 2,
+        keybindOffsetY = -2,
+        keybindColor = {r = 1, g = 1, b = 1, a = 1},
+        rows = {
+            {iconCount = 6, iconSize = 42, padding = -8, yOffset = 0, aspectRatioCrop = 1.0, zoom = 0, iconBorderSize = 0, iconBorderColor = {r = 0, g = 0, b = 0, a = 1}, rowBorderSize = 0, rowBorderColor = {r = 0, g = 0, b = 0, a = 1}, durationSize = 18, durationPoint = "CENTER", durationOffsetX = 0, durationOffsetY = 0, stackSize = 16, stackPoint = "BOTTOMRIGHT", stackOffsetX = 0, stackOffsetY = 0},
+        }
+    },
 }
 
 TavernUI:RegisterModuleDefaults("CDM", defaults, true)
 
 module.VIEWER_ESSENTIAL = "EssentialCooldownViewer"
 module.VIEWER_UTILITY = "UtilityCooldownViewer"
+module.VIEWER_BUFF = "BuffIconCooldownViewer"
 
 local VIEWERS = {
     {name = module.VIEWER_ESSENTIAL, key = "essential"},
     {name = module.VIEWER_UTILITY, key = "utility"},
+    {name = module.VIEWER_BUFF, key = "buff"},
 }
 
 local CDM = {
@@ -55,6 +70,8 @@ local CDM = {
     settingsVersion = {},
     hooked = {},
     initialized = false,
+    refreshing = false,
+    refreshTimer = nil,
 }
 
 module.CDM = CDM
@@ -66,6 +83,8 @@ end
 
 module.GetSettings = GetSettings
 
+local LayoutViewer
+
 local function IsIcon(child)
     if not child then return false end
     return (child.Icon or child.icon) and (child.Cooldown or child.cooldown)
@@ -76,20 +95,87 @@ local function CollectIcons(viewer)
     if not viewer or not viewer.GetNumChildren then return icons end
     
     local numChildren = viewer:GetNumChildren()
+    local viewerName = viewer:GetName() or "unknown"
+    local isBuff = viewerName == module.VIEWER_BUFF
+    
     for i = 1, numChildren do
         local child = select(i, viewer:GetChildren())
+        
         if child and child ~= viewer.Selection and IsIcon(child) then
-            if child:IsShown() or child.__cdmHidden then
+            if isBuff then
+                if not child.__cdmEventHooked then
+                    child.__cdmEventHooked = true
+                    local buffViewer = viewer
+                    local buffViewerName = viewerName
+                    
+                    local function TriggerLayout()
+                        if module:IsEnabled() and buffViewer:IsShown() then
+                            C_Timer.After(0.1, function()
+                                if module:IsEnabled() and buffViewer:IsShown() then
+                                    LayoutViewer(buffViewerName, "buff")
+                                end
+                            end)
+                        end
+                    end
+                    
+                    if child.OnActiveStateChanged then
+                        hooksecurefunc(child, "OnActiveStateChanged", TriggerLayout)
+                    end
+                    if child.OnUnitAuraAddedEvent then
+                        hooksecurefunc(child, "OnUnitAuraAddedEvent", TriggerLayout)
+                    end
+                    if child.OnUnitAuraRemovedEvent then
+                        hooksecurefunc(child, "OnUnitAuraRemovedEvent", TriggerLayout)
+                    end
+                    
+                    child:HookScript("OnShow", function()
+                        TriggerLayout()
+                    end)
+                    
+                    child:HookScript("OnHide", function()
+                        TriggerLayout()
+                    end)
+                end
+                
+                if not child.originalX then
+                    local point, relativeTo, relativePoint, x, y = child:GetPoint(1)
+                    child.originalX = x or 0
+                    child.originalY = y or 0
+                end
                 table.insert(icons, child)
+            else
+                if child:IsShown() or child.__cdmHidden then
+                    table.insert(icons, child)
+                end
             end
         end
     end
     
-    table.sort(icons, function(a, b)
-        local indexA = a.layoutIndex or 9999
-        local indexB = b.layoutIndex or 9999
-        return indexA < indexB
-    end)
+    if isBuff then
+        table.sort(icons, function(a, b)
+            local indexA = a.layoutIndex
+            local indexB = b.layoutIndex
+            
+            if indexA and indexB then
+                return indexA < indexB
+            elseif indexA then
+                return true
+            elseif indexB then
+                return false
+            end
+            
+            if math.abs((a.originalY or 0) - (b.originalY or 0)) < 1 then
+                return (a.originalX or 0) < (b.originalX or 0)
+            end
+            return (a.originalY or 0) > (b.originalY or 0)
+        end)
+    else
+        table.sort(icons, function(a, b)
+            local indexA = a.layoutIndex or 9999
+            local indexB = b.layoutIndex or 9999
+            return indexA < indexB
+        end)
+    end
     
     return icons
 end
@@ -133,12 +219,20 @@ local function SetupIconOnce(icon)
     
     local textures = { icon.Icon, icon.icon }
     for _, tex in ipairs(textures) do
-        if tex and tex.GetMaskTexture and tex.RemoveMaskTexture then
-            for i = 1, 10 do
-                local mask = tex:GetMaskTexture(i)
-                if mask then
-                    tex:RemoveMaskTexture(mask)
+        if tex then
+            if tex.GetMaskTexture and tex.RemoveMaskTexture then
+                for i = 1, 10 do
+                    local mask = tex:GetMaskTexture(i)
+                    if mask then
+                        tex:RemoveMaskTexture(mask)
+                    end
                 end
+            end
+            if tex.ClearAllPoints then
+                tex:ClearAllPoints()
+            end
+            if tex.SetAllPoints then
+                tex:SetAllPoints(icon)
             end
         end
     end
@@ -199,8 +293,77 @@ local function ApplyTexCoord(icon, aspectRatioCrop, zoom)
     end
     
     local tex = icon.Icon or icon.icon
+    if not tex then
+        for i = 1, icon:GetNumRegions() do
+            local region = select(i, icon:GetRegions())
+            if region and region.GetObjectType and region:GetObjectType() == "Texture" then
+                local regionName = region:GetName()
+                if not regionName or (regionName ~= "Border" and regionName ~= "Cooldown" and regionName ~= "NormalTexture") then
+                    tex = region
+                    break
+                end
+            end
+        end
+    end
     if tex and tex.SetTexCoord then
         tex:SetTexCoord(left, right, top, bottom)
+    end
+end
+
+local function ResizeBlizzardBorders(icon)
+    if not icon then return end
+    
+    local iconTexture = icon.Icon or icon.icon
+    if not iconTexture then return end
+    
+    if iconTexture.GetMaskTexture then
+        for i = 1, 10 do
+            local mask = iconTexture:GetMaskTexture(i)
+            if mask then
+                mask:SetAllPoints(iconTexture)
+            end
+        end
+    end
+    
+    if icon.GetNumChildren then
+        for i = 1, icon:GetNumChildren() do
+            local child = select(i, icon:GetChildren())
+            if child then
+                local childName = child:GetName()
+                
+                if childName == "DebuffBorder" then
+                    local point, relativeTo = child:GetPoint(1)
+                    if not point or (relativeTo and relativeTo ~= iconTexture) then
+                        child:ClearAllPoints()
+                        child:SetPoint("TOPLEFT", iconTexture, "TOPLEFT", -3, 3)
+                        child:SetPoint("BOTTOMRIGHT", iconTexture, "BOTTOMRIGHT", 3, -3)
+                    end
+                    if child.Texture then
+                        child.Texture:SetAllPoints(child)
+                    end
+                elseif childName == "PandemicIcon" then
+                    if child.Border then
+                        child.Border:SetAllPoints(child)
+                        if child.Border.Border then
+                            child.Border.Border:SetAllPoints(child.Border)
+                        end
+                    end
+                    if child.FX then
+                        child.FX:SetAllPoints(child)
+                        if child.FX.Mask then
+                            child.FX.Mask:SetAllPoints(child.FX)
+                        end
+                    end
+                end
+            end
+        end
+    end
+    
+    if icon.DebuffBorder then
+        local borderFrame = icon.DebuffBorder
+        if borderFrame.Texture then
+            borderFrame.Texture:SetAllPoints(borderFrame)
+        end
     end
 end
 
@@ -303,6 +466,7 @@ local function StyleIcon(icon, rowConfig)
         icon:SetSize(width, height)
     end)
     
+    ResizeBlizzardBorders(icon)
     ApplyTexCoord(icon, aspectRatioCrop, zoom)
     ApplyIconBorder(icon, iconBorderSize, iconBorderColor)
     ApplyIconTextSettings(icon, rowConfig)
@@ -343,39 +507,37 @@ local function IncrementSettingsVersion(trackerKey)
     else
         CDM.settingsVersion.essential = (CDM.settingsVersion.essential or 0) + 1
         CDM.settingsVersion.utility = (CDM.settingsVersion.utility or 0) + 1
+        CDM.settingsVersion.buff = (CDM.settingsVersion.buff or 0) + 1
     end
 end
 
 local function BuildRowConfigs(activeRows, iconsToLayout)
     local rowConfigs = {}
-    local iconIndex = 1
     
     for _, row in ipairs(activeRows) do
-        local iconsInRow = math.min(row.iconCount, #iconsToLayout - iconIndex + 1)
-        if iconsInRow > 0 then
-            table.insert(rowConfigs, {
-                count = row.iconCount,
-                size = row.iconSize or 50,
-                padding = row.padding or 0,
-                yOffset = row.yOffset or 0,
-                iconsInRow = iconsInRow,
-                aspectRatioCrop = row.aspectRatioCrop or 1.0,
-                zoom = row.zoom or 0,
-                iconBorderSize = row.iconBorderSize or 0,
-                iconBorderColor = row.iconBorderColor or {r = 0, g = 0, b = 0, a = 1},
-                rowBorderSize = row.rowBorderSize or 0,
-                rowBorderColor = row.rowBorderColor or {r = 0, g = 0, b = 0, a = 1},
-                durationSize = row.durationSize or 18,
-                durationPoint = row.durationPoint or "CENTER",
-                durationOffsetX = row.durationOffsetX or 0,
-                durationOffsetY = row.durationOffsetY or 0,
-                stackSize = row.stackSize or 16,
-                stackPoint = row.stackPoint or "BOTTOMRIGHT",
-                stackOffsetX = row.stackOffsetX or 0,
-                stackOffsetY = row.stackOffsetY or 0,
-            })
-            iconIndex = iconIndex + iconsInRow
-        end
+        local maxIconsForRow = row.iconCount
+        
+        table.insert(rowConfigs, {
+            count = row.iconCount,
+            size = row.iconSize or 50,
+            padding = row.padding or 0,
+            yOffset = row.yOffset or 0,
+            maxIconsForRow = maxIconsForRow,
+            aspectRatioCrop = row.aspectRatioCrop or 1.0,
+            zoom = row.zoom or 0,
+            iconBorderSize = row.iconBorderSize or 0,
+            iconBorderColor = row.iconBorderColor or {r = 0, g = 0, b = 0, a = 1},
+            rowBorderSize = row.rowBorderSize or 0,
+            rowBorderColor = row.rowBorderColor or {r = 0, g = 0, b = 0, a = 1},
+            durationSize = row.durationSize or 18,
+            durationPoint = row.durationPoint or "CENTER",
+            durationOffsetX = row.durationOffsetX or 0,
+            durationOffsetY = row.durationOffsetY or 0,
+            stackSize = row.stackSize or 16,
+            stackPoint = row.stackPoint or "BOTTOMRIGHT",
+            stackOffsetX = row.stackOffsetX or 0,
+            stackOffsetY = row.stackOffsetY or 0,
+        })
     end
     
     return rowConfigs
@@ -388,12 +550,12 @@ local function CalculateRowDimensions(rowConfigs)
     local rowGap = 5
     
     for rowNum, rowConfig in ipairs(rowConfigs) do
-        local iconsInRow = rowConfig.iconsInRow
+        local maxIconsForRow = rowConfig.maxIconsForRow
         local iconSize = rowConfig.size
         local aspectRatio = rowConfig.aspectRatioCrop or 1.0
         local iconHeight = iconSize / aspectRatio
         
-        local rowWidth = (iconsInRow * iconSize) + ((iconsInRow - 1) * rowConfig.padding)
+        local rowWidth = (maxIconsForRow * iconSize) + ((maxIconsForRow - 1) * rowConfig.padding)
         rowWidths[rowNum] = rowWidth
         maxRowWidth = math.max(maxRowWidth, rowWidth)
         
@@ -406,94 +568,174 @@ local function CalculateRowDimensions(rowConfigs)
     return maxRowWidth, totalHeight, rowWidths, rowGap
 end
 
-local function LayoutIcons(viewer, iconsToLayout, rowConfigs, rowWidths, rowGap, totalHeight)
+local function LayoutIcons(viewer, iconsToLayout, rowConfigs, rowWidths, rowGap, totalHeight, trackerKey)
     local currentY = totalHeight / 2
-    local iconIndex = 1
     
+    local slotStart = 1
     for rowNum, rowConfig in ipairs(rowConfigs) do
-        local iconsInRow = rowConfig.iconsInRow
+        local stride = rowConfig.maxIconsForRow
         local iconSize = rowConfig.size
         local aspectRatio = rowConfig.aspectRatioCrop or 1.0
         local iconHeight = iconSize / aspectRatio
-        local rowWidth = rowWidths[rowNum]
         
-        local halfRowWidth = rowWidth / 2
-        local rowStartX = -halfRowWidth + (iconSize / 2)
-        local rowCenterY = currentY - (iconHeight / 2) + rowConfig.yOffset
+        local slotEnd = slotStart + stride - 1
+        local iconsInThisRow = {}
         
-        for i = 1, iconsInRow do
-            local icon = iconsToLayout[iconIndex]
-            local iconOffsetX = rowStartX + ((i - 1) * (iconSize + rowConfig.padding))
-            
-            pcall(function()
-                StyleIcon(icon, rowConfig)
-                icon:ClearAllPoints()
-                icon:SetPoint("CENTER", viewer, "CENTER", iconOffsetX, rowCenterY)
-            end)
-            
-            if module.ApplyKeybindToIcon then
-                pcall(function() module.ApplyKeybindToIcon(icon, viewer:GetName()) end)
+        if trackerKey == "buff" then
+            for _, icon in ipairs(iconsToLayout) do
+                local slot = icon.__cdmSlot
+                if slot and slot >= slotStart and slot <= slotEnd then
+                    table.insert(iconsInThisRow, icon)
+                end
             end
             
-            icon:Show()
-            iconIndex = iconIndex + 1
+            table.sort(iconsInThisRow, function(a, b)
+                return (a.__cdmSlot or 9999) < (b.__cdmSlot or 9999)
+            end)
+        else
+            local rowStartIndex = slotStart
+            local rowEndIndex = math.min(slotStart + stride - 1, #iconsToLayout)
+            
+            for i = rowStartIndex, rowEndIndex do
+                if iconsToLayout[i] then
+                    table.insert(iconsInThisRow, iconsToLayout[i])
+                end
+            end
         end
         
-        pcall(function()
-            ApplyRowBorder(viewer, rowNum, rowConfig, rowWidth, iconHeight, 0, rowCenterY)
-        end)
+        slotStart = slotEnd + 1
+        
+        local actualIconsInRow = #iconsInThisRow
+        local rowCenterY = currentY - (iconHeight / 2) + rowConfig.yOffset
+        
+        if actualIconsInRow > 0 then
+            local rowWidth = actualIconsInRow * iconSize + (actualIconsInRow - 1) * rowConfig.padding
+            local totalWidth = rowWidth
+            local startX = -totalWidth / 2 + iconSize / 2
+            
+            for col, icon in ipairs(iconsInThisRow) do
+                local iconOffsetX = startX + (col - 1) * (iconSize + rowConfig.padding)
+                
+                pcall(function()
+                    StyleIcon(icon, rowConfig)
+                    icon:ClearAllPoints()
+                    icon:SetPoint("CENTER", viewer, "CENTER", iconOffsetX, rowCenterY)
+                end)
+                
+                if module.ApplyKeybindToIcon then
+                    pcall(function() module.ApplyKeybindToIcon(icon, viewer:GetName()) end)
+                end
+                
+                icon:Show()
+            end
+            
+            pcall(function()
+                ApplyRowBorder(viewer, rowNum, rowConfig, rowWidth, iconHeight, 0, rowCenterY)
+            end)
+        end
         
         currentY = currentY - iconHeight - rowGap
     end
 end
 
-local function LayoutViewer(viewerName, trackerKey)
-    if not module:IsEnabled() then return end
+LayoutViewer = function(viewerName, trackerKey)
+    if not module:IsEnabled() then
+        return
+    end
     
     local viewer = _G[viewerName]
-    if not viewer then return end
+    if not viewer then
+        return
+    end
     
     local settings = GetSettings(trackerKey)
-    if not settings or not settings.enabled then return end
+    if not settings then
+        return
+    end
+    if not settings.enabled then
+        return
+    end
     
-    if CDM.applying[trackerKey] or viewer.__cdmLayoutRunning then return end
+    if CDM.applying[trackerKey] or viewer.__cdmLayoutRunning or CDM.refreshing then return end
     
     CDM.applying[trackerKey] = true
     viewer.__cdmLayoutRunning = true
     
-    local allIcons = CollectIcons(viewer)
+    if viewer.__cdmSizeChangeTimer then
+        viewer.__cdmSizeChangeTimer:Cancel()
+        viewer.__cdmSizeChangeTimer = nil
+    end
+    
     local activeRows = GetActiveRows(settings)
     local capacity = GetCapacity(settings)
     
     if #activeRows == 0 then
         CDM.applying[trackerKey] = false
         viewer.__cdmLayoutRunning = nil
+        viewer.__cdmLayoutSuppressed = nil
         return
     end
     
-    local iconsToLayout = {}
-    for i = 1, math.min(#allIcons, capacity) do
-        iconsToLayout[i] = allIcons[i]
-        allIcons[i]:Show()
-        allIcons[i].__cdmHidden = nil
-    end
+    local allIcons = CollectIcons(viewer)
     
-    for i = capacity + 1, #allIcons do
-        allIcons[i]:Hide()
-        allIcons[i].__cdmHidden = true
-        pcall(function() allIcons[i]:ClearAllPoints() end)
+    local iconsToLayout = {}
+    if trackerKey == "buff" then
+        for i = 1, #allIcons do
+            if allIcons[i] then
+                local icon = allIcons[i]
+                local slot = icon.layoutIndex
+                if not slot or slot < 1 then
+                    slot = i
+                end
+                icon.__cdmSlot = slot
+                
+                local isShown = icon:IsShown()
+                
+                if slot <= capacity then
+                    if isShown then
+                        iconsToLayout[#iconsToLayout + 1] = icon
+                        icon.__cdmHidden = nil
+                    else
+                        icon:Hide()
+                        icon.__cdmHidden = true
+                        pcall(function() icon:ClearAllPoints() end)
+                    end
+                else
+                    icon:Hide()
+                    icon.__cdmHidden = true
+                    pcall(function() icon:ClearAllPoints() end)
+                end
+            end
+        end
+    else
+        for i = 1, math.min(#allIcons, capacity) do
+            if allIcons[i] then
+                iconsToLayout[#iconsToLayout + 1] = allIcons[i]
+                allIcons[i]:Show()
+                allIcons[i].__cdmHidden = nil
+            end
+        end
+        
+        for i = capacity + 1, #allIcons do
+            if allIcons[i] then
+                allIcons[i]:Hide()
+                allIcons[i].__cdmHidden = true
+                pcall(function() allIcons[i]:ClearAllPoints() end)
+            end
+        end
     end
     
     if #iconsToLayout == 0 then
         CDM.applying[trackerKey] = false
         viewer.__cdmLayoutRunning = nil
+        viewer.__cdmLayoutSuppressed = nil
         return
     end
     
     local rowConfigs = BuildRowConfigs(activeRows, iconsToLayout)
     local maxRowWidth, totalHeight, rowWidths, rowGap = CalculateRowDimensions(rowConfigs)
     
-    LayoutIcons(viewer, iconsToLayout, rowConfigs, rowWidths, rowGap, totalHeight)
+    LayoutIcons(viewer, iconsToLayout, rowConfigs, rowWidths, rowGap, totalHeight, trackerKey)
     
     local data = GetFrameData(viewer)
     data.row1Width = rowWidths[1] or maxRowWidth
@@ -591,17 +833,24 @@ local function ScheduleLayoutCheck(viewer, viewerName, trackerKey, immediate)
         
         if needsLayout then
             viewer.__cdmLastIconCount = count
-            LayoutViewer(viewerName, trackerKey)
+            if not CDM.applying[trackerKey] and not viewer.__cdmLayoutRunning then
+                LayoutViewer(viewerName, trackerKey)
+            end
         end
         
         ScheduleLayoutCheck(viewer, viewerName, trackerKey, false)
     end)
 end
 
+
 local function HookViewer(viewerName, trackerKey)
     local viewer = _G[viewerName]
-    if not viewer then return end
-    if CDM.hooked[trackerKey] then return end
+    if not viewer then
+        return
+    end
+    if CDM.hooked[trackerKey] then
+        return
+    end
     
     CDM.hooked[trackerKey] = true
     
@@ -624,24 +873,57 @@ local function HookViewer(viewerName, trackerKey)
     
     viewer:HookScript("OnSizeChanged", function(self)
         if not module:IsEnabled() then return end
+        if CDM.applying[trackerKey] or self.__cdmLayoutRunning or CDM.refreshing then return end
         self.__cdmBlizzardCount = (self.__cdmBlizzardCount or 0) + 1
-        if self.__cdmLayoutSuppressed or self.__cdmLayoutRunning then
+        if self.__cdmLayoutSuppressed then
             return
         end
-        LayoutViewer(viewerName, trackerKey)
+        
+        if self.__cdmSizeChangeTimer then
+            self.__cdmSizeChangeTimer:Cancel()
+            self.__cdmSizeChangeTimer = nil
+        end
+        
+        self.__cdmSizeChangeTimer = C_Timer.NewTimer(0.1, function()
+            self.__cdmSizeChangeTimer = nil
+            if module:IsEnabled() and not CDM.applying[trackerKey] and not self.__cdmLayoutRunning and not CDM.refreshing then
+                LayoutViewer(viewerName, trackerKey)
+            end
+        end)
     end)
     
-    local eventFrame = CreateFrame("Frame")
-    eventFrame:RegisterEvent("SPELL_UPDATE_COOLDOWN")
-    eventFrame:RegisterEvent("BAG_UPDATE_COOLDOWN")
-    eventFrame:RegisterEvent("ACTIONBAR_SLOT_CHANGED")
-    eventFrame:SetScript("OnEvent", function()
-        if not module:IsEnabled() then return end
-        if InCombatLockdown() then return end
-        if viewer:IsShown() then
-            ScheduleLayoutCheck(viewer, viewerName, trackerKey, true)
-        end
-    end)
+    if trackerKey == "buff" then
+        local eventFrame = CreateFrame("Frame")
+        eventFrame:RegisterUnitEvent("UNIT_TARGET", "player")
+        
+        eventFrame:SetScript("OnEvent", function(self, event, unit)
+            if not module:IsEnabled() then return end
+            
+            if event == "UNIT_TARGET" and unit == "player" then
+                if viewer:IsShown() then
+                    C_Timer.After(0.1, function()
+                        if module:IsEnabled() and viewer:IsShown() then
+                            LayoutViewer(viewerName, trackerKey)
+                        end
+                    end)
+                end
+            end
+        end)
+    elseif trackerKey ~= "buff" then
+        local eventFrame = CreateFrame("Frame")
+        eventFrame:RegisterEvent("SPELL_UPDATE_COOLDOWN")
+        eventFrame:RegisterEvent("BAG_UPDATE_COOLDOWN")
+        eventFrame:RegisterEvent("ACTIONBAR_SLOT_CHANGED")
+        
+        eventFrame:SetScript("OnEvent", function(self, event)
+            if not module:IsEnabled() then return end
+            if InCombatLockdown() then return end
+            
+            if viewer:IsShown() then
+                ScheduleLayoutCheck(viewer, viewerName, trackerKey, true)
+            end
+        end)
+    end
     
     if viewer:IsShown() then
         ScheduleLayoutCheck(viewer, viewerName, trackerKey, false)
@@ -660,7 +942,8 @@ local function Initialize()
     CDM.initialized = true
     
     for _, viewerInfo in ipairs(VIEWERS) do
-        if _G[viewerInfo.name] then
+        local viewer = _G[viewerInfo.name]
+        if viewer then
             HookViewer(viewerInfo.name, viewerInfo.key)
         end
     end
@@ -673,6 +956,7 @@ local function Initialize()
         if module:IsEnabled() then
             if module.ApplyEssentialAnchor then module.ApplyEssentialAnchor() end
             if module.ApplyUtilityAnchor then module.ApplyUtilityAnchor() end
+            if module.ApplyBuffAnchor then module.ApplyBuffAnchor() end
         end
     end)
 end
@@ -687,10 +971,15 @@ function module:OnEnable()
         self.eventFrame = CreateFrame("Frame")
         self.eventFrame:RegisterEvent("PLAYER_LOGIN")
         self.eventFrame:RegisterEvent("PLAYER_ENTERING_WORLD")
+        self.eventFrame:RegisterEvent("ADDON_LOADED")
         self.eventFrame:SetScript("OnEvent", function(frame, event, ...)
             if not module:IsEnabled() then return end
             
-            if event == "PLAYER_LOGIN" then
+            if event == "ADDON_LOADED" then
+                local addonName = ...
+                if addonName == "Blizzard_CooldownManager" then
+                end
+            elseif event == "PLAYER_LOGIN" then
                 C_Timer.After(0.3, Initialize)
             elseif event == "PLAYER_ENTERING_WORLD" then
                 local isLogin, isReload = ...
@@ -757,6 +1046,7 @@ function module:OnDisable()
     
     CDM.applying.essential = false
     CDM.applying.utility = false
+    CDM.applying.buff = false
 end
 
 function module:OnProfileChanged()
@@ -768,18 +1058,36 @@ end
 
 function module:RefreshAll()
     if not self:IsEnabled() then return end
+    if CDM.refreshing then return end
     
-    CDM.applying.essential = false
-    CDM.applying.utility = false
-    IncrementSettingsVersion()
-    C_Timer.After(0.01, function()
-        if module:IsEnabled() then
+    CDM.refreshing = true
+    
+    if CDM.refreshTimer then
+        CDM.refreshTimer:Cancel()
+        CDM.refreshTimer = nil
+    end
+    
+    CDM.refreshTimer = C_Timer.NewTimer(0.1, function()
+        CDM.refreshTimer = nil
+        CDM.refreshing = false
+        
+        if not module:IsEnabled() then return end
+        
+        IncrementSettingsVersion()
+        
+        C_Timer.After(0.05, function()
+            if not module:IsEnabled() then return end
+            
             for _, viewerInfo in ipairs(VIEWERS) do
-                LayoutViewer(viewerInfo.name, viewerInfo.key)
+                local viewer = _G[viewerInfo.name]
+                if viewer and not CDM.applying[viewerInfo.key] and not viewer.__cdmLayoutRunning then
+                    LayoutViewer(viewerInfo.name, viewerInfo.key)
+                end
             end
+            
             if module.UpdateAllKeybinds then
                 module.UpdateAllKeybinds()
             end
-        end
+        end)
     end)
 end

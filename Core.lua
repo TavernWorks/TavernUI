@@ -264,6 +264,14 @@ function TavernUI:SlashCommand(input)
             self.db.profile.general.debug = not self.db.profile.general.debug
             self:Print("Debug mode:", self.db.profile.general.debug and "ON" or "OFF")
         end
+    elseif input == "reset" then
+        if self.db then
+            self.db:ResetDB()
+            self:RefreshModuleStates()
+            self:Print("|cffff0000All saved variables have been reset to defaults.|r")
+        else
+            self:Print("Database not initialized.")
+        end
     else
         self:Print("Unknown command. Type /tui help for commands.")
     end
@@ -277,6 +285,7 @@ function TavernUI:PrintHelp()
     self:Print("  /tui enable <module> - Enable a module")
     self:Print("  /tui disable <module> - Disable a module")
     self:Print("  /tui debug - Toggle debug mode")
+    self:Print("  /tui reset - Reset all saved variables to defaults")
 end
 
 function TavernUI:PrintModuleStatus()

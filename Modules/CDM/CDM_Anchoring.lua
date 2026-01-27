@@ -9,6 +9,7 @@ if not module then return end
 
 local VIEWER_ESSENTIAL = module.VIEWER_ESSENTIAL or "EssentialCooldownViewer"
 local VIEWER_UTILITY = module.VIEWER_UTILITY or "UtilityCooldownViewer"
+local VIEWER_BUFF = module.VIEWER_BUFF or "BuffCooldownViewer"
 
 local CDM = module.CDM
 if not CDM then
@@ -103,6 +104,7 @@ local function RegisterAnchors()
     
     local essentialViewer = _G[VIEWER_ESSENTIAL]
     local utilityViewer = _G[VIEWER_UTILITY]
+    local buffViewer = _G[VIEWER_BUFF]
     
     if essentialViewer then
         Anchor:Register("TavernUI.CDM.Essential", essentialViewer, {
@@ -114,6 +116,13 @@ local function RegisterAnchors()
     if utilityViewer then
         Anchor:Register("TavernUI.CDM.Utility", utilityViewer, {
             displayName = "Utility Cooldowns",
+            category = "cdm",
+        })
+    end
+    
+    if buffViewer then
+        Anchor:Register("TavernUI.CDM.Buff", buffViewer, {
+            displayName = "Buff Cooldowns",
             category = "cdm",
         })
     end
@@ -149,7 +158,7 @@ end
 local function HasPositionChanged(key, startPos)
     if not startPos then return false end
     
-    local viewerName = key == "essential" and VIEWER_ESSENTIAL or VIEWER_UTILITY
+    local viewerName = (key == "essential" and VIEWER_ESSENTIAL) or (key == "utility" and VIEWER_UTILITY) or (key == "buff" and VIEWER_BUFF)
     local viewer = _G[viewerName]
     if not viewer then return false end
     
@@ -188,9 +197,9 @@ local function OnEditModeEnter()
     CDM.editModeStartPositions = {}
     
     -- Store positions for frames that have anchoring enabled
-    for _, key in ipairs({"essential", "utility"}) do
+    for _, key in ipairs({"essential", "utility", "buff"}) do
         if ShouldApplyAnchor(key) then
-            local viewerName = key == "essential" and VIEWER_ESSENTIAL or VIEWER_UTILITY
+            local viewerName = (key == "essential" and VIEWER_ESSENTIAL) or (key == "utility" and VIEWER_UTILITY) or (key == "buff" and VIEWER_BUFF)
             local viewer = _G[viewerName]
             if viewer then
                 CDM.editModeStartPositions[key] = GetViewerPosition(viewer)
@@ -204,7 +213,7 @@ local function OnEditModeSave()
     if not module:IsEnabled() then return end
     
     -- Check each viewer that had anchoring
-    for _, key in ipairs({"essential", "utility"}) do
+    for _, key in ipairs({"essential", "utility", "buff"}) do
         local startPos = CDM.editModeStartPositions[key]
         
         -- Only check if we had a start position (meaning anchoring was enabled)
@@ -215,8 +224,9 @@ local function OnEditModeSave()
                 ClearAnchorConfig(key)
                 
                 -- Notify about the change
+                local viewerName = (key == "essential" and "Essential") or (key == "utility" and "Utility") or (key == "buff" and "Buff")
                 if DEFAULT_CHAT_FRAME then
-                    DEFAULT_CHAT_FRAME:AddMessage("|cFFFFAA00CDM:|r " .. (key == "essential" and "Essential" or "Utility") .. " anchoring disabled (frame moved in Edit Mode)")
+                    DEFAULT_CHAT_FRAME:AddMessage("|cFFFFAA00CDM:|r " .. viewerName .. " anchoring disabled (frame moved in Edit Mode)")
                 end
                 
                 -- Refresh the options UI if it's open
@@ -227,7 +237,7 @@ local function OnEditModeSave()
                 end
             else
                 -- Position didn't change, re-apply anchor to maintain the connection
-                local viewerName = key == "essential" and VIEWER_ESSENTIAL or VIEWER_UTILITY
+                local viewerName = (key == "essential" and VIEWER_ESSENTIAL) or (key == "utility" and VIEWER_UTILITY) or (key == "buff" and VIEWER_BUFF)
                 ApplyAnchorWithTimer(key, viewerName)
             end
         end
@@ -298,6 +308,10 @@ local function ApplyAnchorsAfterLayout(trackerKey)
         if ShouldApplyAnchor("utility") then
             ApplyAnchorWithTimer("utility", VIEWER_UTILITY)
         end
+    elseif trackerKey == "buff" then
+        if ShouldApplyAnchor("buff") then
+            ApplyAnchorWithTimer("buff", VIEWER_BUFF)
+        end
     end
 end
 
@@ -307,6 +321,10 @@ end
 
 module.ApplyUtilityAnchor = function()
     ApplyAnchorWithTimer("utility", VIEWER_UTILITY)
+end
+
+module.ApplyBuffAnchor = function()
+    ApplyAnchorWithTimer("buff", VIEWER_BUFF)
 end
 
 module.RegisterAnchors = RegisterAnchors
@@ -320,6 +338,7 @@ local function CleanupAnchors()
     if Anchor then
         Anchor:Unregister("TavernUI.CDM.Essential")
         Anchor:Unregister("TavernUI.CDM.Utility")
+        Anchor:Unregister("TavernUI.CDM.Buff")
     end
     
     for key, handle in pairs(CDM.anchorHandles) do

@@ -8,13 +8,12 @@ if not module then return end
 
 local VIEWER_ESSENTIAL = module.VIEWER_ESSENTIAL or "EssentialCooldownViewer"
 local VIEWER_UTILITY = module.VIEWER_UTILITY or "UtilityCooldownViewer"
+local VIEWER_BUFF = module.VIEWER_BUFF or "BuffCooldownViewer"
 
--- Cache for spell ID to keybind mapping
+-- Persistent cache for spell ID to keybind mapping (only cleared on action bar changes)
 local spellToKeybind = {}
--- Cache for spell NAME to keybind mapping (fallback for macros)
+-- Persistent cache for spell NAME to keybind mapping (fallback for macros)
 local spellNameToKeybind = {}
-local lastCacheUpdate = 0
-local CACHE_UPDATE_INTERVAL = 1.0
 
 -- Cache of known action buttons (built once, reused)
 local cachedActionButtons = {}
@@ -24,10 +23,8 @@ local actionButtonsCached = false
 local macroNameCache = {}
 local macroCacheBuilt = false
 
--- Timer for periodic cache refresh
-local cacheRefreshTimer = nil
-
-local pendingRebuild = false
+-- Track which spellIDs have been cached
+local cachedSpellIDs = {}
 
 local function GetSettings(key)
     return module.GetSettings and module.GetSettings(key)
@@ -446,34 +443,23 @@ local function BuildActionButtonCache()
 end
 
 -- Scan cached action buttons and build spell-to-keybind cache
-local function RebuildCache()
+-- Only processes buttons that haven't been cached yet, or rebuilds all on action bar change
+local function RebuildCache(forceRebuild)
     if not actionButtonsCached then
         BuildActionButtonCache()
     end
     
-    macroCacheBuilt = false
-    wipe(macroNameCache)
-    wipe(spellToKeybind)
-    wipe(spellNameToKeybind)
+    if forceRebuild then
+        macroCacheBuilt = false
+        wipe(macroNameCache)
+        wipe(spellToKeybind)
+        wipe(spellNameToKeybind)
+        wipe(cachedSpellIDs)
+    end
 
     for _, button in ipairs(cachedActionButtons) do
         pcall(ProcessActionButton, button)
     end
-    
-    lastCacheUpdate = GetTime()
-    pendingRebuild = false
-end
-
--- Periodic cache refresh using timer instead of checking on every lookup
-local function StartCacheRefreshTimer()
-    if cacheRefreshTimer then
-        cacheRefreshTimer:Cancel()
-    end
-    cacheRefreshTimer = C_Timer.NewTicker(CACHE_UPDATE_INTERVAL, function()
-        if GetTime() - lastCacheUpdate >= CACHE_UPDATE_INTERVAL then
-            RebuildCache()
-        end
-    end)
 end
 
 -- Get keybind for a spell ID (uses cache)
@@ -490,6 +476,29 @@ local function GetKeybindForSpell(spellID)
     return nil
 end
 
+-- Get or cache keybind for a specific spellID
+local function GetOrCacheKeybindForSpell(spellID)
+    if not spellID then return nil end
+    
+    local ok, isCached = pcall(function()
+        return cachedSpellIDs[spellID]
+    end)
+    if ok and isCached then
+        return GetKeybindForSpell(spellID)
+    end
+    
+    if not actionButtonsCached then
+        BuildActionButtonCache()
+    end
+    
+    RebuildCache(false)
+    ok, _ = pcall(function()
+        cachedSpellIDs[spellID] = true
+    end)
+    
+    return GetKeybindForSpell(spellID)
+end
+
 -- Get keybind for a spell name (fallback for macros)
 local function GetKeybindForSpellName(spellName)
     if not spellName then return nil end
@@ -501,98 +510,171 @@ local function GetKeybindForSpellName(spellName)
 end
 
 -- Apply keybind text to a cooldown icon
-local function ApplyKeybindToIcon(icon, viewerName)
-    if not module:IsEnabled() then return end
-    
-    local trackerKey = viewerName == VIEWER_ESSENTIAL and "essential" or "utility"
-    local settings = GetSettings(trackerKey)
-    if not settings then return end
-    
-    if not settings.showKeybinds then
-        if icon.keybindText then
-            icon.keybindText:Hide()
-        end
-        return
+-- Only re-applies if spellID changed or keybind was lost
+
+-- Safely compare two secret values by checking for secrets first
+local function SafeCompare(a, b)
+    if not a or not b then
+        return a == b
     end
     
-    local spellID
-    local spellName
-    local ok, result = pcall(function()
-        local id = icon.spellID
-        if not id and icon.GetSpellID then
-            id = icon:GetSpellID()
+    local aIsSecret = issecretvalue(a)
+    local bIsSecret = issecretvalue(b)
+    
+    if aIsSecret or bIsSecret then
+        local compareOk, result = pcall(function()
+            return a == b
+        end)
+        if compareOk then
+            return result
         end
-        return id
+        return false
+    end
+    
+    return a == b
+end
+
+-- Safely extract spellID from an icon
+local function GetSpellIDFromIcon(icon)
+    if not icon then return nil end
+    
+    local ok, id = pcall(function()
+        return icon.spellID or (icon.GetSpellID and icon:GetSpellID())
     end)
     
-    if ok then
-        spellID = result
+    if ok and id then
+        return id
     end
     
-    if not spellID and icon.action then
-        local actionOk, actionType, id = pcall(GetActionInfo, icon.action)
-        if actionOk and actionType == "spell" then
-            spellID = id
+    if icon.action then
+        local actionOk, actionType, actionID = pcall(GetActionInfo, icon.action)
+        if actionOk and actionType == "spell" and actionID then
+            return actionID
         end
     end
     
-    pcall(function()
-        if icon.cooldownInfo and icon.cooldownInfo.name then
-            local testOk, _ = pcall(function() return icon.cooldownInfo.name:len() end)
-            if testOk then
-                spellName = icon.cooldownInfo.name
+    return nil
+end
+
+-- Safely extract spell name from various sources
+local function GetSpellNameFromIcon(icon, spellID)
+    if not icon then return nil end
+    
+    local name = nil
+    
+    if icon.cooldownInfo then
+        local ok, cooldownName = pcall(function()
+            return icon.cooldownInfo.name
+        end)
+        if ok and cooldownName then
+            local lenOk = pcall(function() return tostring(cooldownName):len() end)
+            if lenOk then
+                name = cooldownName
             end
         end
-        if not spellName and spellID then
-            local info = C_Spell.GetSpellInfo(spellID)
-            if info and info.name then
-                local testOk, _ = pcall(function() return info.name:len() end)
-                if testOk then
-                    spellName = info.name
+    end
+    
+    if not name and spellID then
+        local infoOk, info = pcall(function()
+            return C_Spell.GetSpellInfo(spellID)
+        end)
+        if infoOk and info then
+            local nameOk, spellName = pcall(function()
+                return info.name
+            end)
+            if nameOk and spellName then
+                local lenOk = pcall(function() return tostring(spellName):len() end)
+                if lenOk then
+                    name = spellName
                 end
             end
         end
+    end
+    
+    return name
+end
+
+-- Get keybind for a spellID, checking override spells and caching if needed
+local function GetKeybindForSpellID(spellID)
+    if not spellID then return nil end
+    
+    local keybind = GetOrCacheKeybindForSpell(spellID)
+    if keybind then
+        return keybind
+    end
+    
+    local ok, overrideID = pcall(function()
+        return C_Spell.GetOverrideSpell and C_Spell.GetOverrideSpell(spellID)
     end)
     
-    local keybind = nil
+    if ok and overrideID and not SafeCompare(overrideID, spellID) then
+        return GetOrCacheKeybindForSpell(overrideID)
+    end
+    
+    return nil
+end
+
+-- Update icon's cached spellID and keybind
+local function UpdateIconCache(icon, spellID, keybind)
+    if keybind then
+        icon._lastKeybind = keybind
+        if spellID then
+            icon._lastSpellID = spellID
+        end
+    end
+end
+
+-- Check if icon's cached spellID matches current spellID
+local function IsCachedSpellIDValid(icon, spellID)
+    if not icon._lastSpellID or not spellID then
+        return false
+    end
+    return SafeCompare(icon._lastSpellID, spellID)
+end
+
+-- Clear icon cache if spellID changed
+local function ValidateIconCache(icon, spellID)
+    if icon._lastSpellID and spellID and not SafeCompare(icon._lastSpellID, spellID) then
+        icon._lastKeybind = nil
+    end
+end
+
+-- Get keybind using multiple strategies, with persistent caching on icon
+local function ResolveKeybind(icon, spellID, spellName)
+    if not icon then return nil end
+    
+    ValidateIconCache(icon, spellID)
     
     if spellID then
-        if icon._lastSpellID and icon._lastSpellID ~= spellID then
-            icon._lastKeybind = nil
+        if IsCachedSpellIDValid(icon, spellID) and icon._lastKeybind then
+            return icon._lastKeybind
         end
         
-        keybind = GetKeybindForSpell(spellID)
-        
-        if not keybind then
-            local ok, result = pcall(function()
-                return C_Spell.GetOverrideSpell and C_Spell.GetOverrideSpell(spellID)
-            end)
-            if ok and result and result ~= spellID then
-                keybind = GetKeybindForSpell(result)
-            end
-        end
-        
+        local keybind = GetKeybindForSpellID(spellID)
         if keybind then
-            icon._lastKeybind = keybind
-            icon._lastSpellID = spellID
-        elseif icon._lastSpellID == spellID and icon._lastKeybind then
-            keybind = icon._lastKeybind
+            UpdateIconCache(icon, spellID, keybind)
+            return keybind
         end
     end
     
-    if not keybind and spellName then
-        keybind = GetKeybindForSpellName(spellName)
+    if spellName then
+        local keybind = GetKeybindForSpellName(spellName)
         if keybind then
-            icon._lastKeybind = keybind
-            if spellID then
-                icon._lastSpellID = spellID
-            end
+            UpdateIconCache(icon, spellID, keybind)
+            return keybind
         end
     end
     
-    if not keybind and not spellID and icon._lastKeybind then
-        keybind = icon._lastKeybind
+    if not spellID and icon._lastKeybind then
+        return icon._lastKeybind
     end
+    
+    return nil
+end
+
+-- Apply keybind text display to icon
+local function ApplyKeybindDisplay(icon, keybind, settings)
+    if not icon then return end
     
     local keybindSize = settings.keybindSize or 10
     local keybindPoint = settings.keybindPoint or "TOPLEFT"
@@ -611,25 +693,55 @@ local function ApplyKeybindToIcon(icon, viewerName)
         icon.keybindText:SetShadowColor(0, 0, 0, 1)
     end
     
-    icon.keybindText:GetParent():SetFrameStrata("TOOLTIP")
+    icon.keybindText:GetParent():SetFrameStrata("MEDIUM")
     icon.keybindText:GetParent():SetFrameLevel(icon:GetFrameLevel() + 100)
     
     icon.keybindText:ClearAllPoints()
     icon.keybindText:SetPoint(keybindPoint, icon, keybindPoint, keybindOffsetX, keybindOffsetY)
-    
     icon.keybindText:SetFont("Fonts\\FRIZQT__.TTF", keybindSize, "OUTLINE")
-    
     icon.keybindText:SetTextColor(keybindColor.r, keybindColor.g, keybindColor.b, keybindColor.a or 1)
     
     if keybind then
         icon.keybindText:SetText(keybind)
         icon.keybindText:Show()
     else
+        icon.keybindText:SetText("")
+        icon.keybindText:Hide()
+        icon._lastKeybind = nil
+    end
+end
+
+local function ApplyKeybindToIcon(icon, viewerName)
+    if not module:IsEnabled() then return end
+    
+    local trackerKey = (viewerName == VIEWER_ESSENTIAL and "essential") or 
+                       (viewerName == VIEWER_UTILITY and "utility") or 
+                       (viewerName == VIEWER_BUFF and "buff")
+    
+    local settings = GetSettings(trackerKey)
+    if not settings then return end
+    
+    if not settings.showKeybinds then
         if icon.keybindText then
-            icon.keybindText:SetText("")
             icon.keybindText:Hide()
         end
-        icon._lastKeybind = nil
+        return
+    end
+    
+    local spellID = GetSpellIDFromIcon(icon)
+    local spellName = GetSpellNameFromIcon(icon, spellID)
+    
+    if spellID and IsCachedSpellIDValid(icon, spellID) and icon._lastKeybind then
+        if icon.keybindText and not icon.keybindText:IsShown() then
+            ApplyKeybindDisplay(icon, icon._lastKeybind, settings)
+        end
+        return
+    end
+    
+    local keybind = ResolveKeybind(icon, spellID, spellName)
+    
+    if keybind ~= icon._lastKeybind or not icon.keybindText or (icon.keybindText and not icon.keybindText:IsShown()) then
+        ApplyKeybindDisplay(icon, keybind, settings)
     end
 end
 
@@ -649,27 +761,28 @@ local function UpdateViewerKeybinds(viewerName)
     end
 end
 
--- Update keybinds on Essential and Utility viewers
-local function UpdateAllKeybinds()
-    lastCacheUpdate = 0
-    RebuildCache()
-    StartCacheRefreshTimer()
+-- Update keybinds on Essential, Utility, and Buff viewers
+local function UpdateAllKeybinds(forceRebuild)
+    if forceRebuild then
+        RebuildCache(true)
+    end
     
     UpdateViewerKeybinds(VIEWER_ESSENTIAL)
     UpdateViewerKeybinds(VIEWER_UTILITY)
+    UpdateViewerKeybinds(VIEWER_BUFF)
 end
 
 -- Throttle for event-driven updates
 local updatePending = false
-local UPDATE_THROTTLE = 0.5
+local UPDATE_THROTTLE = 0.2
 
-local function ThrottledUpdate()
+local function ThrottledUpdate(forceRebuild)
     if updatePending then return end
     updatePending = true
     
     C_Timer.After(UPDATE_THROTTLE, function()
         updatePending = false
-        UpdateAllKeybinds()
+        UpdateAllKeybinds(forceRebuild)
     end)
 end
 
@@ -679,21 +792,13 @@ eventFrame:RegisterEvent("ACTIONBAR_SLOT_CHANGED")
 eventFrame:RegisterEvent("UPDATE_BINDINGS")
 eventFrame:RegisterEvent("PLAYER_ENTERING_WORLD")
 eventFrame:RegisterEvent("SPELLS_CHANGED")
-eventFrame:RegisterEvent("PLAYER_REGEN_ENABLED")
 
 eventFrame:SetScript("OnEvent", function(self, event)
-    if event == "PLAYER_REGEN_ENABLED" then
-        if pendingRebuild then
-            C_Timer.After(0.2, UpdateAllKeybinds)
-        end
-        return
-    end
-    
     if event == "PLAYER_ENTERING_WORLD" then
-        C_Timer.After(0.5, function()
-            actionButtonsCached = false
-            macroCacheBuilt = false
-            UpdateAllKeybinds()
+        actionButtonsCached = false
+        macroCacheBuilt = false
+        C_Timer.After(0.1, function()
+            UpdateAllKeybinds(true)
         end)
         return
     end
@@ -701,11 +806,14 @@ eventFrame:SetScript("OnEvent", function(self, event)
     if event == "UPDATE_BINDINGS" or event == "ACTIONBAR_SLOT_CHANGED" then
         macroCacheBuilt = false
         wipe(macroNameCache)
-        wipe(spellToKeybind)
-        wipe(spellNameToKeybind)
+        ThrottledUpdate(true)
+        return
     end
     
-    ThrottledUpdate()
+    if event == "SPELLS_CHANGED" then
+        ThrottledUpdate(false)
+        return
+    end
 end)
 
 -- Hook into viewer layout updates
@@ -723,6 +831,14 @@ local function HookViewerLayout(viewerName)
     end
 end
 
+-- Initialize immediately and on events
+local function InitializeKeybinds()
+    HookViewerLayout(VIEWER_ESSENTIAL)
+    HookViewerLayout(VIEWER_UTILITY)
+    HookViewerLayout(VIEWER_BUFF)
+    UpdateAllKeybinds(true)
+end
+
 -- Initialize hooks when viewers are available
 local initFrame = CreateFrame("Frame")
 initFrame:RegisterEvent("ADDON_LOADED")
@@ -730,28 +846,21 @@ initFrame:RegisterEvent("PLAYER_ENTERING_WORLD")
 
 initFrame:SetScript("OnEvent", function(self, event, arg)
     if event == "ADDON_LOADED" and arg == "Blizzard_CooldownManager" then
-        C_Timer.After(0.5, function()
-            HookViewerLayout(VIEWER_ESSENTIAL)
-            HookViewerLayout(VIEWER_UTILITY)
-            UpdateAllKeybinds()
-        end)
+        C_Timer.After(0.1, InitializeKeybinds)
     elseif event == "PLAYER_ENTERING_WORLD" then
-        C_Timer.After(1.0, function()
-            HookViewerLayout(VIEWER_ESSENTIAL)
-            HookViewerLayout(VIEWER_UTILITY)
-            UpdateAllKeybinds()
-        end)
+        C_Timer.After(0.1, InitializeKeybinds)
     end
 end)
+
+-- Initialize immediately if addon is already loaded
+if IsAddOnLoaded and IsAddOnLoaded("Blizzard_CooldownManager") then
+    C_Timer.After(0.1, InitializeKeybinds)
+end
 
 -- Cleanup on disable
 if module and module.OnDisable then
     local originalOnDisable = module.OnDisable
     module.OnDisable = function(self)
-        if cacheRefreshTimer then
-            cacheRefreshTimer:Cancel()
-            cacheRefreshTimer = nil
-        end
         if originalOnDisable then
             originalOnDisable(self)
         end

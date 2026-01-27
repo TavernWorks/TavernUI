@@ -106,9 +106,42 @@ local function MakeRowOption(key, rowIndex, optionKey, optionType, config)
             db[key].rows[rowIndex][setPath] = value
         end
 
+        if key == "buff" and setPath == "iconCount" then
+            local db = module:GetDB()
+            local settings = db[key] or {}
+            local activeRows = {}
+            for _, row in ipairs(settings.rows or {}) do
+                if row.iconCount and row.iconCount > 0 then
+                    table.insert(activeRows, row)
+                end
+            end
+            local newCapacity = 0
+            for _, row in ipairs(activeRows) do
+                newCapacity = newCapacity + (row.iconCount or 0)
+            end
+            
+            if module.ValidateSlotAssignments then
+                local cleaned, removedCount = module.ValidateSlotAssignments("buff", newCapacity)
+                if cleaned and removedCount > 0 then
+                    if DEFAULT_CHAT_FRAME then
+                        DEFAULT_CHAT_FRAME:AddMessage("|cFFFFAA00CDM:|r " .. removedCount .. " slot assignment(s) were removed due to capacity reduction")
+                    end
+                end
+                if module.CDM then
+                    module.CDM.lastCapacity = module.CDM.lastCapacity or {}
+                    module.CDM.lastCapacity["buff"] = newCapacity
+                end
+            end
+        end
+        
         IncrementSettingsVersion(key)
-        if module:IsEnabled() then
-            module:RefreshAll()
+        
+        if module:IsEnabled() and not (module.CDM and module.CDM.refreshing) then
+            C_Timer.After(0.15, function()
+                if module:IsEnabled() and not (module.CDM and module.CDM.refreshing) then
+                    module:RefreshAll()
+                end
+            end)
         end
     end
 
@@ -286,8 +319,26 @@ local function BuildAnchorOptions(key, orderBase, config)
     local order = orderBase or 1
     local viewerName = config.viewerName or key
 
+    local viewerConfig = {
+        essential = {
+            anchorName = "TavernUI.CDM.Essential",
+            applyFunc = module.ApplyEssentialAnchor,
+        },
+        utility = {
+            anchorName = "TavernUI.CDM.Utility",
+            applyFunc = module.ApplyUtilityAnchor,
+        },
+        buff = {
+            anchorName = "TavernUI.CDM.Buff",
+            applyFunc = module.ApplyBuffAnchor,
+        },
+    }
+    
+    local viewerInfo = viewerConfig[key] or {}
+    local excludeAnchor = viewerInfo.anchorName
+
     local function GetApplyAnchorFunc()
-        return key == "essential" and module.ApplyEssentialAnchor or module.ApplyUtilityAnchor
+        return viewerInfo.applyFunc
     end
 
     args.anchoringHeader = {type = "header", name = "Anchoring", order = order}
@@ -298,7 +349,6 @@ local function BuildAnchorOptions(key, orderBase, config)
         if not Anchor then return categories end
 
         local allAnchors = Anchor:GetAll()
-        local excludeAnchor = key == "essential" and "TavernUI.CDM.Essential" or "TavernUI.CDM.Utility"
 
         for anchorName, anchorData in pairs(allAnchors) do
             if anchorName ~= excludeAnchor and anchorData.metadata then
@@ -475,7 +525,6 @@ local function BuildAnchorOptions(key, orderBase, config)
 
                 if selectedCategory and selectedCategory ~= "None" then
                     local anchorsByCategory = Anchor:GetByCategory(selectedCategory)
-                    local excludeAnchor = key == "essential" and "TavernUI.CDM.Essential" or "TavernUI.CDM.Utility"
 
                     for anchorName, anchorData in pairs(anchorsByCategory) do
                         if anchorName ~= excludeAnchor then
@@ -936,7 +985,7 @@ local function BuildViewerOptions(key, viewerName, orderBase)
     if section.rows then
         for i, row in ipairs(section.rows) do
             local rowKey = "row" .. i
-            local rowOrderBase = key == "essential" and 20 or 30
+            local rowOrderBase = key == "essential" and 20 or (key == "utility" and 30) or 40
             args[rowKey] = {
                 type = "group",
                 name = "Row " .. i,
@@ -946,6 +995,7 @@ local function BuildViewerOptions(key, viewerName, orderBase)
             }
         end
     end
+    
 
     return args
 end
@@ -975,11 +1025,18 @@ function module:BuildOptions()
                 order = 20,
                 args = {},
             },
+            buff = {
+                type = "group",
+                name = "Buff Cooldowns",
+                order = 30,
+                args = {},
+            },
         },
     }
 
     options.args.essential.args = BuildViewerOptions("essential", "Essential", 1)
     options.args.utility.args = BuildViewerOptions("utility", "Utility", 1)
+    options.args.buff.args = BuildViewerOptions("buff", "Buff", 1)
 
     TavernUI:RegisterModuleOptions("CDM", options, "CDM")
 end
