@@ -34,6 +34,9 @@ TavernUI.modulePrototype = {}
 
 function TavernUI.modulePrototype:GetDB()
     -- Always return fresh reference to avoid stale data after profile changes
+    if not TavernUI.db or not TavernUI.db.profile then
+        return {}
+    end
     return TavernUI.db.profile[self:GetName()] or {}
 end
 
@@ -103,8 +106,13 @@ function TavernUI:RefreshModuleStates()
             shouldEnable = true
         end
         
-        if shouldEnable and not module:IsEnabled() then
-            self:EnableModule(name)
+        if shouldEnable then
+            if not module:IsEnabled() then
+                self:EnableModule(name)
+            elseif name == "uCDM" and module.OnEnable and not module.__onEnableCalled then
+                module.__onEnableCalled = true
+                module:OnEnable()
+            end
         elseif not shouldEnable and module:IsEnabled() then
             self:DisableModule(name)
         end
@@ -181,6 +189,36 @@ function TavernUI:GetOptions()
     return self._optionsTable
 end
 
+local function FixScrollbarsInFrame(frame)
+    if not frame then return end
+    
+    local function FixScrollFrame(scrollFrame)
+        if scrollFrame and scrollFrame.obj and scrollFrame.obj.FixScroll then
+            scrollFrame.obj:FixScroll()
+        end
+    end
+    
+    local function FindAndFixScrollFrames(parent)
+        if not parent then return end
+        
+        local children = {parent:GetChildren()}
+        for _, child in ipairs(children) do
+            if child.GetObjectType and child:GetObjectType() == "ScrollFrame" then
+                FixScrollFrame(child)
+            end
+            if child.GetChildren then
+                FindAndFixScrollFrames(child)
+            end
+        end
+        
+        if parent.content and parent.content.GetChildren then
+            FindAndFixScrollFrames(parent.content)
+        end
+    end
+    
+    FindAndFixScrollFrames(frame)
+end
+
 function TavernUI:InitializeOptions()
     local function getOptions()
         local options = self:GetOptions()
@@ -193,6 +231,46 @@ function TavernUI:InitializeOptions()
     
     AceConfig:RegisterOptionsTable("TavernUI", getOptions)
     self.optionsFrame = AceConfigDialog:AddToBlizOptions("TavernUI", "TavernUI")
+    
+    AceConfigDialog:SetDefaultSize("TavernUI", 800, 800)
+    
+    local originalOpen = AceConfigDialog.Open
+    AceConfigDialog.Open = function(self, appName, ...)
+        local result = originalOpen(self, appName, ...)
+        
+        if appName == "TavernUI" then
+            C_Timer.After(0.1, function()
+                local frame = AceConfigDialog.OpenFrames["TavernUI"]
+                if frame and frame.frame then
+                    local windowFrame = frame.frame
+                    
+                    frame.frame:SetResizeBounds(800, 800, 1600, 1200)
+                    
+                    if not windowFrame._scrollbarFixed then
+                        windowFrame._scrollbarFixed = true
+                        
+                        local function UpdateScrollbars()
+                            FixScrollbarsInFrame(windowFrame)
+                        end
+
+                        windowFrame:HookScript("OnShow", function()
+                            C_Timer.After(0.1, UpdateScrollbars)
+                        end)
+                        
+                        if frame.content then
+                            frame.content:HookScript("OnSizeChanged", function()
+                                C_Timer.After(0.05, UpdateScrollbars)
+                            end)
+                        end
+                        
+                        UpdateScrollbars()
+                    end
+                end
+            end)
+        end
+        
+        return result
+    end
 end
 
 function TavernUI:RegisterModuleOptions(moduleName, moduleOptions, displayName)
@@ -241,6 +319,13 @@ function TavernUI:RegisterModuleOptions(moduleName, moduleOptions, displayName)
     end
     
     AceConfigRegistry:NotifyChange("TavernUI")
+    
+    C_Timer.After(0.2, function()
+        local frame = AceConfigDialog.OpenFrames["TavernUI"]
+        if frame and frame.frame then
+            FixScrollbarsInFrame(frame.frame)
+        end
+    end)
 end
 
 function TavernUI:FindModuleByName(searchName)
@@ -256,6 +341,14 @@ end
 function TavernUI:OpenOptions(panel)
     panel = panel or "TavernUI"
     AceConfigDialog:Open(panel)
+    
+    C_Timer.After(0.1, function()
+        local frame = AceConfigDialog.OpenFrames[panel]
+        if frame and frame.frame then
+            frame.frame:SetResizeBounds(600, 400, 1600, 1200)
+            FixScrollbarsInFrame(frame.frame)
+        end
+    end)
 end
 
 function TavernUI:SlashCommand(input)

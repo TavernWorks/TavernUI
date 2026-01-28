@@ -1,0 +1,16 @@
+<Ui xmlns="http://www.blizzard.com/wow/ui/" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.blizzard.com/wow/ui/ ..\FrameXML\UI.xsd">
+	<Script file="uCDM.lua"/>
+	<Script file="uCDM_EntrySystem.lua"/>
+	<Script file="uCDM_BlizzProvider.lua"/>
+	<Script file="uCDM_CustomProvider.lua"/>
+	<Script file="uCDM_LayoutEngine.lua"/>
+	<Script file="uCDM_FrameManager.lua"/>
+	<Script file="uCDM_CooldownTrackerHelpers.lua"/>
+	<Script file="uCDM_CooldownTracker.lua"/>
+	<Script file="uCDM_Styler.lua"/>
+	<Script file="uCDM_Keybinds.lua"/>
+	<Script file="uCDM_Conditions.lua"/>
+	<Script file="uCDM_RefreshManager.lua"/>
+	<Script file="uCDM_Anchoring.lua"/>
+	<Script file="uCDM_Options.lua"/>
+</Ui>

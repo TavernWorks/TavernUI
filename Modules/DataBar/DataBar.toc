@@ -1,8 +1,0 @@
-## Interface: 120000
-## Title: TavernUI - DataBar
-## Notes: Information bars with datatext slots for TavernUI
-## Dependencies: TavernUI
-## LoadOnDemand: 1
-## SavedVariables: TavernUIConfig
-
-DataBar.lua
