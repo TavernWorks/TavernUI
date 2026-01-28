@@ -1,4 +1,4 @@
-package-as: TavernUI
+﻿package-as: TavernUI
 enable-nolib-creation: no
 
 curse-id: 1443486
@@ -34,12 +34,11 @@ ignore:
   - libs/*/tests
   - libs/*/test
   - Modules/ExampleModule
-  - Modules/DataBar
 
 move-folders:
   TavernUI/Modules/ExampleModule: TavernUI_ExampleModule
   TavernUI/Modules/Options: TavernUI_Options
-  TavernUI/Modules/CDM: TavernUI_CDM
+  TavernUI/Modules/uCDM: TavernUI_uCDM
   TavernUI/Modules/ExtendedAnchorFrames: TavernUI_ExtendedAnchorFrames
 
 manual-changelog: CHANGELOG.txt

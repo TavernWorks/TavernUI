@@ -1,6 +1,11 @@
 TavernUI Changelog
 ==================
-v1.0.0-beta-2 (2026-01-37
+v1.0.0-beta-3 (2026-01-28)
+ - Refactor Cooldown Manager for Extensibility
+ - Release updated configuration tooling
+ - Setup the project for ease of future development
+
+v1.0.0-beta-2 (2026-01-27
  - Streamline /tui commands
  - Added nested /tui module commands to go to options
  - Fix Ace and Abstract Lib references

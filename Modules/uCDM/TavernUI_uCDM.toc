@@ -1,0 +1,7 @@
+## Interface: 120000
+## Title: TavernUI - Ultimate Cooldown Manager
+## Notes: Cooldown Manager Enhancement Engine
+## Dependencies: TavernUI
+## SavedVariables: TavernUIConfig
+
+uCDM.xml
