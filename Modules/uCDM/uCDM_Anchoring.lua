@@ -23,6 +23,7 @@ local CONSTANTS = {
 }
 
 local anchorHandles = {}
+local lastAppliedConfig = {}
 local anchorTimers = {}
 local editModeStartPositions = {}
 local editModeHooked = false
@@ -96,6 +97,17 @@ local function ReleaseAnchor(viewerKey)
         end
         anchorHandles[viewerKey] = nil
     end
+    lastAppliedConfig[viewerKey] = nil
+end
+
+local function ConfigMatches(viewerKey, config)
+    local last = lastAppliedConfig[viewerKey]
+    if not last then return false end
+    return last.target == (config.target or "")
+        and (last.point or "CENTER") == (config.point or "CENTER")
+        and (last.relativePoint or "CENTER") == (config.relativePoint or "CENTER")
+        and (last.offsetX or 0) == (config.offsetX or 0)
+        and (last.offsetY or 0) == (config.offsetY or 0)
 end
 
 local function ClearAnchorConfig(viewerKey)
@@ -116,11 +128,14 @@ local function ApplyAnchor(viewerKey)
     
     local settings = module:GetViewerSettings(viewerKey)
     local config = settings.anchorConfig
+    local handle = anchorHandles[viewerKey]
     
+    if handle and not handle.released and ConfigMatches(viewerKey, config) then return end
+
     Anchoring.RegisterAnchors()
     ReleaseAnchor(viewerKey)
     
-    local handle = Anchor:AnchorTo(viewer, {
+    handle = Anchor:AnchorTo(viewer, {
         target = config.target,
         point = config.point or "CENTER",
         relativePoint = config.relativePoint or "CENTER",
@@ -131,7 +146,13 @@ local function ApplyAnchor(viewerKey)
     
     if handle then
         anchorHandles[viewerKey] = handle
-        module:LogInfo("Applied anchor for " .. viewerKey)
+        lastAppliedConfig[viewerKey] = {
+            target = config.target,
+            point = config.point or "CENTER",
+            relativePoint = config.relativePoint or "CENTER",
+            offsetX = config.offsetX or 0,
+            offsetY = config.offsetY or 0,
+        }
     else
         module:LogError("Failed to create anchor for " .. viewerKey)
     end
@@ -143,18 +164,6 @@ local function ApplyAnchorWithSizeHook(viewerKey)
     
     local viewer = module:GetViewerFrame(viewerKey)
     if not viewer then return end
-    
-    -- Hook OnSizeChanged to re-apply anchor
-    if not viewer.__ucdmAnchorSizeHooked then
-        viewer:HookScript("OnSizeChanged", function()
-            if anchorTimers[viewerKey] then
-                anchorTimers[viewerKey]:Cancel()
-                anchorTimers[viewerKey] = nil
-            end
-            ApplyAnchor(viewerKey)
-        end)
-        viewer.__ucdmAnchorSizeHooked = true
-    end
     
     ApplyAnchor(viewerKey)
 end
@@ -216,7 +225,6 @@ local function OnEditModeSave()
             if HasPositionChanged(viewerKey, startPos) then
                 ReleaseAnchor(viewerKey)
                 ClearAnchorConfig(viewerKey)
-                module:LogInfo(viewerKey .. " anchoring disabled (frame moved in Edit Mode)")
             else
                 ApplyAnchorWithSizeHook(viewerKey)
             end
@@ -274,7 +282,6 @@ end
 function Anchoring.Initialize()
     Anchoring.RegisterAnchors()
     HookEditMode()
-    module:LogInfo("Anchoring initialized")
 end
 
 --------------------------------------------------------------------------------

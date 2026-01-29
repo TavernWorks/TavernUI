@@ -493,8 +493,6 @@ function Keybinds.Initialize()
     if IsLoggedIn() then
         RebuildCache(true)
     end
-    
-    module:LogInfo("Keybinds initialized")
 end
 
 --------------------------------------------------------------------------------

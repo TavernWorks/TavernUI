@@ -42,8 +42,6 @@ end
 function Styler.Initialize()
     pendingStyling = {}
     setupDone = {}
-    
-    module:LogInfo("Styler initialized")
 end
 
 function Styler.RemoveMaskTextures(frame)
@@ -148,21 +146,6 @@ function Styler.SetupIconOnce(frame)
             cooldown:SetAllPoints(frame)
             cooldown:SetSwipeTexture("Interface\\Buttons\\WHITE8X8")
             cooldown:SetSwipeColor(0, 0, 0, 0.8)
-        else
-            cooldown:SetParent(UIParent)
-            cooldown:Hide()
-            local ours = CreateFrame("Cooldown", nil, frame)
-            ours:SetAllPoints(frame)
-            ours:SetDrawEdge(false)
-            ours:SetDrawBling(false)
-            ours:SetDrawSwipe(true)
-            ours:SetSwipeTexture("Interface\\Buttons\\WHITE8X8")
-            ours:SetSwipeColor(0, 0, 0, 0.8)
-            ours:SetHideCountdownNumbers(false)
-            frame.Cooldown = ours
-            if frame.cooldown and frame.cooldown == cooldown then
-                frame.cooldown = ours
-            end
         end
     end
 end
@@ -397,13 +380,6 @@ function Styler.ApplyViewerStyling(viewer, rowDistribution, activeRows, viewerKe
         if entriesInRow then
             for _, entry in ipairs(entriesInRow) do
                 if entry.frame then
-                    if module:GetSetting("general.debug", false) then
-                        local frame = entry.frame
-                        local label = entry.id and tostring(entry.id) or (frame.GetName and frame:GetName()) or "?"
-                        local size = rowConfig.iconSize or rowConfig.size or 0
-                        local pad = rowConfig.padding or 0
-                        module:LogInfo(string.format("Style %s row %d id=%s size=%s padding=%d", viewerKey, rowNum, tostring(label), tostring(size), pad))
-                    end
                     Styler.ApplyIconStyle(entry.frame, rowConfig, force)
                     Styler.ApplyTextStyle(entry.frame, rowConfig)
                 end

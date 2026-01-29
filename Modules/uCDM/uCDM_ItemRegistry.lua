@@ -44,7 +44,6 @@ function ItemRegistry.Initialize()
     end
 
     initialized = true
-    module:LogInfo("ItemRegistry initialized")
 end
 
 function ItemRegistry.Reset()
@@ -91,19 +90,13 @@ function ItemRegistry.HookBlizzardViewers()
             end)
         end)
 
-        -- Hook OnSizeChanged for layout updates
-        viewer:HookScript("OnSizeChanged", function(self)
-            if not module:IsEnabled() then return end
-            if self.__ucdmSizeTimer then
-                self.__ucdmSizeTimer:Cancel()
-            end
-            self.__ucdmSizeTimer = C_Timer.NewTimer(0.1, function()
-                self.__ucdmSizeTimer = nil
-                if module:IsEnabled() then
-                    module:RefreshViewer(viewerKey)
-                end
+        if not module.LayoutEngine.IsLayoutDrivenByBlizzardHook(viewerKey) then
+            viewer:HookScript("OnSizeChanged", function(self)
+                if not module:IsEnabled() then return end
+                if module.LayoutEngine.IsSettingViewerSize(viewerKey) then return end
+                module:RefreshViewer(viewerKey)
             end)
-        end)
+        end
 
         -- Buff viewer needs extra event handling
         if viewerKey == "buff" then
@@ -111,8 +104,6 @@ function ItemRegistry.HookBlizzardViewers()
         else
             ItemRegistry._hookCooldownEvents(viewer, viewerKey)
         end
-
-        module:LogInfo("Hooked Blizzard viewer: " .. viewerName)
         return true
     end
 
@@ -175,7 +166,7 @@ function ItemRegistry._hookCooldownEvents(viewer, viewerKey)
         if viewer:IsShown() then
             C_Timer.After(0.1, function()
                 if module:IsEnabled() and viewer:IsShown() then
-                    module:RefreshViewer(viewerKey)
+                    module:RefreshViewerContent(viewerKey)
                 end
             end)
         end
@@ -280,6 +271,9 @@ function ItemRegistry.CollectBlizzardItems(viewerKey)
                     itemsByFrame[frame] = item
                 else
                     -- Update existing item
+                    local oldSpellID = item.spellID
+                    local oldIndex = item.index
+                    local oldCooldownID = item.cooldownID
                     item.spellID = spellID
                     item.itemID = itemID
                     item.slotID = slotID
@@ -375,21 +369,14 @@ end
 
 function ItemRegistry.LoadCustomEntries()
     local customEntries = module:GetSetting("customEntries", {})
-    if not customEntries or #customEntries == 0 then
-        module:LogInfo("No custom entries to load")
-        return
-    end
-
-    module:LogInfo("Loading " .. #customEntries .. " custom entries")
+    if not customEntries or #customEntries == 0 then return end
 
     local viewersToRefresh = {}
-
     for _, config in ipairs(customEntries) do
         if config.enabled ~= false and ItemRegistry._isValidCustomConfig(config) then
-            local item = ItemRegistry.CreateCustomItem(config, true)  -- true = skip DB save
+            local item = ItemRegistry.CreateCustomItem(config, true)
             if item then
                 viewersToRefresh[item.viewerKey] = true
-                module:LogInfo("Loaded custom item: " .. item.id)
             end
         end
     end
@@ -429,11 +416,7 @@ function ItemRegistry.CreateCustomItem(config, skipDBSave)
         id = "custom_" .. GetTime() .. "_" .. customFrameCounter
     end
 
-    -- Check if item already exists
-    if itemsById[id] then
-        module:LogInfo("Custom item already exists: " .. itemsById[id].id)
-        return itemsById[id]
-    end
+    if itemsById[id] then return itemsById[id] end
 
     -- Create frame parented to Blizzard's viewer so it picks up same padding/styling
     local viewer = module:GetViewerFrame(viewerKey)

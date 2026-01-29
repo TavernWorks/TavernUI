@@ -19,15 +19,35 @@ local CONSTANTS = {
 }
 
 local layoutRunning = {}
+local layoutSettingSize = {}
 
 --------------------------------------------------------------------------------
 -- Initialization
 --------------------------------------------------------------------------------
 
+local function InstallRefreshLayoutHooks()
+    local names = module.CONSTANTS.VIEWER_NAMES
+    for viewerKey, globalName in pairs(names) do
+        if viewerKey == "essential" or viewerKey == "utility" then
+            local viewer = _G[globalName]
+            if viewer and viewer.RefreshLayout then
+                hooksecurefunc(viewer, "RefreshLayout", function()
+                    if not module:IsEnabled() then return end
+                    if module.ItemRegistry then
+                        module.ItemRegistry.CollectBlizzardItems(viewerKey)
+                    end
+                    LayoutEngine.RefreshViewer(viewerKey)
+                end)
+            end
+        end
+    end
+end
+
 function LayoutEngine.Initialize()
     layoutRunning = {}
-    
-    -- Watch for viewer enable/disable
+
+    C_Timer.After(0, InstallRefreshLayoutHooks)
+
     for _, viewerKey in ipairs(module.CONSTANTS.VIEWER_KEYS) do
         module:WatchSetting(string.format("viewers.%s.enabled", viewerKey), function(newValue)
             local viewer = LayoutEngine.GetViewerFrame(viewerKey)
@@ -46,8 +66,6 @@ function LayoutEngine.Initialize()
             end
         end)
     end
-    
-    module:LogInfo("LayoutEngine initialized")
 end
 
 --------------------------------------------------------------------------------
@@ -56,6 +74,14 @@ end
 
 function LayoutEngine.GetViewerFrame(viewerKey)
     return _G[module.CONSTANTS.VIEWER_NAMES[viewerKey]]
+end
+
+function LayoutEngine.IsLayoutDrivenByBlizzardHook(viewerKey)
+    return viewerKey == "essential" or viewerKey == "utility"
+end
+
+function LayoutEngine.IsSettingViewerSize(viewerKey)
+    return layoutSettingSize[viewerKey] == true
 end
 
 --------------------------------------------------------------------------------
@@ -156,7 +182,7 @@ local function AssignItemsToRows(items, rows, viewerKey)
 end
 
 --------------------------------------------------------------------------------
--- Dimension Calculation
+-- Dimension Calculation (from row config capacity so viewer size is stable)
 --------------------------------------------------------------------------------
 
 local function CalculateDimensions(rowAssignments, rows)
@@ -172,11 +198,7 @@ local function CalculateDimensions(rowAssignments, rows)
         local iconHeight = iconSize / aspectRatio
         local keepHeight = rowConfig.keepRowHeightWhenEmpty
         
-        if actualIcons > 0 then
-            local rowWidth = actualIcons * iconSize + (actualIcons - 1) * rowConfig.padding
-            maxRowWidth = math.max(maxRowWidth, rowWidth)
-            totalHeight = totalHeight + iconHeight + (rowNum > 1 and rowGap or 0)
-        elseif keepHeight then
+        if actualIcons > 0 or keepHeight then
             local rowWidth = rowConfig.iconCount * iconSize + (rowConfig.iconCount - 1) * rowConfig.padding
             maxRowWidth = math.max(maxRowWidth, rowWidth)
             totalHeight = totalHeight + iconHeight + (rowNum > 1 and rowGap or 0)
@@ -223,6 +245,14 @@ local function ApplyLayout(viewer, rowAssignments, rows, viewerKey)
     
     local maxRowWidth, totalHeight, rowGap = CalculateDimensions(rowAssignments, rows)
     
+    -- Hide all row borders first to prevent artifacts
+    for rowNum = 1, #rows do
+        local borderKey = "__ucdmRowBorder" .. rowNum
+        if viewer[borderKey] then
+            viewer[borderKey]:Hide()
+        end
+    end
+    
     -- Starting Y position
     local currentY = (growDirection == "up") and (-totalHeight / 2) or (totalHeight / 2)
     
@@ -237,27 +267,23 @@ local function ApplyLayout(viewer, rowAssignments, rows, viewerKey)
         local padding = rowConfig.padding
         
         if actualIcons > 0 or keepHeight then
-            local rowWidth = (actualIcons > 0)
-                and (actualIcons * iconSize + (actualIcons - 1) * padding)
-                or (rowConfig.iconCount * iconSize + (rowConfig.iconCount - 1) * padding)
+            local rowWidth = rowConfig.iconCount * iconSize + (rowConfig.iconCount - 1) * padding
             
             local rowCenterY = (growDirection == "up")
                 and (currentY + iconHeight / 2 + (rowConfig.yOffset or 0))
                 or (currentY - iconHeight / 2 + (rowConfig.yOffset or 0))
             
-            -- Position and style items in this row
             if actualIcons > 0 then
-                local startX = -rowWidth / 2 + iconSize / 2
-                
+                local actualBlockWidth = actualIcons * iconSize + (actualIcons - 1) * padding
+                local startX = -actualBlockWidth / 2 + iconSize / 2
                 for col, item in ipairs(rowItems) do
                     local frame = item.frame
                     if frame then
                         local offsetX = startX + (col - 1) * (iconSize + padding)
-                        
                         frame:SetParent(viewer)
                         frame:ClearAllPoints()
                         frame:SetPoint("CENTER", viewer, "CENTER", offsetX, rowCenterY)
-                        
+
                         -- Let the item style itself with this row's config
                         item:applyStyle(rowConfig)
 
@@ -299,11 +325,12 @@ local function ApplyLayout(viewer, rowAssignments, rows, viewerKey)
         end
     end
     
-    -- Resize viewer
     if maxRowWidth > 0 and totalHeight > 0 then
+        layoutSettingSize[viewerKey] = true
         pcall(function()
             viewer:SetSize(maxRowWidth, totalHeight)
         end)
+        layoutSettingSize[viewerKey] = nil
     end
 end
 
@@ -314,7 +341,7 @@ end
 function LayoutEngine.RefreshViewer(viewerKey)
     if layoutRunning[viewerKey] then return end
     layoutRunning[viewerKey] = true
-    
+
     local viewer = LayoutEngine.GetViewerFrame(viewerKey)
     if not viewer then
         layoutRunning[viewerKey] = false
@@ -353,35 +380,27 @@ function LayoutEngine.RefreshViewer(viewerKey)
         return
     end
     
-    -- Assign items to rows
     local rowAssignments, visibleItems = AssignItemsToRows(items, rows, viewerKey)
-    
-    -- Apply layout
-    ApplyLayout(viewer, rowAssignments, rows, viewerKey)
-    
-    -- Hide items that weren't assigned
+
+    -- Build set of assigned items for cleanup
     local assignedItems = {}
     for _, entry in ipairs(visibleItems) do
         assignedItems[entry.item] = true
     end
     
+    -- Hide items that weren't assigned BEFORE layout to prevent artifacts
+    local hiddenCount = 0
     for _, item in ipairs(items) do
         if item.frame and not assignedItems[item] then
             item.frame:Hide()
             item.frame:ClearAllPoints()
+            hiddenCount = hiddenCount + 1
         end
     end
-    
+
+    -- Apply layout
+    ApplyLayout(viewer, rowAssignments, rows, viewerKey)
     layoutRunning[viewerKey] = false
-    
-    -- Debug logging
-    if module:GetSetting("general.debug", false) then
-        local parts = {}
-        for r = 1, #rows do
-            parts[r] = r .. "(" .. #(rowAssignments[r] or {}) .. ")"
-        end
-        module:LogInfo("Layout " .. viewerKey .. " rows: " .. table.concat(parts, " "))
-    end
 end
 
 --------------------------------------------------------------------------------

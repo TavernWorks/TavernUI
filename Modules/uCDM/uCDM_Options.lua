@@ -7,13 +7,6 @@ local RefreshOptions
 
 local function RefreshViewerComponents(viewerKey, property)
     if not module:IsEnabled() then return end
-    
-    if module:GetSetting("general.debug", false) then
-        module:LogInfo(string.format(
-            "RefreshViewerComponents: viewer=%s property=%s",
-            tostring(viewerKey), tostring(property)
-        ))
-    end
 
     local layoutProperties = {
         iconCount = true,
@@ -39,15 +32,6 @@ local function RefreshViewerComponents(viewerKey, property)
            property:match("^anchorConfig%.") then
         if module.Anchoring then
             module.Anchoring.RefreshViewer(viewerKey)
-        else
-            if module:GetSetting("general.debug", false) then
-                module:LogError(string.format(
-                    "Anchoring refresh failed: module.Anchoring=%s, RefreshViewer=%s, property=%s",
-                    tostring(module.Anchoring ~= nil),
-                    tostring(module.Anchoring and module.Anchoring.RefreshViewer ~= nil),
-                    tostring(property)
-                ))
-            end
         end
     elseif property == "showKeybinds" or property == "keybindSize" or 
            property == "keybindColor" or property == "keybindPoint" or
@@ -127,13 +111,6 @@ local function MakeRowOption(viewerKey, rowIndex, optionKey, optionType, config)
 
     option.set = function(_, value, g, b)
         local path = string.format("viewers.%s.rows[%d].%s", viewerKey, rowIndex, setPath)
-
-        if module:GetSetting("general.debug", false) then
-            module:LogInfo(string.format(
-                "Options.set: viewer=%s row=%d key=%s value=%s",
-                tostring(viewerKey), rowIndex, tostring(setPath), tostring(value)
-            ))
-        end
 
         if optionType == "color" then
             local color = module:GetSetting(path, {r = 0, g = 0, b = 0, a = 1})
@@ -1107,7 +1084,6 @@ local function BuildCustomTabOptions()
                         
                         local entry = module.ItemRegistry.CreateCustomItem(config)
                         if entry then
-                            module:LogInfo("Added spell: " .. spellInfo.name)
                             local viewerKey = defaultViewer
                             if module.LayoutEngine then
                                 module.LayoutEngine.RefreshViewer(viewerKey)
@@ -1161,7 +1137,6 @@ local function BuildCustomTabOptions()
                         
                         local entry = module.ItemRegistry.CreateCustomItem(config)
                         if entry then
-                            module:LogInfo("Added item: " .. itemInfo.itemName)
                             local viewerKey = defaultViewer
                             if module.LayoutEngine then
                                 module.LayoutEngine.RefreshViewer(viewerKey)
@@ -1221,7 +1196,6 @@ local function BuildCustomTabOptions()
                     
                     local entry = module.ItemRegistry.CreateCustomItem(config)
                     if entry then
-                        module:LogInfo("Added trinket from slot " .. slotID)
                         local viewerKey = defaultViewer
                         if module.LayoutEngine then
                             module.LayoutEngine.RefreshViewer(viewerKey)

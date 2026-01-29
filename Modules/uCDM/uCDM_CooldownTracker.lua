@@ -11,10 +11,12 @@ CooldownTracker._hasChargesCache = {}
 
 function CooldownTracker.UpdateTrinket(slotID)
     local itemID = GetInventoryItemID("player", slotID)
+    if not itemID then return nil end
     return CooldownTracker.UpdateItem(itemID)
 end
 
 function CooldownTracker.UpdateItem(itemID)
+    if not itemID then return nil end
     local startTime, duration = C_Container.GetItemCooldown(itemID)
     local _, spellID = GetItemSpell(itemID)
     local itemCount = C_Item.GetItemCount(itemID, false, false) or 0
@@ -123,7 +125,6 @@ end
 
 function CooldownTracker.Initialize()
     Helpers.SetupCooldownCurves()
-    module:LogInfo("CooldownTracker initialized")
 end
 
 module.CooldownTracker = CooldownTracker

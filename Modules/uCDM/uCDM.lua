@@ -229,8 +229,6 @@ end
 function module:OnEnable()
     if self.__onEnableCalled then return end
     self.__onEnableCalled = true
-    
-    self:LogInfo("uCDM enabled")
 end
 
 function module:OnDisable()
@@ -314,27 +312,21 @@ end
 
 function module:OnPlayerEnteringWorld()
     if not self:IsEnabled() then return end
-    
-    self:LogInfo("OnPlayerEnteringWorld - starting initialization sequence")
     self:StartUpdateLoop()
-    
-    -- Multi-stage initialization to handle Blizzard's delayed frame creation
+
     local function Stage1()
-        self:LogInfo("Stage 1: Hooking Blizzard viewers")
         if self.ItemRegistry then
             self.ItemRegistry.HookBlizzardViewers()
         end
     end
     
     local function Stage2()
-        self:LogInfo("Stage 2: Loading custom entries")
         if self.ItemRegistry then
             self.ItemRegistry.LoadCustomEntries()
         end
     end
     
     local function Stage3()
-        self:LogInfo("Stage 3: Collecting Blizzard items")
         for _, viewerKey in ipairs({"essential", "utility", "buff"}) do
             if self.ItemRegistry then
                 self.ItemRegistry.CollectBlizzardItems(viewerKey)
@@ -343,7 +335,6 @@ function module:OnPlayerEnteringWorld()
     end
     
     local function Stage4()
-        self:LogInfo("Stage 4: Refreshing all viewers")
         self:RefreshAllViewers()
     end
     
@@ -353,10 +344,8 @@ function module:OnPlayerEnteringWorld()
     C_Timer.After(0.5, Stage3)
     C_Timer.After(0.7, Stage4)
     
-    -- Final refresh after everything should be loaded
     C_Timer.After(1.5, function()
         if self:IsEnabled() then
-            self:LogInfo("Final refresh")
             self:RefreshAllViewers()
         end
     end)
@@ -391,9 +380,7 @@ end
 
 function module:OnProfileChanged()
     if not self:IsEnabled() then return end
-    
-    self:LogInfo("Profile changed, refreshing uCDM")
-    
+
     -- Reset and reload
     if self.ItemRegistry then
         self.ItemRegistry.Reset()
@@ -428,6 +415,10 @@ end
 -- Refresh
 --------------------------------------------------------------------------------
 
+local refreshTimers = {}
+local contentRefreshTimers = {}
+local REFRESH_DEBOUNCE_SEC = 0.15
+
 function module:RefreshAllViewers()
     for _, viewerKey in ipairs(CONSTANTS.VIEWER_KEYS) do
         self:RefreshViewer(viewerKey)
@@ -437,25 +428,59 @@ end
 function module:RefreshViewer(viewerKey)
     if not viewerKey then return end
     
-    -- Collect items from Blizzard frames (for non-custom viewers)
-    if viewerKey ~= "custom" and self.ItemRegistry then
-        self.ItemRegistry.CollectBlizzardItems(viewerKey)
+    local timer = refreshTimers[viewerKey]
+    if timer then
+        timer:Cancel()
+        refreshTimers[viewerKey] = nil
     end
     
-    -- Run layout
-    if self.LayoutEngine then
-        self.LayoutEngine.RefreshViewer(viewerKey)
+    local function DoRefresh()
+        refreshTimers[viewerKey] = nil
+        if not self:IsEnabled() then return end
+
+        if viewerKey ~= "custom" and self.ItemRegistry then
+            self.ItemRegistry.CollectBlizzardItems(viewerKey)
+        end
+        
+        if self.LayoutEngine then
+            self.LayoutEngine.RefreshViewer(viewerKey)
+        end
+        
+        if self.Keybinds then
+            self.Keybinds.RefreshViewer(viewerKey)
+        end
+        
+        if self.Anchoring then
+            self.Anchoring.RefreshViewer(viewerKey)
+        end
     end
     
-    -- Update keybinds
-    if self.Keybinds then
-        self.Keybinds.RefreshViewer(viewerKey)
+    refreshTimers[viewerKey] = C_Timer.NewTimer(REFRESH_DEBOUNCE_SEC, DoRefresh)
+end
+
+function module:RefreshViewerContent(viewerKey)
+    if not viewerKey or viewerKey == "custom" then return end
+    
+    local timer = contentRefreshTimers[viewerKey]
+    if timer then
+        timer:Cancel()
+        contentRefreshTimers[viewerKey] = nil
     end
     
-    -- Apply anchoring
-    if self.Anchoring then
-        self.Anchoring.RefreshViewer(viewerKey)
+    local function DoContentRefresh()
+        contentRefreshTimers[viewerKey] = nil
+        if not self:IsEnabled() then return end
+        
+        if self.ItemRegistry then
+            self.ItemRegistry.CollectBlizzardItems(viewerKey)
+        end
+        
+        if self.Keybinds then
+            self.Keybinds.RefreshViewer(viewerKey)
+        end
     end
+    
+    contentRefreshTimers[viewerKey] = C_Timer.NewTimer(REFRESH_DEBOUNCE_SEC, DoContentRefresh)
 end
 
 --------------------------------------------------------------------------------

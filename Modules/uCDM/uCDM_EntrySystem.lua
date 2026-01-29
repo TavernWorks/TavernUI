@@ -25,8 +25,6 @@ function EntrySystem.Initialize()
     viewerEntries = {}
     nextIndex = {}
     customIDCounter = 0
-    
-    module:LogInfo("EntrySystem initialized")
 end
 
 function EntrySystem.EncodeID(trackingType, id)
@@ -473,16 +471,6 @@ function EntrySystem.GetMergedEntriesForViewer(viewerKey)
     for i, entry in ipairs(merged) do
         entry.layoutIndex = i
     end
-
-    if module:GetSetting("general.debug", false) then
-        local labels = {}
-        for _, entry in ipairs(merged) do
-            local label = entry.id and tostring(entry.id) or (entry.frame and entry.frame.GetName and entry.frame:GetName()) or "?"
-            table.insert(labels, tostring(label))
-        end
-        module:LogInfo("Merged " .. viewerKey .. " " .. #merged .. " entries: " .. table.concat(labels, ", "))
-    end
-
     return merged
 end
 
