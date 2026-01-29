@@ -5,6 +5,63 @@ if not module then return end
 
 local RefreshOptions
 
+local function RefreshViewerComponents(viewerKey, property)
+    if not module:IsEnabled() then return end
+    
+    if module:GetSetting("general.debug", false) then
+        module:LogInfo(string.format(
+            "RefreshViewerComponents: viewer=%s property=%s",
+            tostring(viewerKey), tostring(property)
+        ))
+    end
+
+    local layoutProperties = {
+        iconCount = true,
+        padding = true,
+        yOffset = true,
+        iconSize = true,
+        aspectRatioCrop = true,
+        rowBorderSize = true,
+        rows = true,
+        keepRowHeightWhenEmpty = true,
+    }
+    
+    if layoutProperties[property] then
+        if module.RefreshViewer then
+            module:RefreshViewer(viewerKey)
+        elseif module.LayoutEngine then
+            module.LayoutEngine.RefreshViewer(viewerKey)
+            if module.LayoutEngine then
+                module.LayoutEngine.RefreshViewer(viewerKey)
+            end
+        end
+    elseif property == "anchorConfig" or property == "anchorCategory" or 
+           property:match("^anchorConfig%.") then
+        if module.Anchoring then
+            module.Anchoring.RefreshViewer(viewerKey)
+        else
+            if module:GetSetting("general.debug", false) then
+                module:LogError(string.format(
+                    "Anchoring refresh failed: module.Anchoring=%s, RefreshViewer=%s, property=%s",
+                    tostring(module.Anchoring ~= nil),
+                    tostring(module.Anchoring and module.Anchoring.RefreshViewer ~= nil),
+                    tostring(property)
+                ))
+            end
+        end
+    elseif property == "showKeybinds" or property == "keybindSize" or 
+           property == "keybindColor" or property == "keybindPoint" or
+           property == "keybindOffsetX" or property == "keybindOffsetY" then
+        if module.Keybinds then
+            module.Keybinds.RefreshViewer(viewerKey)
+        end
+    else
+        if module.LayoutEngine then
+            module.LayoutEngine.RefreshViewer(viewerKey)
+        end
+    end
+end
+
 local Anchor = LibStub("LibAnchorRegistry-1.0", true)
 
 local ANCHOR_POINTS = {
@@ -18,14 +75,6 @@ local ANCHOR_POINTS = {
     BOTTOM = "BOTTOM",
     BOTTOMRIGHT = "BOTTOMRIGHT",
 }
-
-local function IncrementSettingsVersion(viewerKey)
-    if not viewerKey then return end
-    if not module.settingsVersion then
-        module.settingsVersion = {}
-    end
-    module.settingsVersion[viewerKey] = (module.settingsVersion[viewerKey] or 0) + 1
-end
 
 local function MakeRowOption(viewerKey, rowIndex, optionKey, optionType, config)
     local order = config.order
@@ -58,58 +107,59 @@ local function MakeRowOption(viewerKey, rowIndex, optionKey, optionType, config)
     end
 
     option.get = function()
-        local db = module:GetDB()
-        local viewers = db.viewers or {}
-        local viewer = viewers[viewerKey] or {}
-        local rows = viewer.rows or {}
-        local row = rows[rowIndex]
-        if row then
-            if optionType == "color" then
-                local color = row[getPath]
-                if color then
-                    return color.r, color.g, color.b
-                end
-                return 0, 0, 0
-            else
-                return row[getPath] or defaultValue
+        local path = string.format("viewers.%s.rows[%d].%s", viewerKey, rowIndex, getPath)
+        if optionType == "color" then
+            local color = module:GetSetting(path, defaultValue)
+            if color and type(color) == "table" then
+                return color.r or 0, color.g or 0, color.b or 0
             end
+            return 0, 0, 0
+        elseif optionType == "toggle" then
+            local value = module:GetSetting(path)
+            if value == nil then
+                return defaultValue ~= false
+            end
+            return value == true
+        else
+            return module:GetSetting(path, defaultValue)
         end
-        return defaultValue
     end
 
     option.set = function(_, value, g, b)
-        local db = module:GetDB()
-        if not db.viewers then db.viewers = {} end
-        if not db.viewers[viewerKey] then db.viewers[viewerKey] = {} end
-        if not db.viewers[viewerKey].rows then db.viewers[viewerKey].rows = {} end
-        if not db.viewers[viewerKey].rows[rowIndex] then db.viewers[viewerKey].rows[rowIndex] = {} end
+        local path = string.format("viewers.%s.rows[%d].%s", viewerKey, rowIndex, setPath)
 
-        if optionType == "color" then
-            if not db.viewers[viewerKey].rows[rowIndex][setPath] then
-                db.viewers[viewerKey].rows[rowIndex][setPath] = {r = 0, g = 0, b = 0, a = 1}
-            end
-            db.viewers[viewerKey].rows[rowIndex][setPath].r = value
-            db.viewers[viewerKey].rows[rowIndex][setPath].g = g
-            db.viewers[viewerKey].rows[rowIndex][setPath].b = b
-        else
-            db.viewers[viewerKey].rows[rowIndex][setPath] = value
+        if module:GetSetting("general.debug", false) then
+            module:LogInfo(string.format(
+                "Options.set: viewer=%s row=%d key=%s value=%s",
+                tostring(viewerKey), rowIndex, tostring(setPath), tostring(value)
+            ))
         end
 
-        IncrementSettingsVersion(viewerKey)
-
-        if module:IsEnabled() and module.RefreshManager then
-            module.RefreshManager.RefreshViewer(viewerKey)
+        if optionType == "color" then
+            local color = module:GetSetting(path, {r = 0, g = 0, b = 0, a = 1})
+            if type(color) ~= "table" then
+                color = {r = 0, g = 0, b = 0, a = 1}
+            end
+            color.r = value
+            color.g = g
+            color.b = b
+            module:SetSetting(path, color)
+            RefreshViewerComponents(viewerKey, setPath)
+        else
+            module:SetSetting(path, value, {
+                type = optionType == "range" and "number" or nil,
+                min = optionType == "range" and min or nil,
+                max = optionType == "range" and max or nil,
+            })
+            RefreshViewerComponents(viewerKey, setPath)
         end
     end
 
     if disabled then
         option.disabled = function()
-            local db = module:GetDB()
-            local viewers = db.viewers or {}
-            local viewer = viewers[viewerKey] or {}
-            local rows = viewer.rows or {}
-            local row = rows[rowIndex]
-            return disabled(row, db)
+            local path = string.format("viewers.%s.rows[%d]", viewerKey, rowIndex)
+            local row = module:GetSetting(path)
+            return disabled(row)
         end
     end
 
@@ -147,6 +197,12 @@ local function BuildRowOptions(viewerKey, rowIndex, orderBase)
     args.yOffset = MakeRowOption(viewerKey, rowIndex, "yOffset", "range", {
         order = order, name = "Y Offset", desc = "Vertical offset for this row",
         min = -50, max = 50, step = 1, default = 0
+    })
+    order = order + 1
+
+    args.keepRowHeightWhenEmpty = MakeRowOption(viewerKey, rowIndex, "keepRowHeightWhenEmpty", "toggle", {
+        order = order, name = "Keep Row Height When Empty", desc = "Maintain row height even when no spells are visible",
+        default = true
     })
     order = order + 1
 
@@ -266,20 +322,13 @@ local function BuildRowOptions(viewerKey, rowIndex, orderBase)
             return rowIndex == 1
         end,
         func = function()
-            local db = module:GetDB()
-            if db.viewers and db.viewers[viewerKey] and db.viewers[viewerKey].rows and rowIndex > 1 then
-                local rows = db.viewers[viewerKey].rows
+            local path = string.format("viewers.%s.rows", viewerKey)
+            local rows = module:GetSetting(path, {})
+            if type(rows) == "table" and rowIndex > 1 and rows[rowIndex] and rows[rowIndex - 1] then
                 rows[rowIndex], rows[rowIndex - 1] = rows[rowIndex - 1], rows[rowIndex]
-                IncrementSettingsVersion(viewerKey)
-                if module:IsEnabled() and module.RefreshManager then
-                    module.RefreshManager.RefreshViewer(viewerKey)
-                end
+                module:SetSetting(path, rows)
+                RefreshViewerComponents(viewerKey, "rows")
                 RefreshOptions(true)
-                if module:IsEnabled() and module.RefreshManager then
-                    C_Timer.After(0.15, function()
-                        module.RefreshManager.RefreshViewer(viewerKey)
-                    end)
-                end
             end
         end,
     }
@@ -291,25 +340,19 @@ local function BuildRowOptions(viewerKey, rowIndex, orderBase)
         desc = "Move this row down",
         order = order,
         disabled = function()
-            local db = module:GetDB()
-            if not db.viewers or not db.viewers[viewerKey] or not db.viewers[viewerKey].rows then return true end
-            return rowIndex >= #db.viewers[viewerKey].rows
+            local path = string.format("viewers.%s.rows", viewerKey)
+            local rows = module:GetSetting(path, {})
+            if type(rows) ~= "table" then return true end
+            return rowIndex >= #rows
         end,
         func = function()
-            local db = module:GetDB()
-            if db.viewers and db.viewers[viewerKey] and db.viewers[viewerKey].rows and rowIndex < #db.viewers[viewerKey].rows then
-                local rows = db.viewers[viewerKey].rows
+            local path = string.format("viewers.%s.rows", viewerKey)
+            local rows = module:GetSetting(path, {})
+            if type(rows) == "table" and rowIndex < #rows and rows[rowIndex] and rows[rowIndex + 1] then
                 rows[rowIndex], rows[rowIndex + 1] = rows[rowIndex + 1], rows[rowIndex]
-                IncrementSettingsVersion(viewerKey)
-                if module:IsEnabled() and module.RefreshManager then
-                    module.RefreshManager.RefreshViewer(viewerKey)
-                end
+                module:SetSetting(path, rows)
+                RefreshViewerComponents(viewerKey, "rows")
                 RefreshOptions(true)
-                if module:IsEnabled() and module.RefreshManager then
-                    C_Timer.After(0.15, function()
-                        module.RefreshManager.RefreshViewer(viewerKey)
-                    end)
-                end
             end
         end,
     }
@@ -321,19 +364,13 @@ local function BuildRowOptions(viewerKey, rowIndex, orderBase)
         desc = "Remove this row",
         order = order,
         func = function()
-            local db = module:GetDB()
-            if db.viewers and db.viewers[viewerKey] and db.viewers[viewerKey].rows then
-                table.remove(db.viewers[viewerKey].rows, rowIndex)
-                IncrementSettingsVersion(viewerKey)
-                if module:IsEnabled() and module.RefreshManager then
-                    module.RefreshManager.RefreshViewer(viewerKey)
-                end
+            local path = string.format("viewers.%s.rows", viewerKey)
+            local rows = module:GetSetting(path, {})
+            if type(rows) == "table" and rows[rowIndex] then
+                table.remove(rows, rowIndex)
+                module:SetSetting(path, rows)
+                RefreshViewerComponents(viewerKey, "rows")
                 RefreshOptions(true)
-                if module:IsEnabled() and module.RefreshManager then
-                    C_Timer.After(0.15, function()
-                        module.RefreshManager.RefreshViewer(viewerKey)
-                    end)
-                end
             end
         end,
     }
@@ -442,57 +479,51 @@ local function BuildAnchorOptions(viewerKey, orderBase)
             return values
         end,
         get = function()
-            local db = module:GetDB()
-            local viewers = db.viewers or {}
-            local viewer = viewers[viewerKey] or {}
-            if viewer.anchorConfig and viewer.anchorConfig.target and viewer.anchorConfig.target ~= "UIParent" then
-                local category = GetCategoryForAnchor(viewer.anchorConfig.target)
+            local viewerPath = string.format("viewers.%s", viewerKey)
+            local viewer = module:GetSetting(viewerPath, {})
+            local anchorConfig = module:GetSetting(viewerPath .. ".anchorConfig", {})
+            
+            if anchorConfig.target and anchorConfig.target ~= "UIParent" then
+                local category = GetCategoryForAnchor(anchorConfig.target)
                 if category then
-                    if not viewer.anchorCategory then
-                        viewer.anchorCategory = category
+                    local anchorCategory = module:GetSetting(viewerPath .. ".anchorCategory")
+                    if not anchorCategory then
+                        module:SetSetting(viewerPath .. ".anchorCategory", category)
                     end
                     return category
                 end
                 return "misc"
             end
-            return viewer.anchorCategory or "None"
+            return module:GetSetting(viewerPath .. ".anchorCategory", "None")
         end,
         set = function(_, value)
-            local db = module:GetDB()
-            if not db.viewers then db.viewers = {} end
-            if not db.viewers[viewerKey] then db.viewers[viewerKey] = {} end
-            if not db.viewers[viewerKey].anchorConfig then
-                db.viewers[viewerKey].anchorConfig = {
-                    target = nil,
-                    point = "CENTER",
-                    relativePoint = "CENTER",
-                    offsetX = 0,
-                    offsetY = 0,
-                }
-            end
-
+            local viewerPath = string.format("viewers.%s", viewerKey)
+            local anchorConfigPath = viewerPath .. ".anchorConfig"
+            
+            local anchorConfig = module:GetSetting(anchorConfigPath, {
+                target = nil,
+                point = "CENTER",
+                relativePoint = "CENTER",
+                offsetX = 0,
+                offsetY = 0,
+            })
+            
             if value == "None" or not value then
-                if db.viewers[viewerKey].anchorConfig then
-                    db.viewers[viewerKey].anchorConfig.target = nil
-                end
-                db.viewers[viewerKey].anchorCategory = nil
+                anchorConfig.target = nil
+                module:SetSetting(anchorConfigPath, anchorConfig)
+                module:SetSetting(viewerPath .. ".anchorCategory", nil)
             else
-                db.viewers[viewerKey].anchorCategory = value
-                if db.viewers[viewerKey].anchorConfig and db.viewers[viewerKey].anchorConfig.target then
-                    local currentCategory = GetCategoryForAnchor(db.viewers[viewerKey].anchorConfig.target)
+                module:SetSetting(viewerPath .. ".anchorCategory", value)
+                if anchorConfig.target then
+                    local currentCategory = GetCategoryForAnchor(anchorConfig.target)
                     if currentCategory ~= value then
-                        db.viewers[viewerKey].anchorConfig.target = nil
+                        anchorConfig.target = nil
+                        module:SetSetting(anchorConfigPath, anchorConfig)
                     end
                 end
             end
-
-            IncrementSettingsVersion(viewerKey)
-
-            if module:IsEnabled() and module.Anchoring then
-                module.Anchoring.ApplyAnchorsAfterLayout(viewerKey)
-            end
-
-            LibStub("AceConfigRegistry-3.0"):NotifyChange("TavernUI")
+            
+            RefreshViewerComponents(viewerKey, "anchorCategory")
         end,
     }
     order = order + 1
@@ -503,15 +534,14 @@ local function BuildAnchorOptions(viewerKey, orderBase)
         desc = "Frame to anchor to",
         order = order,
         disabled = function()
-            local db = module:GetDB()
-            local viewers = db.viewers or {}
-            local viewer = viewers[viewerKey] or {}
-            local category = viewer.anchorCategory
+            local viewerPath = string.format("viewers.%s", viewerKey)
+            local category = module:GetSetting(viewerPath .. ".anchorCategory")
             if not category or category == "None" then
-                if viewer.anchorConfig and viewer.anchorConfig.target and viewer.anchorConfig.target ~= "UIParent" then
-                    category = GetCategoryForAnchor(viewer.anchorConfig.target)
+                local anchorConfig = module:GetSetting(viewerPath .. ".anchorConfig", {})
+                if anchorConfig.target and anchorConfig.target ~= "UIParent" then
+                    category = GetCategoryForAnchor(anchorConfig.target)
                     if category then
-                        viewer.anchorCategory = category
+                        module:SetSetting(viewerPath .. ".anchorCategory", category)
                         return false
                     end
                 end
@@ -521,10 +551,8 @@ local function BuildAnchorOptions(viewerKey, orderBase)
         end,
         values = function()
             local values = {}
-            local db = module:GetDB()
-            local viewers = db.viewers or {}
-            local viewer = viewers[viewerKey] or {}
-            local selectedCategory = viewer.anchorCategory
+            local viewerPath = string.format("viewers.%s", viewerKey)
+            local selectedCategory = module:GetSetting(viewerPath .. ".anchorCategory")
 
             if selectedCategory and selectedCategory ~= "None" then
                 local anchorsByCategory = Anchor:GetByCategory(selectedCategory)
@@ -540,46 +568,38 @@ local function BuildAnchorOptions(viewerKey, orderBase)
             return values
         end,
         get = function()
-            local db = module:GetDB()
-            local viewers = db.viewers or {}
-            local viewer = viewers[viewerKey] or {}
-            if viewer.anchorConfig and viewer.anchorConfig.target and viewer.anchorConfig.target ~= "UIParent" then
-                return viewer.anchorConfig.target
+            local anchorConfig = module:GetSetting(string.format("viewers.%s.anchorConfig", viewerKey), {})
+            if anchorConfig.target and anchorConfig.target ~= "UIParent" then
+                return anchorConfig.target
             end
             return nil
         end,
         set = function(_, value)
-            local db = module:GetDB()
-            if not db.viewers then db.viewers = {} end
-            if not db.viewers[viewerKey] then db.viewers[viewerKey] = {} end
+            local viewerPath = string.format("viewers.%s", viewerKey)
+            local anchorConfigPath = viewerPath .. ".anchorConfig"
+            
+            local anchorConfig = module:GetSetting(anchorConfigPath, {
+                target = nil,
+                point = "CENTER",
+                relativePoint = "CENTER",
+                offsetX = 0,
+                offsetY = 0,
+            })
 
             if not value then
-                if db.viewers[viewerKey].anchorConfig then
-                    db.viewers[viewerKey].anchorConfig.target = nil
-                end
+                anchorConfig.target = nil
+                module:SetSetting(anchorConfigPath, anchorConfig)
             else
-                if not db.viewers[viewerKey].anchorConfig then
-                    db.viewers[viewerKey].anchorConfig = {
-                        target = value,
-                        point = "CENTER",
-                        relativePoint = "CENTER",
-                        offsetX = 0,
-                        offsetY = 0,
-                    }
-                else
-                    db.viewers[viewerKey].anchorConfig.target = value
-                end
+                anchorConfig.target = value
+                module:SetSetting(anchorConfigPath, anchorConfig)
 
                 local category = GetCategoryForAnchor(value)
                 if category then
-                    db.viewers[viewerKey].anchorCategory = category
+                    module:SetSetting(viewerPath .. ".anchorCategory", category)
                 end
             end
-
-            IncrementSettingsVersion(viewerKey)
-            if module:IsEnabled() and module.Anchoring then
-                module.Anchoring.ApplyAnchorsAfterLayout(viewerKey)
-            end
+            
+            RefreshViewerComponents(viewerKey, "anchorConfig")
         end,
     }
     order = order + 1
@@ -591,29 +611,16 @@ local function BuildAnchorOptions(viewerKey, orderBase)
         order = order,
         values = ANCHOR_POINTS,
         disabled = function()
-            local db = module:GetDB()
-            local viewers = db.viewers or {}
-            local viewer = viewers[viewerKey] or {}
-            return not (viewer.anchorConfig and viewer.anchorConfig.target ~= nil)
+            local anchorConfig = module:GetSetting(string.format("viewers.%s.anchorConfig", viewerKey), {})
+            return not (anchorConfig.target ~= nil)
         end,
         get = function()
-            local db = module:GetDB()
-            local viewers = db.viewers or {}
-            local viewer = viewers[viewerKey] or {}
-            return (viewer.anchorConfig and viewer.anchorConfig.point) or "CENTER"
+            return module:GetSetting(string.format("viewers.%s.anchorConfig.point", viewerKey), "CENTER")
         end,
         set = function(_, value)
-            local db = module:GetDB()
-            if not db.viewers then db.viewers = {} end
-            if not db.viewers[viewerKey] then db.viewers[viewerKey] = {} end
-            if not db.viewers[viewerKey].anchorConfig then
-                db.viewers[viewerKey].anchorConfig = {}
-            end
-            db.viewers[viewerKey].anchorConfig.point = value
-            IncrementSettingsVersion(viewerKey)
-            if module:IsEnabled() and module.Anchoring then
-                module.Anchoring.ApplyAnchorsAfterLayout(viewerKey)
-            end
+            local path = string.format("viewers.%s.anchorConfig.point", viewerKey)
+            module:SetSetting(path, value)
+            RefreshViewerComponents(viewerKey, "anchorConfig.point")
         end,
     }
     order = order + 1
@@ -625,29 +632,16 @@ local function BuildAnchorOptions(viewerKey, orderBase)
         order = order,
         values = ANCHOR_POINTS,
         disabled = function()
-            local db = module:GetDB()
-            local viewers = db.viewers or {}
-            local viewer = viewers[viewerKey] or {}
-            return not (viewer.anchorConfig and viewer.anchorConfig.target ~= nil)
+            local anchorConfig = module:GetSetting(string.format("viewers.%s.anchorConfig", viewerKey), {})
+            return not (anchorConfig.target ~= nil)
         end,
         get = function()
-            local db = module:GetDB()
-            local viewers = db.viewers or {}
-            local viewer = viewers[viewerKey] or {}
-            return (viewer.anchorConfig and viewer.anchorConfig.relativePoint) or "CENTER"
+            return module:GetSetting(string.format("viewers.%s.anchorConfig.relativePoint", viewerKey), "CENTER")
         end,
         set = function(_, value)
-            local db = module:GetDB()
-            if not db.viewers then db.viewers = {} end
-            if not db.viewers[viewerKey] then db.viewers[viewerKey] = {} end
-            if not db.viewers[viewerKey].anchorConfig then
-                db.viewers[viewerKey].anchorConfig = {}
-            end
-            db.viewers[viewerKey].anchorConfig.relativePoint = value
-            IncrementSettingsVersion(viewerKey)
-            if module:IsEnabled() and module.Anchoring then
-                module.Anchoring.ApplyAnchorsAfterLayout(viewerKey)
-            end
+            local path = string.format("viewers.%s.anchorConfig.relativePoint", viewerKey)
+            module:SetSetting(path, value)
+            RefreshViewerComponents(viewerKey, "anchorConfig.relativePoint")
         end,
     }
     order = order + 1
@@ -661,29 +655,20 @@ local function BuildAnchorOptions(viewerKey, orderBase)
         max = 500,
         step = 1,
         disabled = function()
-            local db = module:GetDB()
-            local viewers = db.viewers or {}
-            local viewer = viewers[viewerKey] or {}
-            return not (viewer.anchorConfig and viewer.anchorConfig.target ~= nil)
+            local anchorConfig = module:GetSetting(string.format("viewers.%s.anchorConfig", viewerKey), {})
+            return not (anchorConfig.target ~= nil)
         end,
         get = function()
-            local db = module:GetDB()
-            local viewers = db.viewers or {}
-            local viewer = viewers[viewerKey] or {}
-            return (viewer.anchorConfig and viewer.anchorConfig.offsetX) or 0
+            return module:GetSetting(string.format("viewers.%s.anchorConfig.offsetX", viewerKey), 0)
         end,
         set = function(_, value)
-            local db = module:GetDB()
-            if not db.viewers then db.viewers = {} end
-            if not db.viewers[viewerKey] then db.viewers[viewerKey] = {} end
-            if not db.viewers[viewerKey].anchorConfig then
-                db.viewers[viewerKey].anchorConfig = {}
-            end
-            db.viewers[viewerKey].anchorConfig.offsetX = value
-            IncrementSettingsVersion(viewerKey)
-            if module:IsEnabled() and module.Anchoring then
-                module.Anchoring.ApplyAnchorsAfterLayout(viewerKey)
-            end
+            local path = string.format("viewers.%s.anchorConfig.offsetX", viewerKey)
+            module:SetSetting(path, value, {
+                type = "number",
+                min = -500,
+                max = 500,
+            })
+            RefreshViewerComponents(viewerKey, "anchorConfig.offsetX")
         end,
     }
     order = order + 1
@@ -697,29 +682,20 @@ local function BuildAnchorOptions(viewerKey, orderBase)
         max = 500,
         step = 1,
         disabled = function()
-            local db = module:GetDB()
-            local viewers = db.viewers or {}
-            local viewer = viewers[viewerKey] or {}
-            return not (viewer.anchorConfig and viewer.anchorConfig.target ~= nil)
+            local anchorConfig = module:GetSetting(string.format("viewers.%s.anchorConfig", viewerKey), {})
+            return not (anchorConfig.target ~= nil)
         end,
         get = function()
-            local db = module:GetDB()
-            local viewers = db.viewers or {}
-            local viewer = viewers[viewerKey] or {}
-            return (viewer.anchorConfig and viewer.anchorConfig.offsetY) or 0
+            return module:GetSetting(string.format("viewers.%s.anchorConfig.offsetY", viewerKey), 0)
         end,
         set = function(_, value)
-            local db = module:GetDB()
-            if not db.viewers then db.viewers = {} end
-            if not db.viewers[viewerKey] then db.viewers[viewerKey] = {} end
-            if not db.viewers[viewerKey].anchorConfig then
-                db.viewers[viewerKey].anchorConfig = {}
-            end
-            db.viewers[viewerKey].anchorConfig.offsetY = value
-            IncrementSettingsVersion(viewerKey)
-            if module:IsEnabled() and module.Anchoring then
-                module.Anchoring.ApplyAnchorsAfterLayout(viewerKey)
-            end
+            local path = string.format("viewers.%s.anchorConfig.offsetY", viewerKey)
+            module:SetSetting(path, value, {
+                type = "number",
+                min = -500,
+                max = 500,
+            })
+            RefreshViewerComponents(viewerKey, "anchorConfig.offsetY")
         end,
     }
 
@@ -736,36 +712,11 @@ local function BuildViewerOptions(viewerKey, viewerName, orderBase)
         desc = "Enable " .. viewerName .. " cooldown viewer",
         order = order,
         get = function()
-            local db = module:GetDB()
-            local viewers = db.viewers or {}
-            local viewer = viewers[viewerKey] or {}
-            return viewer.enabled ~= false
+            return module:GetSetting(string.format("viewers.%s.enabled", viewerKey), true) ~= false
         end,
         set = function(_, value)
-            local db = module:GetDB()
-            if not db.viewers then db.viewers = {} end
-            if not db.viewers[viewerKey] then db.viewers[viewerKey] = {} end
-            db.viewers[viewerKey].enabled = value
-            
-            local viewer = module.LayoutEngine.GetViewerFrame(viewerKey)
-            if viewer then
-                if value then
-                    viewer:Show()
-                else
-                    viewer:Hide()
-                end
-            end
-            
-            IncrementSettingsVersion(viewerKey)
-            if module:IsEnabled() and module.RefreshManager then
-                if value then
-                    module.RefreshManager.RefreshViewer(viewerKey)
-                else
-                    if viewer then
-                        viewer:Hide()
-                    end
-                end
-            end
+            local path = string.format("viewers.%s.enabled", viewerKey)
+            module:SetSetting(path, value)
         end,
     }
     order = order + 1
@@ -780,20 +731,11 @@ local function BuildViewerOptions(viewerKey, viewerName, orderBase)
             up = "Up",
         },
         get = function()
-            local db = module:GetDB()
-            local viewers = db.viewers or {}
-            local viewer = viewers[viewerKey] or {}
-            return viewer.rowGrowDirection or "down"
+            return module:GetSetting(string.format("viewers.%s.rowGrowDirection", viewerKey), "down")
         end,
         set = function(_, value)
-            local db = module:GetDB()
-            if not db.viewers then db.viewers = {} end
-            if not db.viewers[viewerKey] then db.viewers[viewerKey] = {} end
-            db.viewers[viewerKey].rowGrowDirection = value
-            IncrementSettingsVersion(viewerKey)
-            if module:IsEnabled() and module.RefreshManager then
-                module.RefreshManager.RefreshViewer(viewerKey)
-            end
+            local path = string.format("viewers.%s.rowGrowDirection", viewerKey)
+            module:SetSetting(path, value)
         end,
     }
     order = order + 1
@@ -817,20 +759,12 @@ local function BuildViewerOptions(viewerKey, viewerName, orderBase)
         desc = "Display action bar keybinds on cooldown icons",
         order = order,
         get = function()
-            local db = module:GetDB()
-            local viewers = db.viewers or {}
-            local viewer = viewers[viewerKey] or {}
-            return viewer.showKeybinds == true
+            return module:GetSetting(string.format("viewers.%s.showKeybinds", viewerKey), false) == true
         end,
         set = function(_, value)
-            local db = module:GetDB()
-            if not db.viewers then db.viewers = {} end
-            if not db.viewers[viewerKey] then db.viewers[viewerKey] = {} end
-            db.viewers[viewerKey].showKeybinds = value
-            IncrementSettingsVersion(viewerKey)
-            if module:IsEnabled() and module.RefreshManager then
-                module.RefreshManager.RefreshKeybinds(viewerKey)
-            end
+            local path = string.format("viewers.%s.showKeybinds", viewerKey)
+            module:SetSetting(path, value)
+            RefreshViewerComponents(viewerKey, "showKeybinds")
         end,
     }
     order = order + 1
@@ -844,26 +778,19 @@ local function BuildViewerOptions(viewerKey, viewerName, orderBase)
         max = 24,
         step = 1,
         disabled = function()
-            local db = module:GetDB()
-            local viewers = db.viewers or {}
-            local viewer = viewers[viewerKey] or {}
-            return not viewer.showKeybinds
+            return not module:GetSetting(string.format("viewers.%s.showKeybinds", viewerKey), false)
         end,
         get = function()
-            local db = module:GetDB()
-            local viewers = db.viewers or {}
-            local viewer = viewers[viewerKey] or {}
-            return viewer.keybindSize or 10
+            return module:GetSetting(string.format("viewers.%s.keybindSize", viewerKey), 10)
         end,
         set = function(_, value)
-            local db = module:GetDB()
-            if not db.viewers then db.viewers = {} end
-            if not db.viewers[viewerKey] then db.viewers[viewerKey] = {} end
-            db.viewers[viewerKey].keybindSize = value
-            IncrementSettingsVersion(viewerKey)
-            if module:IsEnabled() and module.RefreshManager then
-                module.RefreshManager.RefreshKeybinds(viewerKey)
-            end
+            local path = string.format("viewers.%s.keybindSize", viewerKey)
+            module:SetSetting(path, value, {
+                type = "number",
+                min = 6,
+                max = 24,
+            })
+            RefreshViewerComponents(viewerKey, "keybindSize")
         end,
     }
     order = order + 1
@@ -875,26 +802,15 @@ local function BuildViewerOptions(viewerKey, viewerName, orderBase)
         order = order,
         values = ANCHOR_POINTS,
         disabled = function()
-            local db = module:GetDB()
-            local viewers = db.viewers or {}
-            local viewer = viewers[viewerKey] or {}
-            return not viewer.showKeybinds
+            return not module:GetSetting(string.format("viewers.%s.showKeybinds", viewerKey), false)
         end,
         get = function()
-            local db = module:GetDB()
-            local viewers = db.viewers or {}
-            local viewer = viewers[viewerKey] or {}
-            return viewer.keybindPoint or "TOPLEFT"
+            return module:GetSetting(string.format("viewers.%s.keybindPoint", viewerKey), "TOPLEFT")
         end,
         set = function(_, value)
-            local db = module:GetDB()
-            if not db.viewers then db.viewers = {} end
-            if not db.viewers[viewerKey] then db.viewers[viewerKey] = {} end
-            db.viewers[viewerKey].keybindPoint = value
-            IncrementSettingsVersion(viewerKey)
-            if module:IsEnabled() and module.RefreshManager then
-                module.RefreshManager.RefreshKeybinds(viewerKey)
-            end
+            local path = string.format("viewers.%s.keybindPoint", viewerKey)
+            module:SetSetting(path, value)
+            RefreshViewerComponents(viewerKey, "keybindPoint")
         end,
     }
     order = order + 1
@@ -908,26 +824,19 @@ local function BuildViewerOptions(viewerKey, viewerName, orderBase)
         max = 50,
         step = 1,
         disabled = function()
-            local db = module:GetDB()
-            local viewers = db.viewers or {}
-            local viewer = viewers[viewerKey] or {}
-            return not viewer.showKeybinds
+            return not module:GetSetting(string.format("viewers.%s.showKeybinds", viewerKey), false)
         end,
         get = function()
-            local db = module:GetDB()
-            local viewers = db.viewers or {}
-            local viewer = viewers[viewerKey] or {}
-            return viewer.keybindOffsetX or 2
+            return module:GetSetting(string.format("viewers.%s.keybindOffsetX", viewerKey), 2)
         end,
         set = function(_, value)
-            local db = module:GetDB()
-            if not db.viewers then db.viewers = {} end
-            if not db.viewers[viewerKey] then db.viewers[viewerKey] = {} end
-            db.viewers[viewerKey].keybindOffsetX = value
-            IncrementSettingsVersion(viewerKey)
-            if module:IsEnabled() and module.RefreshManager then
-                module.RefreshManager.RefreshKeybinds(viewerKey)
-            end
+            local path = string.format("viewers.%s.keybindOffsetX", viewerKey)
+            module:SetSetting(path, value, {
+                type = "number",
+                min = -50,
+                max = 50,
+            })
+            RefreshViewerComponents(viewerKey, "keybindOffsetX")
         end,
     }
     order = order + 1
@@ -941,26 +850,19 @@ local function BuildViewerOptions(viewerKey, viewerName, orderBase)
         max = 50,
         step = 1,
         disabled = function()
-            local db = module:GetDB()
-            local viewers = db.viewers or {}
-            local viewer = viewers[viewerKey] or {}
-            return not viewer.showKeybinds
+            return not module:GetSetting(string.format("viewers.%s.showKeybinds", viewerKey), false)
         end,
         get = function()
-            local db = module:GetDB()
-            local viewers = db.viewers or {}
-            local viewer = viewers[viewerKey] or {}
-            return viewer.keybindOffsetY or -2
+            return module:GetSetting(string.format("viewers.%s.keybindOffsetY", viewerKey), -2)
         end,
         set = function(_, value)
-            local db = module:GetDB()
-            if not db.viewers then db.viewers = {} end
-            if not db.viewers[viewerKey] then db.viewers[viewerKey] = {} end
-            db.viewers[viewerKey].keybindOffsetY = value
-            IncrementSettingsVersion(viewerKey)
-            if module:IsEnabled() and module.RefreshManager then
-                module.RefreshManager.RefreshKeybinds(viewerKey)
-            end
+            local path = string.format("viewers.%s.keybindOffsetY", viewerKey)
+            module:SetSetting(path, value, {
+                type = "number",
+                min = -50,
+                max = 50,
+            })
+            RefreshViewerComponents(viewerKey, "keybindOffsetY")
         end,
     }
     order = order + 1
@@ -972,27 +874,16 @@ local function BuildViewerOptions(viewerKey, viewerName, orderBase)
         order = order,
         hasAlpha = true,
         disabled = function()
-            local db = module:GetDB()
-            local viewers = db.viewers or {}
-            local viewer = viewers[viewerKey] or {}
-            return not viewer.showKeybinds
+            return not module:GetSetting(string.format("viewers.%s.showKeybinds", viewerKey), false)
         end,
         get = function()
-            local db = module:GetDB()
-            local viewers = db.viewers or {}
-            local viewer = viewers[viewerKey] or {}
-            local color = viewer.keybindColor or {r = 1, g = 1, b = 1, a = 1}
-            return color.r, color.g, color.b, color.a
+            local color = module:GetSetting(string.format("viewers.%s.keybindColor", viewerKey), {r = 1, g = 1, b = 1, a = 1})
+            return color.r or 1, color.g or 1, color.b or 1, color.a or 1
         end,
         set = function(_, r, g, b, a)
-            local db = module:GetDB()
-            if not db.viewers then db.viewers = {} end
-            if not db.viewers[viewerKey] then db.viewers[viewerKey] = {} end
-            db.viewers[viewerKey].keybindColor = {r = r, g = g, b = b, a = a}
-            IncrementSettingsVersion(viewerKey)
-            if module:IsEnabled() and module.RefreshManager then
-                module.RefreshManager.RefreshKeybinds(viewerKey)
-            end
+            local path = string.format("viewers.%s.keybindColor", viewerKey)
+            module:SetSetting(path, {r = r, g = g, b = b, a = a})
+            RefreshViewerComponents(viewerKey, "keybindColor")
         end,
     }
     order = order + 1
@@ -1006,20 +897,22 @@ local function BuildViewerOptions(viewerKey, viewerName, orderBase)
         desc = "Add a new row",
         order = order,
         func = function()
-            local db = module:GetDB()
-            if not db.viewers then db.viewers = {} end
-            if not db.viewers[viewerKey] then db.viewers[viewerKey] = {} end
-            if not db.viewers[viewerKey].rows then db.viewers[viewerKey].rows = {} end
+            local path = string.format("viewers.%s.rows", viewerKey)
+            local rows = module:GetSetting(path, {})
+            if type(rows) ~= "table" then
+                rows = {}
+            end
 
             local defaultIconCount = viewerKey == "essential" and 4 or 6
             local defaultIconSize = viewerKey == "essential" and 50 or 42
 
-            table.insert(db.viewers[viewerKey].rows, {
-                name = "Row " .. (#db.viewers[viewerKey].rows + 1),
+            table.insert(rows, {
+                name = "Row " .. (#rows + 1),
                 iconCount = defaultIconCount,
                 iconSize = defaultIconSize,
                 padding = -8,
                 yOffset = 0,
+                keepRowHeightWhenEmpty = true,
                 aspectRatioCrop = 1.0,
                 zoom = 0,
                 iconBorderSize = 0,
@@ -1036,24 +929,18 @@ local function BuildViewerOptions(viewerKey, viewerName, orderBase)
                 stackOffsetY = 0,
             })
 
-            IncrementSettingsVersion(viewerKey)
-            if module:IsEnabled() and module.RefreshManager then
-                module.RefreshManager.RefreshViewer(viewerKey)
-            end
+            module:SetSetting(path, rows)
+            RefreshViewerComponents(viewerKey, "rows")
             RefreshOptions(true)
-            if module:IsEnabled() and module.RefreshManager then
-                C_Timer.After(0.15, function()
-                    module.RefreshManager.RefreshViewer(viewerKey)
-                end)
-            end
         end,
     }
     order = order + 1
 
-    local db = module:GetDB()
-    local viewers = db.viewers or {}
-    local viewer = viewers[viewerKey] or {}
-    local rows = viewer.rows or {}
+    local path = string.format("viewers.%s.rows", viewerKey)
+    local rows = module:GetSetting(path, {})
+    if type(rows) ~= "table" then
+        rows = {}
+    end
     
     if #rows == 0 then
         local defaultIconCount = viewerKey == "essential" and 4 or 6
@@ -1064,6 +951,7 @@ local function BuildViewerOptions(viewerKey, viewerName, orderBase)
             iconSize = defaultIconSize,
             padding = -8,
             yOffset = 0,
+            keepRowHeightWhenEmpty = true,
             aspectRatioCrop = 1.0,
             zoom = 0,
             iconBorderSize = 0,
@@ -1079,9 +967,7 @@ local function BuildViewerOptions(viewerKey, viewerName, orderBase)
             stackOffsetX = 0,
             stackOffsetY = 0,
         })
-        if not db.viewers then db.viewers = {} end
-        if not db.viewers[viewerKey] then db.viewers[viewerKey] = {} end
-        db.viewers[viewerKey].rows = rows
+        module:SetSetting(path, rows)
     end
 
     for rowIndex, row in ipairs(rows) do
@@ -1110,13 +996,10 @@ local function BuildGeneralOptions()
             desc = "Enable debug messages",
             order = 2,
             get = function()
-                local db = module:GetDB()
-                return db.general and db.general.debug == true
+                return module:GetSetting("general.debug", false) == true
             end,
             set = function(_, value)
-                local db = module:GetDB()
-                if not db.general then db.general = {} end
-                db.general.debug = value
+                module:SetSetting("general.debug", value)
             end,
         },
         updateRatesHeader = {
@@ -1133,18 +1016,14 @@ local function BuildGeneralOptions()
             max = 1.0,
             step = 0.05,
             get = function()
-                local db = module:GetDB()
-                return (db.general and db.general.updateRates and db.general.updateRates.normal) or 0.1
+                return module:GetSetting("general.updateRates.normal", 0.1)
             end,
             set = function(_, value)
-                local db = module:GetDB()
-                if not db.general then db.general = {} end
-                if not db.general.updateRates then db.general.updateRates = {} end
-                db.general.updateRates.normal = value
-                if module:IsEnabled() then
-                    module:StopUpdateLoop()
-                    module:StartUpdateLoop()
-                end
+                module:SetSetting("general.updateRates.normal", value, {
+                    type = "number",
+                    min = 0.05,
+                    max = 1.0,
+                })
             end,
         },
         updateRateCombat = {
@@ -1156,18 +1035,14 @@ local function BuildGeneralOptions()
             max = 2.0,
             step = 0.1,
             get = function()
-                local db = module:GetDB()
-                return (db.general and db.general.updateRates and db.general.updateRates.combat) or 0.3
+                return module:GetSetting("general.updateRates.combat", 0.3)
             end,
             set = function(_, value)
-                local db = module:GetDB()
-                if not db.general then db.general = {} end
-                if not db.general.updateRates then db.general.updateRates = {} end
-                db.general.updateRates.combat = value
-                if module:IsEnabled() then
-                    module:StopUpdateLoop()
-                    module:StartUpdateLoop()
-                end
+                module:SetSetting("general.updateRates.combat", value, {
+                    type = "number",
+                    min = 0.1,
+                    max = 2.0,
+                })
             end,
         },
         updateRateInitial = {
@@ -1179,14 +1054,14 @@ local function BuildGeneralOptions()
             max = 0.2,
             step = 0.01,
             get = function()
-                local db = module:GetDB()
-                return (db.general and db.general.updateRates and db.general.updateRates.initial) or 0.05
+                return module:GetSetting("general.updateRates.initial", 0.05)
             end,
             set = function(_, value)
-                local db = module:GetDB()
-                if not db.general then db.general = {} end
-                if not db.general.updateRates then db.general.updateRates = {} end
-                db.general.updateRates.initial = value
+                module:SetSetting("general.updateRates.initial", value, {
+                    type = "number",
+                    min = 0.01,
+                    max = 0.2
+                })
             end,
         },
     }
@@ -1205,16 +1080,41 @@ local function BuildCustomTabOptions()
                 if spellID then
                     local ok, spellInfo = pcall(C_Spell.GetSpellInfo, spellID)
                     if ok and spellInfo then
-                        local db = module:GetDB()
-                        local defaultViewer = db.defaultCustomViewer or "essential"
+                        local defaultViewer = module:GetSetting("defaultCustomViewer", "essential")
+                        local trackingType = module.CONSTANTS.TRACKING_TYPE.SPELL
+                        local entryID = module:GenerateItemID(trackingType, spellID)
+                        local index = module:GetNextIndex(defaultViewer)
+                        
                         local config = {
+                            id = entryID,
                             spellID = spellID,
                             viewer = defaultViewer,
                             enabled = true,
                         }
-                        local entry = module.CustomProvider.CreateEntry(config)
+                        
+                        local entryConfig = {
+                            id = entryID,
+                            spellID = spellID,
+                            viewer = defaultViewer,
+                            index = index,
+                            enabled = true,
+                            config = config,
+                        }
+                        
+                        local customEntries = module:GetSetting("customEntries", {})
+                        table.insert(customEntries, entryConfig)
+                        module:SetSetting("customEntries", customEntries)
+                        
+                        local entry = module.ItemRegistry.CreateCustomItem(config)
                         if entry then
                             module:LogInfo("Added spell: " .. spellInfo.name)
+                            local viewerKey = defaultViewer
+                            if module.LayoutEngine then
+                                module.LayoutEngine.RefreshViewer(viewerKey)
+                            end
+                            if module.LayoutEngine then
+                                module.LayoutEngine.RefreshViewer(viewerKey)
+                            end
                             RefreshOptions(true)
                         end
                     else
@@ -1234,16 +1134,41 @@ local function BuildCustomTabOptions()
                 if itemID then
                     local ok, itemInfo = pcall(C_Item.GetItemInfoByID, itemID)
                     if ok and itemInfo then
-                        local db = module:GetDB()
-                        local defaultViewer = db.defaultCustomViewer or "essential"
+                        local defaultViewer = module:GetSetting("defaultCustomViewer", "essential")
+                        local trackingType = module.CONSTANTS.TRACKING_TYPE.ITEM
+                        local entryID = module:GenerateItemID(trackingType, itemID)
+                        local index = module:GetNextIndex(defaultViewer)
+                        
                         local config = {
+                            id = entryID,
                             itemID = itemID,
                             viewer = defaultViewer,
                             enabled = true,
                         }
-                        local entry = module.CustomProvider.CreateEntry(config)
+                        
+                        local entryConfig = {
+                            id = entryID,
+                            itemID = itemID,
+                            viewer = defaultViewer,
+                            index = index,
+                            enabled = true,
+                            config = config,
+                        }
+                        
+                        local customEntries = module:GetSetting("customEntries", {})
+                        table.insert(customEntries, entryConfig)
+                        module:SetSetting("customEntries", customEntries)
+                        
+                        local entry = module.ItemRegistry.CreateCustomItem(config)
                         if entry then
                             module:LogInfo("Added item: " .. itemInfo.itemName)
+                            local viewerKey = defaultViewer
+                            if module.LayoutEngine then
+                                module.LayoutEngine.RefreshViewer(viewerKey)
+                            end
+                            if module.LayoutEngine then
+                                module.LayoutEngine.RefreshViewer(viewerKey)
+                            end
                             RefreshOptions(true)
                         end
                     else
@@ -1266,16 +1191,46 @@ local function BuildCustomTabOptions()
                 local slotID = value
                 local itemID = GetInventoryItemID("player", slotID)
                 if itemID then
-                    local db = module:GetDB()
-                    local defaultViewer = db.defaultCustomViewer or "custom"
+                    local defaultViewer = module:GetSetting("defaultCustomViewer", "custom")
+                    if defaultViewer == "custom" then
+                        defaultViewer = "essential"
+                    end
+                    local trackingType = module.CONSTANTS.TRACKING_TYPE.TRINKET
+                    local entryID = module:GenerateItemID(trackingType, slotID)
+                    local index = module:GetNextIndex(defaultViewer)
+                    
                     local config = {
+                        id = entryID,
                         slotID = slotID,
                         viewer = defaultViewer,
                         enabled = true,
                     }
-                    module.CustomProvider.CreateEntry(config)
-                    module:LogInfo("Added trinket from slot " .. slotID)
-                    RefreshOptions(true)
+                    
+                    local entryConfig = {
+                        id = entryID,
+                        slotID = slotID,
+                        viewer = defaultViewer,
+                        index = index,
+                        enabled = true,
+                        config = config,
+                    }
+                    
+                    local customEntries = module:GetSetting("customEntries", {})
+                    table.insert(customEntries, entryConfig)
+                    module:SetSetting("customEntries", customEntries)
+                    
+                    local entry = module.ItemRegistry.CreateCustomItem(config)
+                    if entry then
+                        module:LogInfo("Added trinket from slot " .. slotID)
+                        local viewerKey = defaultViewer
+                        if module.LayoutEngine then
+                            module.LayoutEngine.RefreshViewer(viewerKey)
+                        end
+                        if module.LayoutEngine then
+                            module.LayoutEngine.RefreshViewer(viewerKey)
+                        end
+                        RefreshOptions(true)
+                    end
                 else
                     module:LogError("No item equipped in slot " .. slotID)
                 end
@@ -1291,12 +1246,10 @@ local function BuildCustomTabOptions()
                 utility = "Utility Viewer",
             },
             get = function()
-                local db = module:GetDB()
-                return db.defaultCustomViewer or "essential"
+                return module:GetSetting("defaultCustomViewer", "essential")
             end,
             set = function(_, value)
-                local db = module:GetDB()
-                db.defaultCustomViewer = value
+                module:SetSetting("defaultCustomViewer", value)
             end,
         },
         entriesHeader = {
@@ -1347,14 +1300,18 @@ function module:BuildOptions()
                     },
                 },
             },
+            custom = {
+                type = "group",
+                name = "Custom Items",
+                order = 4,
+                args = {},
+            },
         },
     }
     
-    local db = module:GetDB()
-    
     local customTabOptions = BuildCustomTabOptions()
     for k, v in pairs(customTabOptions) do
-        options.args.essential.args[k] = v
+        options.args.custom.args[k] = v
     end
     
     for _, viewerKey in ipairs({"essential", "utility", "buff"}) do
@@ -1364,7 +1321,7 @@ function module:BuildOptions()
         
         options.args[viewerKey].args = BuildViewerOptions(viewerKey, viewerName, 1)
 
-        local customEntries = db.customEntries or {}
+        local customEntries = module:GetSetting("customEntries", {})
         for entryIndex, entryConfig in ipairs(customEntries) do
             local entryViewer = entryConfig.viewer or "essential"
             if entryViewer == "custom" then
@@ -1401,7 +1358,7 @@ function module:BuildOptions()
                             end,
                             set = function(_, value)
                                 entryConfig.enabled = value
-                                local entry = module.EntrySystem.GetEntry(entryConfig.id)
+                                local entry = module.ItemRegistry.GetItem(entryConfig.id)
                                 if entry then
                                     entry.enabled = value
                                     if entry.frame then
@@ -1412,11 +1369,15 @@ function module:BuildOptions()
                                         end
                                     end
                                 end
-                                if module:IsEnabled() and module.RefreshManager then
+                                if module:IsEnabled() then
                                     local assignedViewer = entryConfig.viewer or "essential"
-                                    module.RefreshManager.RefreshViewer(assignedViewer)
+                                    if module.LayoutEngine then
+                                        module.LayoutEngine.RefreshViewer(assignedViewer)
+                                    end
                                     if assignedViewer ~= viewerKey then
-                                        module.RefreshManager.RefreshViewer(viewerKey)
+                                        if module.LayoutEngine then
+                                            module.LayoutEngine.RefreshViewer(viewerKey)
+                                        end
                                     end
                                 end
                             end,
@@ -1431,7 +1392,7 @@ function module:BuildOptions()
                             step = 1,
                             get = function()
                                 local assignedViewer = entryConfig.viewer or viewerKey
-                                local entries = module.EntrySystem.GetMergedEntriesForViewer(assignedViewer)
+                                local entries = module.ItemRegistry.GetItemsForViewer(assignedViewer)
                                 for i, e in ipairs(entries) do
                                     if e.id == entryConfig.id then
                                         return i
@@ -1440,12 +1401,12 @@ function module:BuildOptions()
                                 return entryConfig.index or 1
                             end,
                             set = function(_, value)
-                                if not module.EntrySystem.ReorderEntry then
+                                if not module.ItemRegistry.ReorderItem then
                                     return
                                 end
                                 
                                 local assignedViewer = entryConfig.viewer or viewerKey
-                                local allEntries = module.EntrySystem.GetMergedEntriesForViewer(assignedViewer)
+                                local allEntries = module.ItemRegistry.GetItemsForViewer(assignedViewer)
                                 local maxIndex = #allEntries
                                 
                                 if value < 1 then
@@ -1454,15 +1415,15 @@ function module:BuildOptions()
                                     value = maxIndex
                                 end
                                 
-                                local success = module.EntrySystem.ReorderEntry(entryConfig.id, value)
+                                local success = module.ItemRegistry.ReorderItem(entryConfig.id, value)
                                 
                                 if success then
-                                    local db = module:GetDB()
-                                    if db and db.customEntries then
-                                        local updatedEntries = module.EntrySystem.GetMergedEntriesForViewer(assignedViewer)
+                                    local customEntries = module:GetSetting("customEntries", {})
+                                    if customEntries and #customEntries > 0 then
+                                        local updatedEntries = module.ItemRegistry.GetItemsForViewer(assignedViewer)
                                         for _, entry in ipairs(updatedEntries) do
-                                            if entry.type == "custom" then
-                                                for _, cfg in ipairs(db.customEntries) do
+                                            if entry.source == "custom" then
+                                                for _, cfg in ipairs(customEntries) do
                                                     if cfg.id == entry.id then
                                                         cfg.index = entry.index
                                                         break
@@ -1470,10 +1431,11 @@ function module:BuildOptions()
                                                 end
                                             end
                                         end
+                                        module:SetSetting("customEntries", customEntries)
                                     end
                                     
-                                    if module:IsEnabled() and module.RefreshManager then
-                                        module.RefreshManager.RefreshViewer(assignedViewer)
+                                    if module:IsEnabled() and module.LayoutEngine then
+                                        module.LayoutEngine.RefreshViewer(assignedViewer)
                                     end
                                 end
                             end,
@@ -1501,25 +1463,39 @@ function module:BuildOptions()
                                     return
                                 end
                                 
-                                local entry = module.EntrySystem.GetEntry(entryConfig.id)
+                                local entry = module.ItemRegistry.GetItem(entryConfig.id)
                                 if not entry then
                                     module:LogError("Entry not found when changing viewer")
                                     return
                                 end
                                 
-                                local oldViewer = entryConfig.viewer or entry.source or viewerKey
+                                local oldViewer = entryConfig.viewer or module.ItemRegistry.GetItemSource(entry) or viewerKey
                                 if oldViewer == "custom" then
                                     oldViewer = "essential"
                                 end
-                                entryConfig.viewer = value
                                 
-                                if entry.source ~= value and module.EntrySystem.MoveEntryToViewer then
-                                    module.EntrySystem.MoveEntryToViewer(entryConfig.id, value)
+                                local sources = { entry.viewerKey } or {entry.viewerKey}
+                                local wasInViewer = false
+                                for _, source in ipairs(sources) do
+                                    if source == value then
+                                        wasInViewer = true
+                                        break
+                                    end
                                 end
                                 
-                                if module.RefreshManager then
-                                    module.RefreshManager.RefreshViewer(oldViewer)
-                                    module.RefreshManager.RefreshViewer(value)
+                                if not wasInViewer then
+                                    if module.ItemRegistry.MoveItemToViewer then
+                                        module.ItemRegistry.MoveItemToViewer(entryConfig.id, value)
+                                    end
+                                end
+                                
+                                entryConfig.viewer = value
+                                
+                                if module.LayoutEngine then
+                                    if not wasInViewer then
+                                        module.LayoutEngine.RefreshViewer(oldViewer)
+                                    end
+                                    module.LayoutEngine.RefreshViewer(value)
                                 end
                                 
                                 RefreshOptions(true)
@@ -1530,7 +1506,7 @@ function module:BuildOptions()
                             name = "Remove",
                             order = 6,
                             func = function()
-                                module.CustomProvider.RemoveEntry(entryConfig.id)
+                                module.ItemRegistry.RemoveCustomItem(entryConfig.id)
                                 RefreshOptions(true)
                             end,
                         },
@@ -1538,6 +1514,193 @@ function module:BuildOptions()
                 }
             end
         end
+    end
+    
+    local customEntries = module:GetSetting("customEntries", {})
+    for entryIndex, entryConfig in ipairs(customEntries) do
+        local entryName = "Entry " .. entryIndex
+        if entryConfig.spellID then
+            local ok, spellInfo = pcall(C_Spell.GetSpellInfo, entryConfig.spellID)
+            if ok and spellInfo then
+                entryName = spellInfo.name
+            end
+        elseif entryConfig.itemID then
+            local ok, itemInfo = pcall(C_Item.GetItemInfoByID, entryConfig.itemID)
+            if ok and itemInfo then
+                entryName = itemInfo.itemName
+            end
+        elseif entryConfig.slotID then
+            entryName = "Trinket " .. (entryConfig.slotID == 13 and "1" or "2")
+        end
+
+        local entryViewer = entryConfig.viewer or "essential"
+        if entryViewer == "custom" then
+            entryViewer = "essential"
+        end
+
+        options.args.custom.args["entry" .. entryIndex] = {
+            type = "group",
+            name = entryName .. " (" .. (entryViewer == "essential" and "Essential" or "Utility") .. ")",
+            order = 200 + entryIndex,
+            args = {
+                enabled = {
+                    type = "toggle",
+                    name = "Enabled",
+                    order = 1,
+                    get = function()
+                        return entryConfig.enabled ~= false
+                    end,
+                    set = function(_, value)
+                        entryConfig.enabled = value
+                        local entry = module.ItemRegistry.GetItem(entryConfig.id)
+                        if entry then
+                            entry.enabled = value
+                            if entry.frame then
+                                if value then
+                                    entry.frame:Show()
+                                else
+                                    entry.frame:Hide()
+                                end
+                            end
+                        end
+                        if module:IsEnabled() then
+                            local assignedViewer = entryConfig.viewer or "essential"
+                            if module.LayoutEngine then
+                                module.LayoutEngine.RefreshViewer(assignedViewer)
+                            end
+                        end
+                    end,
+                },
+                index = {
+                    type = "range",
+                    name = "Index",
+                    desc = "Display order (lower = earlier)",
+                    order = 2,
+                    min = 1,
+                    max = 13,
+                    step = 1,
+                    get = function()
+                        local assignedViewer = entryConfig.viewer or "essential"
+                        local entries = module.ItemRegistry.GetItemsForViewer(assignedViewer)
+                        for i, e in ipairs(entries) do
+                            if e.id == entryConfig.id then
+                                return i
+                            end
+                        end
+                        return entryConfig.index or 1
+                    end,
+                    set = function(_, value)
+                        if not module.ItemRegistry.ReorderItem then
+                            return
+                        end
+                        
+                        local assignedViewer = entryConfig.viewer or "essential"
+                        local allEntries = module.ItemRegistry.GetItemsForViewer(assignedViewer)
+                        local maxIndex = #allEntries
+                        
+                        if value < 1 then
+                            value = 1
+                        elseif value > maxIndex then
+                            value = maxIndex
+                        end
+                        
+                        local success = module.ItemRegistry.ReorderItem(entryConfig.id, value)
+                        
+                        if success then
+                            local customEntries = module:GetSetting("customEntries", {})
+                            if customEntries and #customEntries > 0 then
+                                local updatedEntries = module.ItemRegistry.GetItemsForViewer(assignedViewer)
+                                for _, entry in ipairs(updatedEntries) do
+                                    if entry.source == "custom" then
+                                        for _, cfg in ipairs(customEntries) do
+                                            if cfg.id == entry.id then
+                                                cfg.index = entry.index
+                                                break
+                                            end
+                                        end
+                                    end
+                                end
+                                module:SetSetting("customEntries", customEntries)
+                            end
+                            
+                            if module:IsEnabled() and module.LayoutEngine then
+                                module.LayoutEngine.RefreshViewer(assignedViewer)
+                            end
+                        end
+                    end,
+                },
+                viewer = {
+                    type = "select",
+                    name = "Viewer",
+                    desc = "Assign entry to viewer",
+                    order = 5,
+                    values = {
+                        essential = "Essential Viewer",
+                        utility = "Utility Viewer",
+                    },
+                    get = function()
+                        local viewer = entryConfig.viewer or "essential"
+                        if viewer == "custom" then
+                            viewer = "essential"
+                            entryConfig.viewer = "essential"
+                        end
+                        return viewer
+                    end,
+                    set = function(_, value)
+                        if value == "buff" then
+                            module:LogError("Cannot assign custom entries to buff viewer")
+                            return
+                        end
+                        
+                        local entry = module.ItemRegistry.GetItem(entryConfig.id)
+                        if not entry then
+                            module:LogError("Entry not found when changing viewer")
+                            return
+                        end
+                        
+                        local oldViewer = entryConfig.viewer or module.ItemRegistry.GetItemSource(entry) or "essential"
+                        if oldViewer == "custom" then
+                            oldViewer = "essential"
+                        end
+                        
+                        local sources = { entry.viewerKey } or {entry.viewerKey}
+                        local wasInViewer = false
+                        for _, source in ipairs(sources) do
+                            if source == value then
+                                wasInViewer = true
+                                break
+                            end
+                        end
+                        
+                        if not wasInViewer then
+                            if module.ItemRegistry.MoveItemToViewer then
+                                module.ItemRegistry.MoveItemToViewer(entryConfig.id, value)
+                            end
+                        end
+                        
+                        entryConfig.viewer = value
+                        
+                        if module.LayoutEngine then
+                            if not wasInViewer then
+                                module.LayoutEngine.RefreshViewer(oldViewer)
+                            end
+                            module.LayoutEngine.RefreshViewer(value)
+                        end
+                        
+                        RefreshOptions(true)
+                    end,
+                },
+                remove = {
+                    type = "execute",
+                    name = "Remove",
+                    order = 6,
+                    func = function()
+                        module.ItemRegistry.RemoveCustomItem(entryConfig.id)
+                        RefreshOptions(true)
+                    end,
+                },
+            },
+        }
     end
     
     TavernUI:RegisterModuleOptions("uCDM", options, "uCDM")

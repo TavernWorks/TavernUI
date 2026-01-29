@@ -3,6 +3,5 @@
 ## Notes: Example module for TavernUI
 ## Dependencies: TavernUI
 ## LoadOnDemand: 1
-## SavedVariables: TavernUIConfig
 
 ExampleModule.lua

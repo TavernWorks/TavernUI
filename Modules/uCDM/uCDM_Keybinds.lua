@@ -3,34 +3,52 @@ local module = TavernUI:GetModule("uCDM", true)
 
 if not module then return end
 
+--[[
+    Keybinds - Keybind lookup and display
+    
+    Handles finding keybinds for spells/items/trinkets and displaying them on frames.
+]]
+
 local Keybinds = {}
 
+local CONSTANTS = {
+    DEFAULT_KEYBIND_SIZE = 10,
+    UPDATE_THROTTLE = 0.2,
+}
+
+-- Caches
 local spellToKeybind = {}
 local spellNameToKeybind = {}
 local cachedActionButtons = {}
 local actionButtonsCached = false
 local macroNameCache = {}
 local macroCacheBuilt = false
-local cachedSpellIDs = {}
 
 local RANGE_INDICATOR = "●"
+local FONT_PATH = "Fonts\\FRIZQT__.TTF"
+
+--------------------------------------------------------------------------------
+-- Keybind Formatting
+--------------------------------------------------------------------------------
 
 local function FormatKeybind(keybind)
     if not keybind then return nil end
-
-    local upper = keybind:upper()
-    upper = upper:gsub(" ", "")
     
+    local upper = keybind:upper():gsub(" ", "")
+    
+    -- Mouse buttons
     upper = upper:gsub("MOUSEWHEELUP", "WU")
     upper = upper:gsub("MOUSEWHEELDOWN", "WD")
     upper = upper:gsub("MIDDLEMOUSE", "B3")
     upper = upper:gsub("MIDDLEBUTTON", "B3")
     upper = upper:gsub("BUTTON(%d+)", "B%1")
     
+    -- Modifiers
     upper = upper:gsub("SHIFT%-", "S")
     upper = upper:gsub("CTRL%-", "C")
     upper = upper:gsub("ALT%-", "A")
     
+    -- Numpad
     upper = upper:gsub("NUMPADPLUS", "N+")
     upper = upper:gsub("NUMPADMINUS", "N-")
     upper = upper:gsub("NUMPADMULTIPLY", "N*")
@@ -38,6 +56,8 @@ local function FormatKeybind(keybind)
     upper = upper:gsub("NUMPADPERIOD", "N.")
     upper = upper:gsub("NUMPADENTER", "NE")
     upper = upper:gsub("NUMPAD", "N")
+    
+    -- Special keys
     upper = upper:gsub("CAPSLOCK", "CAP")
     upper = upper:gsub("DELETE", "DEL")
     upper = upper:gsub("ESCAPE", "ESC")
@@ -49,35 +69,91 @@ local function FormatKeybind(keybind)
     upper = upper:gsub("HOME", "HM")
     upper = upper:gsub("END", "ED")
     
+    -- Arrow keys
     upper = upper:gsub("UPARROW", "UP")
     upper = upper:gsub("DOWNARROW", "DN")
     upper = upper:gsub("LEFTARROW", "LF")
     upper = upper:gsub("RIGHTARROW", "RT")
     
+    -- Truncate
     if #upper > 4 then
         upper = upper:sub(1, 4)
     end
-
+    
     return upper
 end
 
-local function GetKeybindFromActionButton(button, actionSlot)
+--------------------------------------------------------------------------------
+-- Action Button Cache
+--------------------------------------------------------------------------------
+
+local function BuildActionButtonCache()
+    if actionButtonsCached then return end
+    
+    cachedActionButtons = {}
+    
+    -- Standard action bars
+    local barPrefixes = {
+        "ActionButton",
+        "MultiBarBottomLeftButton",
+        "MultiBarBottomRightButton",
+        "MultiBarRightButton",
+        "MultiBarLeftButton",
+    }
+    
+    for _, prefix in ipairs(barPrefixes) do
+        for i = 1, 12 do
+            local button = _G[prefix .. i]
+            if button then
+                cachedActionButtons[#cachedActionButtons + 1] = button
+            end
+        end
+    end
+    
+    -- Bartender4
+    for i = 1, 120 do
+        local button = _G["BT4Button" .. i]
+        if button then
+            cachedActionButtons[#cachedActionButtons + 1] = button
+        end
+    end
+    
+    -- Dominos
+    for i = 1, 120 do
+        local button = _G["DominosActionButton" .. i]
+        if button then
+            cachedActionButtons[#cachedActionButtons + 1] = button
+        end
+    end
+    
+    -- ElvUI
+    for bar = 1, 10 do
+        for i = 1, 12 do
+            local button = _G["ElvUI_Bar" .. bar .. "Button" .. i]
+            if button then
+                cachedActionButtons[#cachedActionButtons + 1] = button
+            end
+        end
+    end
+    
+    actionButtonsCached = true
+end
+
+local function GetKeybindFromActionButton(button)
     if not button then return nil end
     
-    if button.HotKey then
-        local ok, hotkeyText = pcall(function() return button.HotKey:GetText() end)
-        if ok and hotkeyText and hotkeyText ~= "" and hotkeyText ~= RANGE_INDICATOR then
-            return FormatKeybind(hotkeyText)
+    -- Try HotKey text
+    local hotkeyRegions = {button.HotKey, button.hotKey}
+    for _, hotkey in ipairs(hotkeyRegions) do
+        if hotkey then
+            local ok, text = pcall(function() return hotkey:GetText() end)
+            if ok and text and text ~= "" and text ~= RANGE_INDICATOR then
+                return FormatKeybind(text)
+            end
         end
     end
     
-    if button.hotKey then
-        local ok, hotkeyText = pcall(function() return button.hotKey:GetText() end)
-        if ok and hotkeyText and hotkeyText ~= "" and hotkeyText ~= RANGE_INDICATOR then
-            return FormatKeybind(hotkeyText)
-        end
-    end
-    
+    -- Try GetHotkey method
     if button.GetHotkey then
         local ok, hotkey = pcall(function() return button:GetHotkey() end)
         if ok and hotkey and hotkey ~= "" then
@@ -85,99 +161,28 @@ local function GetKeybindFromActionButton(button, actionSlot)
         end
     end
     
+    -- Try binding lookup by button name
     local buttonName = button:GetName()
     if buttonName then
-        local key1 = GetBindingKey("CLICK " .. buttonName .. ":LeftButton")
-        if key1 then
-            return FormatKeybind(key1)
-        end
-        
-        if buttonName:match("ActionButton(%d+)$") then
-            local num = tonumber(buttonName:match("ActionButton(%d+)$"))
-            if num then
-                key1 = GetBindingKey("ACTIONBUTTON" .. num)
-                if key1 then return FormatKeybind(key1) end
-            end
-        elseif buttonName:match("MultiBarBottomLeftButton(%d+)$") then
-            local num = tonumber(buttonName:match("MultiBarBottomLeftButton(%d+)$"))
-            if num then
-                key1 = GetBindingKey("MULTIACTIONBAR1BUTTON" .. num)
-                if key1 then return FormatKeybind(key1) end
-            end
-        elseif buttonName:match("MultiBarBottomRightButton(%d+)$") then
-            local num = tonumber(buttonName:match("MultiBarBottomRightButton(%d+)$"))
-            if num then
-                key1 = GetBindingKey("MULTIACTIONBAR2BUTTON" .. num)
-                if key1 then return FormatKeybind(key1) end
-            end
-        elseif buttonName:match("MultiBarRightButton(%d+)$") then
-            local num = tonumber(buttonName:match("MultiBarRightButton(%d+)$"))
-            if num then
-                key1 = GetBindingKey("MULTIACTIONBAR3BUTTON" .. num)
-                if key1 then return FormatKeybind(key1) end
-            end
-        elseif buttonName:match("MultiBarLeftButton(%d+)$") then
-            local num = tonumber(buttonName:match("MultiBarLeftButton(%d+)$"))
-            if num then
-                key1 = GetBindingKey("MULTIACTIONBAR4BUTTON" .. num)
-                if key1 then return FormatKeybind(key1) end
-            end
-        elseif buttonName:match("^BT4Button(%d+)$") then
-            local num = tonumber(buttonName:match("^BT4Button(%d+)$"))
-            if num then
-                key1 = GetBindingKey("CLICK " .. buttonName .. ":Keybind")
-                if not key1 then
-                    key1 = GetBindingKey("CLICK " .. buttonName .. ":LeftButton")
-                end
-                if not key1 and actionSlot then
-                    local bar = math.ceil(num / 12)
-                    local buttonInBar = ((num - 1) % 12) + 1
-                    if bar == 1 then
-                        key1 = GetBindingKey("ACTIONBUTTON" .. buttonInBar)
-                    elseif bar == 3 then
-                        key1 = GetBindingKey("MULTIACTIONBAR3BUTTON" .. buttonInBar)
-                    elseif bar == 4 then
-                        key1 = GetBindingKey("MULTIACTIONBAR4BUTTON" .. buttonInBar)
-                    elseif bar == 5 then
-                        key1 = GetBindingKey("MULTIACTIONBAR2BUTTON" .. buttonInBar)
-                    elseif bar == 6 then
-                        key1 = GetBindingKey("MULTIACTIONBAR1BUTTON" .. buttonInBar)
-                    end
-                end
-                if key1 then return FormatKeybind(key1) end
-            end
-        elseif buttonName:match("^DominosActionButton(%d+)$") then
-            local num = tonumber(buttonName:match("^DominosActionButton(%d+)$"))
-            if num then
-                key1 = GetBindingKey("CLICK " .. buttonName .. ":LeftButton")
-                if not key1 and num <= 12 then
-                    key1 = GetBindingKey("ACTIONBUTTON" .. num)
-                elseif not key1 and num <= 24 then
-                    key1 = GetBindingKey("ACTIONBUTTON" .. (num - 12))
-                elseif not key1 and num <= 36 then
-                    key1 = GetBindingKey("MULTIACTIONBAR3BUTTON" .. (num - 24))
-                elseif not key1 and num <= 48 then
-                    key1 = GetBindingKey("MULTIACTIONBAR4BUTTON" .. (num - 36))
-                elseif not key1 and num <= 60 then
-                    key1 = GetBindingKey("MULTIACTIONBAR1BUTTON" .. (num - 48))
-                elseif not key1 and num <= 72 then
-                    key1 = GetBindingKey("MULTIACTIONBAR2BUTTON" .. (num - 60))
-                end
-                if key1 then return FormatKeybind(key1) end
-            end
-        end
+        local key = GetBindingKey("CLICK " .. buttonName .. ":LeftButton")
+        if key then return FormatKeybind(key) end
     end
-
+    
     return nil
 end
+
+--------------------------------------------------------------------------------
+-- Cache Building
+--------------------------------------------------------------------------------
 
 local function ParseMacroForSpells(macroIndex)
     local spellIDs = {}
     local spellNames = {}
     
-    local macroName, iconTexture, body = GetMacroInfo(macroIndex)
+    local macroName, _, body = GetMacroInfo(macroIndex)
     if not body then return spellIDs, spellNames end
     
+    -- Try simple spell lookup first
     local simpleSpell = GetMacroSpell(macroIndex)
     if simpleSpell then
         spellIDs[simpleSpell] = true
@@ -187,12 +192,13 @@ local function ParseMacroForSpells(macroIndex)
         end
     end
     
+    -- Parse macro body for /cast and /use commands
     for line in body:gmatch("[^\r\n]+") do
         local lineLower = line:lower()
-        
         if not lineLower:match("^%s*%-%-") then
             local spellName = nil
             
+            -- /cast command
             if lineLower:match("/cast") then
                 local afterCast = line:match("/[cC][aA][sS][tT]%s*(.*)")
                 if afterCast then
@@ -201,6 +207,7 @@ local function ParseMacroForSpells(macroIndex)
                 end
             end
             
+            -- /use command
             if not spellName or spellName == "" then
                 if lineLower:match("/use") then
                     local afterUse = line:match("/[uU][sS][eE]%s*(.*)")
@@ -211,6 +218,7 @@ local function ParseMacroForSpells(macroIndex)
                 end
             end
             
+            -- #showtooltip
             if not spellName or spellName == "" then
                 if lineLower:match("#showtooltip") then
                     spellName = line:match("#[sS][hH][oO][wW][tT][oO][oO][lL][tT][iI][pP]%s+(.+)")
@@ -225,14 +233,8 @@ local function ParseMacroForSpells(macroIndex)
                 if spellName then
                     spellName = spellName:match("^%s*(.-)%s*$")
                 end
-                
                 if spellName and spellName ~= "" then
                     spellNames[spellName:lower()] = true
-                    
-                    local spellInfo = C_Spell.GetSpellInfo(spellName)
-                    if spellInfo and spellInfo.spellID then
-                        spellIDs[spellInfo.spellID] = true
-                    end
                 end
             end
         end
@@ -241,321 +243,89 @@ local function ParseMacroForSpells(macroIndex)
     return spellIDs, spellNames
 end
 
-local function ProcessActionButton(button)
-    if not button then return end
-
-    local buttonName = button:GetName()
-    local action
-
-    if buttonName and buttonName:match("^BT4Button") then
-        action = button._state_action
-        if not action and button.GetAction then
-            local actionType, actionSlot = button:GetAction()
-            if actionType == "action" then
-                action = actionSlot
-            end
-        end
-    else
-        action = button.action or (button.GetAction and button:GetAction())
-    end
-
-    if not action or action == 0 then return end
-    
-    local actionType, id = GetActionInfo(action)
-    local keybind = nil
-    
-    if actionType == "spell" and id then
-        keybind = GetKeybindFromActionButton(button, action)
-        if keybind then
-            if not spellToKeybind[id] then
-                spellToKeybind[id] = keybind
-            end
-            local spellInfo = C_Spell.GetSpellInfo(id)
-            if spellInfo and spellInfo.name then
-                local nameLower = spellInfo.name:lower()
-                if not spellNameToKeybind[nameLower] then
-                    spellNameToKeybind[nameLower] = keybind
-                end
-            end
-        end
-    elseif actionType == "item" and id then
-        keybind = GetKeybindFromActionButton(button, action)
-        if keybind then
-            if not spellToKeybind[id] then
-                spellToKeybind[id] = keybind
-            end
-        end
-    elseif actionType == "macro" then
-        keybind = GetKeybindFromActionButton(button, action)
-        if not keybind then return end
-        
-        local macroName = id and GetMacroInfo(id)
-        
-        if macroName then
-            local macroSpells, macroSpellNames = ParseMacroForSpells(id)
-            
-            for spellID in pairs(macroSpells) do
-                if not spellToKeybind[spellID] then
-                    spellToKeybind[spellID] = keybind
-                end
-            end
-            for spellName in pairs(macroSpellNames) do
-                if not spellNameToKeybind[spellName] then
-                    spellNameToKeybind[spellName] = keybind
-                end
-            end
-        else
-            local actionText = GetActionText(action)
-            if actionText and actionText ~= "" then
-                if not macroCacheBuilt then
-                    for i = 1, 138 do
-                        local mName = GetMacroInfo(i)
-                        if mName then
-                            macroNameCache[mName:lower()] = i
-                        end
-                    end
-                    macroCacheBuilt = true
-                end
-                
-                local macroIndex = macroNameCache[actionText:lower()]
-                if macroIndex then
-                    local macroSpells, macroSpellNames = ParseMacroForSpells(macroIndex)
-                    for spellID in pairs(macroSpells) do
-                        if not spellToKeybind[spellID] then
-                            spellToKeybind[spellID] = keybind
-                        end
-                    end
-                    for spellName in pairs(macroSpellNames) do
-                        if not spellNameToKeybind[spellName] then
-                            spellNameToKeybind[spellName] = keybind
-                        end
-                    end
-                end
-            end
-        end
-    end
-end
-
-local function BuildActionButtonCache()
-    if actionButtonsCached then return end
-    
-    cachedActionButtons = {}
-    local addedButtons = {}
-    
-    local buttonPrefixes = {
-        "ActionButton",
-        "MultiBarBottomLeftButton",
-        "MultiBarBottomRightButton",
-        "MultiBarRightButton",
-        "MultiBarLeftButton",
-        "MultiBar5Button",
-        "MultiBar6Button",
-        "MultiBar7Button",
-        "OverrideActionBarButton",
-        "BT4Button",
-        "DominosActionButton",
-        "ElvUI_Bar1Button",
-        "ElvUI_Bar2Button",
-        "ElvUI_Bar3Button",
-        "ElvUI_Bar4Button",
-        "ElvUI_Bar5Button",
-        "ElvUI_Bar6Button",
-    }
-    
-    for _, prefix in ipairs(buttonPrefixes) do
-        for i = 1, 12 do
-            local button = _G[prefix .. i]
-            if button and not addedButtons[button] then
-                table.insert(cachedActionButtons, button)
-                addedButtons[button] = true
-            end
-        end
-    end
-    
-    for i = 1, 180 do
-        local button = _G["DominosActionButton" .. i]
-        if button and not addedButtons[button] then
-            table.insert(cachedActionButtons, button)
-            addedButtons[button] = true
-        end
-    end
-
-    for i = 1, 120 do
-        local button = _G["BT4Button" .. i]
-        if button and not addedButtons[button] then
-            table.insert(cachedActionButtons, button)
-            addedButtons[button] = true
-        end
-    end
-
-    table.sort(cachedActionButtons, function(a, b)
-        local nameA = (type(a.GetName) == "function") and a:GetName() or ""
-        local nameB = (type(b.GetName) == "function") and b:GetName() or ""
-
-        local numA = nameA:match("^BT4Button(%d+)$")
-        local numB = nameB:match("^BT4Button(%d+)$")
-        if numA and numB then
-            return tonumber(numA) < tonumber(numB)
-        end
-
-        numA = nameA:match("^DominosActionButton(%d+)$")
-        numB = nameB:match("^DominosActionButton(%d+)$")
-        if numA and numB then
-            return tonumber(numA) < tonumber(numB)
-        end
-
-        local priorityA = nameA:match("^BT4") and 1 or nameA:match("^Dominos") and 2 or nameA:match("^ElvUI") and 3 or 4
-        local priorityB = nameB:match("^BT4") and 1 or nameB:match("^Dominos") and 2 or nameB:match("^ElvUI") and 3 or 4
-        if priorityA ~= priorityB then
-            return priorityA < priorityB
-        end
-
-        return false
-    end)
-
-    actionButtonsCached = true
-end
-
 local function RebuildCache(forceRebuild)
-    if not actionButtonsCached then
-        BuildActionButtonCache()
-    end
+    if not forceRebuild and next(spellToKeybind) then return end
     
-    if forceRebuild then
-        macroCacheBuilt = false
-        macroNameCache = {}
-        spellToKeybind = {}
-        spellNameToKeybind = {}
-        cachedSpellIDs = {}
-    end
-
+    BuildActionButtonCache()
+    
+    spellToKeybind = {}
+    spellNameToKeybind = {}
+    
     for _, button in ipairs(cachedActionButtons) do
-        pcall(ProcessActionButton, button)
-    end
-end
-
-local function SafeCompare(a, b)
-    if not a or not b then
-        return a == b
-    end
-    
-    local aIsSecret = issecretvalue(a)
-    local bIsSecret = issecretvalue(b)
-    
-    if aIsSecret or bIsSecret then
-        local compareOk, result = pcall(function()
-            return a == b
-        end)
-        if compareOk then
-            return result
+        local actionType, id = nil, nil
+        
+        if button.GetAction then
+            local ok, result = pcall(function() return button:GetAction() end)
+            if ok and result then
+                local aType, aId = GetActionInfo(result)
+                actionType, id = aType, aId
+            end
+        elseif button.action then
+            local aType, aId = GetActionInfo(button.action)
+            actionType, id = aType, aId
         end
-        return false
+        
+        local keybind = GetKeybindFromActionButton(button)
+        if keybind then
+            if actionType == "spell" and id then
+                if not spellToKeybind[id] then
+                    spellToKeybind[id] = keybind
+                end
+                local spellInfo = C_Spell.GetSpellInfo(id)
+                if spellInfo and spellInfo.name and not spellNameToKeybind[spellInfo.name:lower()] then
+                    spellNameToKeybind[spellInfo.name:lower()] = keybind
+                end
+            elseif actionType == "item" and id then
+                if not spellToKeybind[id] then
+                    spellToKeybind[id] = keybind
+                end
+            elseif actionType == "macro" and id then
+                -- Parse macro for spells
+                local spellIDs, spellNames = ParseMacroForSpells(id)
+                for spellID in pairs(spellIDs) do
+                    if not spellToKeybind[spellID] then
+                        spellToKeybind[spellID] = keybind
+                    end
+                end
+                for spellName in pairs(spellNames) do
+                    if not spellNameToKeybind[spellName] then
+                        spellNameToKeybind[spellName] = keybind
+                    end
+                end
+            end
+        end
     end
-    
-    return a == b
 end
 
-local function GetKeybindForSpell(spellID)
-    if not spellID then return nil end
-    
-    local ok, result = pcall(function()
-        return spellToKeybind[spellID]
-    end)
-    
-    if ok then
-        return result
-    end
-    return nil
-end
-
-local function GetOrCacheKeybindForSpell(spellID)
-    if not spellID then return nil end
-
-    local ok, isCached = pcall(function()
-        return cachedSpellIDs[spellID]
-    end)
-    if ok and isCached then
-        return GetKeybindForSpell(spellID)
-    end
-
-    if not actionButtonsCached then
-        BuildActionButtonCache()
-    end
-
-    RebuildCache(false)
-    local keybind = GetKeybindForSpell(spellID)
-
-    if keybind then
-        ok, _ = pcall(function()
-            cachedSpellIDs[spellID] = true
-        end)
-    end
-
-    return keybind
-end
-
-local function GetKeybindForSpellName(spellName)
-    if not spellName then return nil end
-    
-    local ok, nameLower = pcall(function() return spellName:lower() end)
-    if not ok or not nameLower then return nil end
-    
-    return spellNameToKeybind[nameLower]
-end
-
-local function GetKeybindForSpellID(spellID)
-    if not spellID then return nil end
-    
-    local keybind = GetOrCacheKeybindForSpell(spellID)
-    if keybind then
-        return keybind
-    end
-    
-    local ok, overrideID = pcall(function()
-        return C_Spell.GetOverrideSpell and C_Spell.GetOverrideSpell(spellID)
-    end)
-    
-    if ok and overrideID and not SafeCompare(overrideID, spellID) then
-        return GetOrCacheKeybindForSpell(overrideID)
-    end
-    
-    return nil
-end
-
-local function GetKeybindForItemID(itemID)
-    if not itemID then return nil end
-    
-    local ok, result = pcall(function()
-        return spellToKeybind[itemID]
-    end)
-    
-    if ok then
-        return result
-    end
-    
-    if not actionButtonsCached then
-        BuildActionButtonCache()
-    end
-    
-    RebuildCache(false)
-    
-    return spellToKeybind[itemID]
-end
+--------------------------------------------------------------------------------
+-- Keybind Lookup
+--------------------------------------------------------------------------------
 
 function Keybinds.GetSpellKeybind(spellID)
     if not spellID then return nil end
     
-    local spellInfo = C_Spell.GetSpellInfo(spellID)
-    if not spellInfo then return nil end
+    RebuildCache(false)
     
-    local keybind = GetKeybindForSpellID(spellID)
-    if keybind then
-        return keybind
+    -- Direct lookup
+    if spellToKeybind[spellID] then
+        return spellToKeybind[spellID]
     end
     
-    local spellName = spellInfo.name
-    if spellName then
-        return GetKeybindForSpellName(spellName)
+    -- Name lookup
+    local spellInfo = C_Spell.GetSpellInfo(spellID)
+    if spellInfo and spellInfo.name then
+        local nameLower = spellInfo.name:lower()
+        if spellNameToKeybind[nameLower] then
+            return spellNameToKeybind[nameLower]
+        end
+    end
+    
+    -- Try override spell
+    if C_Spell.GetOverrideSpell then
+        local overrideID = C_Spell.GetOverrideSpell(spellID)
+        if overrideID and overrideID ~= spellID then
+            return Keybinds.GetSpellKeybind(overrideID)
+        end
     end
     
     return nil
@@ -564,126 +334,127 @@ end
 function Keybinds.GetItemKeybind(itemID)
     if not itemID then return nil end
     
-    return GetKeybindForItemID(itemID)
+    RebuildCache(false)
+    return spellToKeybind[itemID]
 end
 
 function Keybinds.GetTrinketKeybind(slotID)
     if not slotID then return nil end
     
-    local trinketItemID = GetInventoryItemID("player", slotID)
-    if not trinketItemID then return nil end
-    
-    return Keybinds.GetItemKeybind(trinketItemID)
+    local itemID = GetInventoryItemID("player", slotID)
+    if itemID then
+        return Keybinds.GetItemKeybind(itemID)
+    end
+    return nil
 end
 
-function Keybinds.UpdateEntry(entry)
-    if not entry or not entry.frame then return end
+--------------------------------------------------------------------------------
+-- Keybind Display
+--------------------------------------------------------------------------------
+
+function Keybinds.UpdateItem(item)
+    if not item or not item.frame then return end
     
-    local settings = module:GetViewerSettings(entry.source)
-    if not settings or not settings.showKeybinds then return end
+    local settings = module:GetViewerSettings(item.viewerKey)
+    if not settings or not settings.showKeybinds then
+        if item.frame._ucdmKeybindText then
+            item.frame._ucdmKeybindText:Hide()
+        end
+        return
+    end
     
-    local frame = entry.frame
-    local spellID = entry.spellID
-    local itemID = entry.itemID
-    local slotID = entry.slotID
+    local frame = item.frame
     
-    if not spellID and not itemID and not slotID then
-        if frame.GetSpellID then
-            spellID = frame:GetSpellID()
-        elseif frame.spellID then
-            spellID = frame.spellID
-        elseif frame._spellID then
-            spellID = frame._spellID
-        end
-        
-        if frame.GetItemID then
-            itemID = frame:GetItemID()
-        elseif frame.itemID then
-            itemID = frame.itemID
-        elseif frame._itemID then
-            itemID = frame._itemID
-        end
-        
-        if frame.GetSlotID then
-            slotID = frame:GetSlotID()
-        elseif frame.slotID then
-            slotID = frame.slotID
-        elseif frame._slotID then
-            slotID = frame._slotID
-        end
+    -- Get keybind based on what the item is tracking
+    local keybind = nil
+    if item.spellID then
+        keybind = Keybinds.GetSpellKeybind(item.spellID)
+    elseif item.itemID then
+        keybind = Keybinds.GetItemKeybind(item.itemID)
+    elseif item.slotID then
+        keybind = Keybinds.GetTrinketKeybind(item.slotID)
+    end
+    
+    -- For blizzard frames, also try to extract IDs from the frame itself
+    if not keybind and item.source == "blizzard" then
+        local spellID = frame.GetSpellID and frame:GetSpellID() or frame.spellID
+        local itemID = frame.GetItemID and frame:GetItemID() or frame.itemID
+        local slotID = frame.GetSlotID and frame:GetSlotID() or frame.slotID
         
         if frame.cooldownData then
-            if frame.cooldownData.spellID then
-                spellID = frame.cooldownData.spellID
-            end
-            if frame.cooldownData.itemID then
-                itemID = frame.cooldownData.itemID
-            end
-            if frame.cooldownData.slotID then
-                slotID = frame.cooldownData.slotID
-            end
+            spellID = spellID or frame.cooldownData.spellID
+            itemID = itemID or frame.cooldownData.itemID
+            slotID = slotID or frame.cooldownData.slotID
         end
         
-        if spellID or itemID or slotID then
-            entry.spellID = spellID
-            entry.itemID = itemID
-            entry.slotID = slotID
+        if spellID then
+            keybind = Keybinds.GetSpellKeybind(spellID)
+        elseif itemID then
+            keybind = Keybinds.GetItemKeybind(itemID)
+        elseif slotID then
+            keybind = Keybinds.GetTrinketKeybind(slotID)
         end
     end
     
-    local keybind = nil
-    
-    if spellID then
-        keybind = Keybinds.GetSpellKeybind(spellID)
-    elseif itemID then
-        keybind = Keybinds.GetItemKeybind(itemID)
-    elseif slotID then
-        keybind = Keybinds.GetTrinketKeybind(slotID)
+    -- Create or update keybind text
+    if not frame._ucdmKeybindText then
+        frame._ucdmKeybindText = frame:CreateFontString(nil, "OVERLAY")
     end
     
-    if not entry.frame._ucdmKeybindText then
-        entry.frame._ucdmKeybindText = entry.frame:CreateFontString(nil, "OVERLAY")
-        entry.frame._ucdmKeybindText:SetFont("Fonts\\FRIZQT__.TTF", settings.keybindSize or 10, "OUTLINE")
-    end
+    local keybindText = frame._ucdmKeybindText
+    keybindText:SetFont(FONT_PATH, settings.keybindSize or CONSTANTS.DEFAULT_KEYBIND_SIZE, "OUTLINE")
     
-    local keybindText = entry.frame._ucdmKeybindText
-    local keybindColor = settings.keybindColor or {r = 1, g = 1, b = 1, a = 1}
+    local bindPoint = frame
+    if frame.Icon then
+        bindPoint = frame.Icon
+    end
     
     if keybind then
+        local color = settings.keybindColor or {r = 1, g = 1, b = 1, a = 1}
         keybindText:SetText(keybind)
-        keybindText:SetTextColor(keybindColor.r, keybindColor.g, keybindColor.b, keybindColor.a)
-        keybindText:SetPoint(settings.keybindPoint or "TOPLEFT", entry.frame, settings.keybindPoint or "TOPLEFT", settings.keybindOffsetX or 2, settings.keybindOffsetY or -2)
+        keybindText:SetTextColor(color.r, color.g, color.b, color.a)
+        keybindText:ClearAllPoints()
+        keybindText:SetPoint(
+            settings.keybindPoint or "TOPLEFT",
+            bindPoint,
+            settings.keybindPoint or "TOPLEFT",
+            settings.keybindOffsetX or 2,
+            settings.keybindOffsetY or -2
+        )
         keybindText:Show()
     else
         keybindText:Hide()
     end
 end
 
-function Keybinds.UpdateViewer(viewerKey, entries)
-    if not entries then return end
+--------------------------------------------------------------------------------
+-- Viewer Refresh
+--------------------------------------------------------------------------------
+
+function Keybinds.RefreshViewer(viewerKey)
+    local items = module.ItemRegistry.GetItemsForViewer(viewerKey)
+    if not items then return end
     
-    local settings = module:GetViewerSettings(viewerKey)
-    if not settings or not settings.showKeybinds then return end
-    
-    for _, entry in ipairs(entries) do
-        Keybinds.UpdateEntry(entry)
+    for _, item in ipairs(items) do
+        Keybinds.UpdateItem(item)
     end
 end
 
+--------------------------------------------------------------------------------
+-- Initialization
+--------------------------------------------------------------------------------
+
 local updatePending = false
-local UPDATE_THROTTLE = 0.2
 
 local function ThrottledRebuild(forceRebuild)
     if updatePending then return end
     updatePending = true
     
-    C_Timer.After(UPDATE_THROTTLE, function()
+    C_Timer.After(CONSTANTS.UPDATE_THROTTLE, function()
         updatePending = false
         RebuildCache(forceRebuild)
-        if module.RefreshManager then
-            for _, viewerKey in ipairs({"essential", "utility", "buff", "custom"}) do
-                module.RefreshManager.RefreshKeybinds(viewerKey)
-            end
+        for _, viewerKey in ipairs(module.CONSTANTS.VIEWER_KEYS) do
+            Keybinds.RefreshViewer(viewerKey)
         end
     end)
 end
@@ -699,14 +470,10 @@ function Keybinds.Initialize()
         if event == "PLAYER_ENTERING_WORLD" then
             actionButtonsCached = false
             macroCacheBuilt = false
-            C_Timer.After(0.1, function()
-                RebuildCache(true)
-                if module.RefreshManager then
-                    for _, viewerKey in ipairs({"essential", "utility", "buff", "custom"}) do
-                        module.RefreshManager.RefreshKeybinds(viewerKey)
-                    end
-                end
-            end)
+            RebuildCache(true)
+            for _, viewerKey in ipairs(module.CONSTANTS.VIEWER_KEYS) do
+                Keybinds.RefreshViewer(viewerKey)
+            end
             return
         end
         
@@ -723,9 +490,15 @@ function Keybinds.Initialize()
         end
     end)
     
-    C_Timer.After(0.5, function()
+    if IsLoggedIn() then
         RebuildCache(true)
-    end)
+    end
+    
+    module:LogInfo("Keybinds initialized")
 end
+
+--------------------------------------------------------------------------------
+-- Export
+--------------------------------------------------------------------------------
 
 module.Keybinds = Keybinds

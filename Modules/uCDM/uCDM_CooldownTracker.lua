@@ -41,7 +41,7 @@ function CooldownTracker.UpdateSpell(spellID)
     
     return {
         stackDisplay = stackDisplay,
-        isOnCooldown = duration:EvaluateRemainingPercent(Helpers.CooldownCurves.Binary),
+        isOnCooldown = Helpers.EvaluateRemainingPercentSafe(duration),
         duration = duration,
         buffRemaining = buffRemaining,
         chargeDuration = chargeDuration,
@@ -52,15 +52,11 @@ end
 
 function CooldownTracker.UpdateEntry(entry)
     if not entry or not entry.frame then return nil end
-    if entry.type ~= "custom" then return nil end
-    
+
     local data = nil
-    
+
     if entry.spellID then
         data = CooldownTracker.UpdateSpell(entry.spellID)
-        if data and entry.type == "custom" then
-            data.isUsable = C_Spell.IsSpellUsable(entry.spellID) or false
-        end
     elseif entry.itemID then
         data = CooldownTracker.UpdateItem(entry.itemID)
     elseif entry.slotID then
@@ -92,24 +88,33 @@ function CooldownTracker.UpdateEntry(entry)
         end
     end
 
-    if data.isOnCooldown then
-        frame.Icon:SetDesaturation(data.isOnCooldown)
-    elseif frame.Icon and data.isUsable ~= nil then
-        if data.isUsable then
-            frame.Icon:SetVertexColor(1.0, 1.0, 1.0)
-        elseif data.noMana then
-            frame.Icon:SetVertexColor(0.5, 0.5, 1.0)
+    local icon = frame.Icon or frame.icon
+    if icon then
+        if data.isOnCooldown and data.isOnCooldown > 0 then
+            icon:SetDesaturation(data.isOnCooldown)
+            icon:SetVertexColor(1.0, 1.0, 1.0)
+        elseif data.isUsable ~= nil then
+            icon:SetDesaturation(0)
+            if data.isUsable then
+                icon:SetVertexColor(1.0, 1.0, 1.0)
+            elseif data.noMana then
+                icon:SetVertexColor(0.5, 0.5, 1.0)
+            else
+                icon:SetVertexColor(0.4, 0.4, 0.4)
+            end
         else
-            frame.Icon:SetVertexColor(0.4, 0.4, 0.4)
+            icon:SetDesaturation(0)
+            icon:SetVertexColor(1.0, 1.0, 1.0)
         end
-    end    
-    
-    if frame.Count then
+    end
+
+    local countText = frame.Count or frame.count
+    if countText then
         if data.stackDisplay then
-            frame.Count:SetText(data.stackDisplay)
-            frame.Count:Show()
+            countText:SetText(data.stackDisplay)
+            countText:Show()
         else
-            frame.Count:Hide()
+            countText:Hide()
         end
     end
     

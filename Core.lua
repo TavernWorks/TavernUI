@@ -46,6 +46,61 @@ function TavernUI.modulePrototype:Debug(...)
     end
 end
 
+function TavernUI.modulePrototype:GetModulePath()
+    if not TavernUI.Config then
+        return nil
+    end
+    return TavernUI.Config:GetModulePath(self:GetName())
+end
+
+function TavernUI.modulePrototype:GetSetting(path, defaultValue)
+    if not TavernUI.Config then
+        return defaultValue
+    end
+    local modulePath = self:GetModulePath()
+    if not modulePath then
+        return defaultValue
+    end
+    local fullPath = modulePath .. "." .. path
+    return TavernUI.Config:Get(fullPath, defaultValue)
+end
+
+function TavernUI.modulePrototype:SetSetting(path, value, options)
+    if not TavernUI.Config then
+        return false
+    end
+    local modulePath = self:GetModulePath()
+    if not modulePath then
+        return false
+    end
+    local fullPath = modulePath .. "." .. path
+    return TavernUI.Config:Set(fullPath, value, options)
+end
+
+function TavernUI.modulePrototype:WatchSetting(path, callback)
+    if not TavernUI.Config then
+        return nil
+    end
+    local modulePath = self:GetModulePath()
+    if not modulePath then
+        return nil
+    end
+    local fullPath = modulePath .. "." .. path
+    return TavernUI.Config:RegisterChangeCallback(fullPath, callback)
+end
+
+function TavernUI.modulePrototype:UnwatchSetting(path, callbackId)
+    if not TavernUI.Config then
+        return false
+    end
+    local modulePath = self:GetModulePath()
+    if not modulePath then
+        return false
+    end
+    local fullPath = modulePath .. "." .. path
+    return TavernUI.Config:UnregisterChangeCallback(fullPath, callbackId)
+end
+
 TavernUI:SetDefaultModulePrototype(TavernUI.modulePrototype)
 TavernUI:SetDefaultModuleState(false) -- Modules disabled by default, we control enabling
 
@@ -77,6 +132,11 @@ function TavernUI:OnInitialize()
     self.db.RegisterCallback(self, "OnProfileChanged", "RefreshConfig")
     self.db.RegisterCallback(self, "OnProfileCopied", "RefreshConfig")
     self.db.RegisterCallback(self, "OnProfileReset", "RefreshConfig")
+    
+    -- Initialize Config system
+    if self.Config then
+        self.Config:OnInitialize()
+    end
     
     self:InitializeOptions()
     self:RegisterChatCommand("tui", "SlashCommand")

@@ -3,32 +3,76 @@ local module = TavernUI:GetModule("uCDM", true)
 
 if not module then return end
 
+--[[
+    LayoutEngine - Positions items and applies per-row styling
+    
+    This is now much simpler because:
+    1. ItemRegistry provides the items
+    2. Each CooldownItem styles itself
+    3. LayoutEngine just handles positioning and row assignment
+]]
+
 local LayoutEngine = {}
 
-local layoutRunning = {}
-local layoutThrottle = {}
-local VIEWER_NAMES = {
-    essential = "EssentialCooldownViewer",
-    utility = "UtilityCooldownViewer",
-    buff = "BuffIconCooldownViewer",
+local CONSTANTS = {
+    DEFAULT_ROW_GAP = 5,
 }
 
-local function GetViewerFrame(viewerKey)
-    return _G[VIEWER_NAMES[viewerKey]]
+local layoutRunning = {}
+
+--------------------------------------------------------------------------------
+-- Initialization
+--------------------------------------------------------------------------------
+
+function LayoutEngine.Initialize()
+    layoutRunning = {}
+    
+    -- Watch for viewer enable/disable
+    for _, viewerKey in ipairs(module.CONSTANTS.VIEWER_KEYS) do
+        module:WatchSetting(string.format("viewers.%s.enabled", viewerKey), function(newValue)
+            local viewer = LayoutEngine.GetViewerFrame(viewerKey)
+            if viewer then
+                if newValue then
+                    LayoutEngine.RefreshViewer(viewerKey)
+                else
+                    viewer:Hide()
+                end
+            end
+        end)
+        
+        module:WatchSetting(string.format("viewers.%s.rowGrowDirection", viewerKey), function()
+            if module:IsEnabled() then
+                LayoutEngine.RefreshViewer(viewerKey)
+            end
+        end)
+    end
+    
+    module:LogInfo("LayoutEngine initialized")
 end
 
+--------------------------------------------------------------------------------
+-- Viewer Access
+--------------------------------------------------------------------------------
+
+function LayoutEngine.GetViewerFrame(viewerKey)
+    return _G[module.CONSTANTS.VIEWER_NAMES[viewerKey]]
+end
+
+--------------------------------------------------------------------------------
+-- Row Configuration
+--------------------------------------------------------------------------------
+
 local function GetActiveRows(settings)
-    local activeRows = {}
-    if not settings or not settings.rows then return activeRows end
+    local rows = {}
+    if not settings or not settings.rows then return rows end
     
     for _, row in ipairs(settings.rows) do
         if row.iconCount and row.iconCount > 0 then
-            table.insert(activeRows, {
-                count = row.iconCount,
-                size = row.iconSize or 50,
+            rows[#rows + 1] = {
+                iconCount = row.iconCount,
+                iconSize = row.iconSize or 50,
                 padding = row.padding or 0,
                 yOffset = row.yOffset or 0,
-                maxIconsForRow = row.iconCount,
                 aspectRatioCrop = row.aspectRatioCrop or 1.0,
                 zoom = row.zoom or 0,
                 iconBorderSize = row.iconBorderSize or 0,
@@ -43,154 +87,114 @@ local function GetActiveRows(settings)
                 stackPoint = row.stackPoint or "BOTTOMRIGHT",
                 stackOffsetX = row.stackOffsetX or 0,
                 stackOffsetY = row.stackOffsetY or 0,
-            })
+                keepRowHeightWhenEmpty = row.keepRowHeightWhenEmpty ~= false,
+            }
         end
     end
     
-    return activeRows
+    return rows
 end
 
-local function GetCapacity(settings)
+local function GetTotalCapacity(rows)
     local total = 0
-    if not settings or not settings.rows then return total end
-    
-    for _, row in ipairs(settings.rows) do
-        total = total + (row.iconCount or 0)
+    for _, row in ipairs(rows) do
+        total = total + row.iconCount
     end
-    
     return total
 end
 
-local function CalculateRowDimensions(rowConfigs)
+--------------------------------------------------------------------------------
+-- Row Assignment
+--------------------------------------------------------------------------------
+
+local function AssignItemsToRows(items, rows, viewerKey)
+    local rowAssignments = {}
+    local capacity = GetTotalCapacity(rows)
+    
+    -- Create visibility context
+    local context = {
+        viewerKey = viewerKey,
+        inCombat = InCombatLockdown(),
+    }
+    
+    -- Filter visible items and assign layout indices
+    local visibleItems = {}
+    for _, item in ipairs(items) do
+        if item.enabled ~= false and item.frame and item:isVisible(context) then
+            local layoutIdx = item.layoutIndex or item.index or (#visibleItems + 1)
+            if layoutIdx <= capacity then
+                visibleItems[#visibleItems + 1] = {
+                    item = item,
+                    layoutIndex = layoutIdx,
+                }
+            end
+        end
+    end
+    
+    -- Sort by layout index
+    table.sort(visibleItems, function(a, b)
+        return a.layoutIndex < b.layoutIndex
+    end)
+    
+    -- Assign to rows based on breakpoints
+    local slotStart = 1
+    for rowNum, rowConfig in ipairs(rows) do
+        local slotEnd = slotStart + rowConfig.iconCount - 1
+        rowAssignments[rowNum] = {}
+        
+        for _, entry in ipairs(visibleItems) do
+            local slot = entry.layoutIndex
+            if slot >= slotStart and slot <= slotEnd then
+                rowAssignments[rowNum][#rowAssignments[rowNum] + 1] = entry.item
+            end
+        end
+        
+        slotStart = slotEnd + 1
+    end
+    
+    return rowAssignments, visibleItems
+end
+
+--------------------------------------------------------------------------------
+-- Dimension Calculation
+--------------------------------------------------------------------------------
+
+local function CalculateDimensions(rowAssignments, rows)
     local maxRowWidth = 0
     local totalHeight = 0
-    local rowWidths = {}
-    local rowGap = 5
+    local rowGap = CONSTANTS.DEFAULT_ROW_GAP
     
-    for rowNum, rowConfig in ipairs(rowConfigs) do
-        local maxIconsForRow = rowConfig.maxIconsForRow
-        local iconSize = rowConfig.size
-        local aspectRatio = rowConfig.aspectRatioCrop or 1.0
+    for rowNum, rowConfig in ipairs(rows) do
+        local rowItems = rowAssignments[rowNum] or {}
+        local actualIcons = #rowItems
+        local iconSize = rowConfig.iconSize
+        local aspectRatio = rowConfig.aspectRatioCrop
         local iconHeight = iconSize / aspectRatio
+        local keepHeight = rowConfig.keepRowHeightWhenEmpty
         
-        local rowWidth = (maxIconsForRow * iconSize) + ((maxIconsForRow - 1) * rowConfig.padding)
-        rowWidths[rowNum] = rowWidth
-        maxRowWidth = math.max(maxRowWidth, rowWidth)
-        
-        totalHeight = totalHeight + iconHeight
-        if rowNum > 1 then
-            totalHeight = totalHeight + rowGap
+        if actualIcons > 0 then
+            local rowWidth = actualIcons * iconSize + (actualIcons - 1) * rowConfig.padding
+            maxRowWidth = math.max(maxRowWidth, rowWidth)
+            totalHeight = totalHeight + iconHeight + (rowNum > 1 and rowGap or 0)
+        elseif keepHeight then
+            local rowWidth = rowConfig.iconCount * iconSize + (rowConfig.iconCount - 1) * rowConfig.padding
+            maxRowWidth = math.max(maxRowWidth, rowWidth)
+            totalHeight = totalHeight + iconHeight + (rowNum > 1 and rowGap or 0)
         end
     end
     
-    return maxRowWidth, totalHeight, rowWidths, rowGap
+    return maxRowWidth, totalHeight, rowGap
 end
 
-local function FilterEntries(entries, viewerKey, settings)
-    local capacity = GetCapacity(settings)
-    local isBuff = viewerKey == "buff"
-    local filtered = {}
-    
-    if isBuff then
-        for _, entry in ipairs(entries) do
-            local slot = entry.layoutIndex or entry.index
-            if slot and slot <= capacity then
-                local isShown = false
-                local frame = entry.frame
-                if frame.ShouldBeShown then
-                    local ok, result = pcall(function() return frame:ShouldBeShown() end)
-                    if ok then
-                        isShown = result
-                    else
-                        isShown = frame:IsShown()
-                    end
-                else
-                    isShown = frame:IsShown()
-                end
-                
-                if isShown then
-                    table.insert(filtered, entry)
-                else
-                    frame:Hide()
-                    pcall(function() frame:ClearAllPoints() end)
-                end
-            else
-                entry.frame:Hide()
-                pcall(function() entry.frame:ClearAllPoints() end)
-            end
-        end
-    else
-        for i = 1, math.min(#entries, capacity) do
-            if entries[i] then
-                table.insert(filtered, entries[i])
-                entries[i].frame:Show()
-            end
-        end
-        
-        for i = capacity + 1, #entries do
-            if entries[i] then
-                entries[i].frame:Hide()
-                pcall(function() entries[i].frame:ClearAllPoints() end)
-            end
-        end
-    end
-    
-    return filtered
-end
+--------------------------------------------------------------------------------
+-- Layout Application
+--------------------------------------------------------------------------------
 
-local function CalculateRows(entries, rowConfigs, viewerKey)
-    local rowDistribution = {}
-    local isBuff = viewerKey == "buff"
-    
-    if isBuff then
-        local slotStart = 1
-        for rowNum, rowConfig in ipairs(rowConfigs) do
-            local stride = rowConfig.maxIconsForRow
-            local slotEnd = slotStart + stride - 1
-            local entriesInRow = {}
-            
-            for _, entry in ipairs(entries) do
-                local slot = entry.layoutIndex or entry.index
-                if slot and slot >= slotStart and slot <= slotEnd then
-                    table.insert(entriesInRow, entry)
-                end
-            end
-            
-            table.sort(entriesInRow, function(a, b)
-                return (a.layoutIndex or a.index or 9999) < (b.layoutIndex or b.index or 9999)
-            end)
-            
-            rowDistribution[rowNum] = entriesInRow
-            slotStart = slotEnd + 1
-        end
-    else
-        local slotStart = 1
-        for rowNum, rowConfig in ipairs(rowConfigs) do
-            local stride = rowConfig.maxIconsForRow
-            local rowEndIndex = math.min(slotStart + stride - 1, #entries)
-            local entriesInRow = {}
-            
-            for i = slotStart, rowEndIndex do
-                if entries[i] then
-                    table.insert(entriesInRow, entries[i])
-                end
-            end
-            
-            rowDistribution[rowNum] = entriesInRow
-            slotStart = rowEndIndex + 1
-        end
-    end
-    
-    return rowDistribution
-end
-
-local function ApplyRowBorder(viewer, rowNum, rowConfig, rowWidth, rowHeight, rowCenterX, rowCenterY)
-    if not viewer or not rowConfig then return end
-    
-    local rowBorderSize = rowConfig.rowBorderSize or 0
+local function ApplyRowBorder(viewer, rowNum, rowConfig, rowWidth, rowHeight, rowCenterY)
+    local borderSize = rowConfig.rowBorderSize or 0
     local borderKey = "__ucdmRowBorder" .. rowNum
     
-    if rowBorderSize <= 0 then
+    if borderSize <= 0 then
         if viewer[borderKey] then
             viewer[borderKey]:Hide()
         end
@@ -201,75 +205,101 @@ local function ApplyRowBorder(viewer, rowNum, rowConfig, rowWidth, rowHeight, ro
         viewer[borderKey] = viewer:CreateTexture(nil, "BACKGROUND", nil, -7)
     end
     
-    local borderColor = rowConfig.rowBorderColor or {r = 0, g = 0, b = 0, a = 1}
-    viewer[borderKey]:SetColorTexture(borderColor.r, borderColor.g, borderColor.b, borderColor.a)
-    
+    local border = viewer[borderKey]
     local halfWidth = rowWidth / 2
     local halfHeight = rowHeight / 2
+    local color = rowConfig.rowBorderColor or {r = 0, g = 0, b = 0, a = 1}
     
-    viewer[borderKey]:ClearAllPoints()
-    viewer[borderKey]:SetPoint("TOPLEFT", viewer, "CENTER", rowCenterX - halfWidth - rowBorderSize, rowCenterY + halfHeight + rowBorderSize)
-    viewer[borderKey]:SetPoint("BOTTOMRIGHT", viewer, "CENTER", rowCenterX + halfWidth + rowBorderSize, rowCenterY - halfHeight - rowBorderSize)
-    viewer[borderKey]:Show()
+    border:SetColorTexture(color.r, color.g, color.b, color.a)
+    border:ClearAllPoints()
+    border:SetPoint("TOPLEFT", viewer, "CENTER", -halfWidth - borderSize, rowCenterY + halfHeight + borderSize)
+    border:SetPoint("BOTTOMRIGHT", viewer, "CENTER", halfWidth + borderSize, rowCenterY - halfHeight - borderSize)
+    border:Show()
 end
 
-local function ApplyLayout(viewer, rowDistribution, rowConfigs, viewerKey)
-    local maxRowWidth, totalHeight, rowWidths, rowGap = CalculateRowDimensions(rowConfigs)
-    
+local function ApplyLayout(viewer, rowAssignments, rows, viewerKey)
     local settings = module:GetViewerSettings(viewerKey)
     local growDirection = (settings and settings.rowGrowDirection) or "down"
     
-    local currentY
-    if growDirection == "up" then
-        currentY = -totalHeight / 2
-    else
-        currentY = totalHeight / 2
-    end
+    local maxRowWidth, totalHeight, rowGap = CalculateDimensions(rowAssignments, rows)
     
-    for rowNum, rowConfig in ipairs(rowConfigs) do
-        local entriesInRow = rowDistribution[rowNum] or {}
-        local actualIconsInRow = #entriesInRow
+    -- Starting Y position
+    local currentY = (growDirection == "up") and (-totalHeight / 2) or (totalHeight / 2)
+    
+    for rowNum, rowConfig in ipairs(rows) do
+        local rowItems = rowAssignments[rowNum] or {}
+        local actualIcons = #rowItems
+        local keepHeight = rowConfig.keepRowHeightWhenEmpty
         
-        if actualIconsInRow > 0 then
-            local iconSize = rowConfig.size
-            local aspectRatio = rowConfig.aspectRatioCrop or 1.0
-            local iconHeight = iconSize / aspectRatio
-            local rowWidth = actualIconsInRow * iconSize + (actualIconsInRow - 1) * rowConfig.padding
-            local startX = -rowWidth / 2 + iconSize / 2
-            local rowCenterY
-            if growDirection == "up" then
-                rowCenterY = currentY + (iconHeight / 2) + rowConfig.yOffset
-            else
-                rowCenterY = currentY - (iconHeight / 2) + rowConfig.yOffset
-            end
-            
-            for col, entry in ipairs(entriesInRow) do
-                local iconOffsetX = startX + (col - 1) * (iconSize + rowConfig.padding)
-                
-                pcall(function()
-                    if module.FrameManager then
-                        module.FrameManager.PositionFrame(entry.frame, iconOffsetX, rowCenterY, viewer)
-                    else
-                        entry.frame:ClearAllPoints()
-                        entry.frame:SetPoint("CENTER", viewer, "CENTER", iconOffsetX, rowCenterY)
-                    end
-                    entry.frame:Show()
-                end)
-            end
-            
-            ApplyRowBorder(viewer, rowNum, rowConfig, rowWidth, iconHeight, 0, rowCenterY)
-        end
-        
-        local iconSize = rowConfig.size
-        local aspectRatio = rowConfig.aspectRatioCrop or 1.0
+        local iconSize = rowConfig.iconSize
+        local aspectRatio = rowConfig.aspectRatioCrop
         local iconHeight = iconSize / aspectRatio
-        if growDirection == "up" then
-            currentY = currentY + iconHeight + rowGap
-        else
-            currentY = currentY - iconHeight - rowGap
+        local padding = rowConfig.padding
+        
+        if actualIcons > 0 or keepHeight then
+            local rowWidth = (actualIcons > 0)
+                and (actualIcons * iconSize + (actualIcons - 1) * padding)
+                or (rowConfig.iconCount * iconSize + (rowConfig.iconCount - 1) * padding)
+            
+            local rowCenterY = (growDirection == "up")
+                and (currentY + iconHeight / 2 + (rowConfig.yOffset or 0))
+                or (currentY - iconHeight / 2 + (rowConfig.yOffset or 0))
+            
+            -- Position and style items in this row
+            if actualIcons > 0 then
+                local startX = -rowWidth / 2 + iconSize / 2
+                
+                for col, item in ipairs(rowItems) do
+                    local frame = item.frame
+                    if frame then
+                        local offsetX = startX + (col - 1) * (iconSize + padding)
+                        
+                        frame:SetParent(viewer)
+                        frame:ClearAllPoints()
+                        frame:SetPoint("CENTER", viewer, "CENTER", offsetX, rowCenterY)
+                        
+                        -- Let the item style itself with this row's config
+                        item:applyStyle(rowConfig)
+
+                        if item.source == "custom" then
+                            frame:SetScale(viewer.iconScale or 1)
+                            local cellW = iconSize + 2 * padding
+                            local cellH = iconHeight + 2 * padding
+                            frame:SetSize(cellW, cellH)
+                            if frame.Icon then
+                                frame.Icon:ClearAllPoints()
+                                frame.Icon:SetSize(iconSize, iconHeight)
+                                frame.Icon:SetPoint("CENTER", frame, "CENTER", 0, 0)
+                                if frame.IconMask then
+                                    frame.IconMask:ClearAllPoints()
+                                    frame.IconMask:SetAllPoints(frame.Icon)
+                                end
+                            end
+                            if frame.Cooldown then
+                                frame.Cooldown:ClearAllPoints()
+                                frame.Cooldown:SetSize(iconSize, iconHeight)
+                                frame.Cooldown:SetPoint("CENTER", frame, "CENTER", 0, 0)
+                            end
+                        end
+                        
+                        frame:Show()
+                    end
+                end
+            end
+            
+            -- Apply row border
+            ApplyRowBorder(viewer, rowNum, rowConfig, rowWidth, iconHeight, rowCenterY)
+            
+            -- Advance to next row
+            if growDirection == "up" then
+                currentY = currentY + iconHeight + rowGap
+            else
+                currentY = currentY - iconHeight - rowGap
+            end
         end
     end
     
+    -- Resize viewer
     if maxRowWidth > 0 and totalHeight > 0 then
         pcall(function()
             viewer:SetSize(maxRowWidth, totalHeight)
@@ -277,11 +307,15 @@ local function ApplyLayout(viewer, rowDistribution, rowConfigs, viewerKey)
     end
 end
 
-function LayoutEngine.LayoutViewer(viewerKey)
+--------------------------------------------------------------------------------
+-- Main Refresh
+--------------------------------------------------------------------------------
+
+function LayoutEngine.RefreshViewer(viewerKey)
     if layoutRunning[viewerKey] then return end
     layoutRunning[viewerKey] = true
     
-    local viewer = GetViewerFrame(viewerKey)
+    local viewer = LayoutEngine.GetViewerFrame(viewerKey)
     if not viewer then
         layoutRunning[viewerKey] = false
         return
@@ -289,74 +323,69 @@ function LayoutEngine.LayoutViewer(viewerKey)
     
     local settings = module:GetViewerSettings(viewerKey)
     if not settings or settings.enabled == false then
-        local viewer = GetViewerFrame(viewerKey)
-        if viewer then
-            viewer:Hide()
-        end
+        viewer:Hide()
         layoutRunning[viewerKey] = false
         return
     end
     
+    -- Buff viewer special case: respect Blizzard's visibility
     if viewerKey == "buff" then
         local blizzBuffViewer = _G["BuffIconCooldownViewer"]
         if blizzBuffViewer and not blizzBuffViewer:IsShown() then
-            local viewer = GetViewerFrame(viewerKey)
-            if viewer then
-                viewer:Hide()
-            end
+            viewer:Hide()
             layoutRunning[viewerKey] = false
             return
         end
     end
     
-    local viewer = GetViewerFrame(viewerKey)
-    if viewer then
-        viewer:Show()
-    end
+    viewer:Show()
     
-    local activeRows = GetActiveRows(settings)
-    if #activeRows == 0 then
+    local rows = GetActiveRows(settings)
+    if #rows == 0 then
         layoutRunning[viewerKey] = false
         return
     end
     
-    local allEntries = module.EntrySystem.GetMergedEntriesForViewer(viewerKey)
-    local entriesToLayout = FilterEntries(allEntries, viewerKey, settings)
-    
-    if #entriesToLayout == 0 then
+    -- Get items from registry
+    local items = module.ItemRegistry.GetItemsForViewer(viewerKey)
+    if not items or #items == 0 then
         layoutRunning[viewerKey] = false
         return
     end
     
-    local rowDistribution = CalculateRows(entriesToLayout, activeRows, viewerKey)
-    ApplyLayout(viewer, rowDistribution, activeRows, viewerKey)
+    -- Assign items to rows
+    local rowAssignments, visibleItems = AssignItemsToRows(items, rows, viewerKey)
     
-    if module.Styler then
-        module.Styler.ApplyViewerStyling(viewer, rowDistribution, activeRows, viewerKey)
+    -- Apply layout
+    ApplyLayout(viewer, rowAssignments, rows, viewerKey)
+    
+    -- Hide items that weren't assigned
+    local assignedItems = {}
+    for _, entry in ipairs(visibleItems) do
+        assignedItems[entry.item] = true
     end
     
-    if module.Keybinds then
-        module.Keybinds.UpdateViewer(viewerKey, entriesToLayout)
-    end
-    
-    if module.Anchoring then
-        module.Anchoring.ApplyAnchorsAfterLayout(viewerKey)
+    for _, item in ipairs(items) do
+        if item.frame and not assignedItems[item] then
+            item.frame:Hide()
+            item.frame:ClearAllPoints()
+        end
     end
     
     layoutRunning[viewerKey] = false
+    
+    -- Debug logging
+    if module:GetSetting("general.debug", false) then
+        local parts = {}
+        for r = 1, #rows do
+            parts[r] = r .. "(" .. #(rowAssignments[r] or {}) .. ")"
+        end
+        module:LogInfo("Layout " .. viewerKey .. " rows: " .. table.concat(parts, " "))
+    end
 end
 
-function LayoutEngine.Initialize()
-    layoutRunning = {}
-    layoutThrottle = {}
-    module:LogInfo("LayoutEngine initialized")
-end
-
-LayoutEngine.GetViewerFrame = GetViewerFrame
-LayoutEngine.GetActiveRows = GetActiveRows
-LayoutEngine.GetCapacity = GetCapacity
-LayoutEngine.CalculateRowDimensions = CalculateRowDimensions
-LayoutEngine.FilterEntries = FilterEntries
-LayoutEngine.CalculateRows = CalculateRows
+--------------------------------------------------------------------------------
+-- Export
+--------------------------------------------------------------------------------
 
 module.LayoutEngine = LayoutEngine

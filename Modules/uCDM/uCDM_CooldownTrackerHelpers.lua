@@ -55,10 +55,25 @@ local function CreateCooldownDuration(startTime, duration)
 
     local isOnCooldown = 0
     if SetupCooldownCurves() then
-        isOnCooldown = durationObj:EvaluateRemainingPercent(CooldownCurves.Binary)
+        local ok, val = pcall(durationObj.EvaluateRemainingPercent, durationObj, CooldownCurves.Binary)
+        if ok and type(val) == "number" then
+            local okCmp = pcall(function() return val > 0 end)
+            if okCmp then
+                isOnCooldown = val
+            end
+        end
     end
 
     return durationObj, isOnCooldown
+end
+
+local function EvaluateRemainingPercentSafe(durationObj)
+    if not durationObj or not SetupCooldownCurves() then return 0 end
+    local ok, val = pcall(durationObj.EvaluateRemainingPercent, durationObj, CooldownCurves.Binary)
+    if not ok or type(val) ~= "number" then return 0 end
+    local okCmp = pcall(function() return val > 0 end)
+    if not okCmp then return 0 end
+    return val
 end
 
 local function GetStacksAndRemainingBuffTime(auraData)
@@ -188,9 +203,10 @@ end
 local function GetSpellUsability(spellID)
     if not spellID then return true, false end
 
-    local usable, noMana = C_Spell.IsSpellUsable(spellID)
+    local ok, usable, noMana = pcall(C_Spell.IsSpellUsable, spellID)
+    if not ok or usable == nil then return true, false end
     if not usable then
-        return false, noMana
+        return false, noMana and true or false
     end
 
     local spellName = GetSpellInfo(spellID)
@@ -211,6 +227,7 @@ local Helpers = {
     SetupCooldownCurves = SetupCooldownCurves,
     GetHasCharges = GetHasCharges,
     CreateCooldownDuration = CreateCooldownDuration,
+    EvaluateRemainingPercentSafe = EvaluateRemainingPercentSafe,
     GetStacksAndRemainingBuffTime = GetStacksAndRemainingBuffTime,
     GetSpellInfo = GetSpellInfo,
     GetWeaponEnchantBuff = GetWeaponEnchantBuff,

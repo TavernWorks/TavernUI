@@ -35,12 +35,6 @@ ignore:
   - libs/*/test
   - Modules/ExampleModule
 
-move-folders:
-  TavernUI/Modules/ExampleModule: TavernUI_ExampleModule
-  TavernUI/Modules/Options: TavernUI_Options
-  TavernUI/Modules/uCDM: TavernUI_uCDM
-  TavernUI/Modules/ExtendedAnchorFrames: TavernUI_ExtendedAnchorFrames
-
 manual-changelog: CHANGELOG.txt
 
 tools-used:

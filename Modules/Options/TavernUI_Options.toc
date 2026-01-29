@@ -2,6 +2,5 @@
 ## Title: TavernUI - Options
 ## Notes: Options configuration module for TavernUI
 ## Dependencies: TavernUI
-## SavedVariables: TavernUIConfig
 
 Options.lua

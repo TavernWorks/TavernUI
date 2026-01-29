@@ -5,10 +5,39 @@ if not module then return end
 
 local Styler = {}
 
+local CONSTANTS = {
+    MAX_MASK_TEXTURES = 10,
+    TEXTURE_BASE_CROP_PIXELS = 4,
+    TEXTURE_SOURCE_SIZE = 64,
+}
+
 local pendingStyling = {}
 local setupDone = {}
 
 local FONT_PATH = "Fonts\\FRIZQT__.TTF"
+
+function Styler.RefreshViewer(viewerKey)
+    local settings = module:GetViewerSettings(viewerKey)
+    if not settings then return end
+    
+    local activeRows = module.LayoutEngine.GetActiveRows(settings)
+
+    if #activeRows == 0 then return end
+    
+    local viewer = module.LayoutEngine.GetViewerFrame(viewerKey)
+    if not viewer then return end
+    
+    local allEntries = module.EntrySystem.GetMergedEntriesForViewer(viewerKey)
+    if not allEntries then
+        module:LogError("Styler.RefreshViewer: Failed to get entries for viewer:", viewerKey)
+        return
+    end
+
+    -- Use LayoutEngine's row assignment logic to ensure we style exactly what is laid out
+    local rowAssignments, usedEntries = module.LayoutEngine.BuildRowAssignments(allEntries, activeRows, settings, viewerKey)
+
+    Styler.ApplyViewerStyling(viewer, rowAssignments or {}, activeRows, viewerKey, true)
+end
 
 function Styler.Initialize()
     pendingStyling = {}
@@ -23,7 +52,7 @@ function Styler.RemoveMaskTextures(frame)
     local textures = {frame.Icon, frame.icon}
     for _, tex in ipairs(textures) do
         if tex and tex.GetMaskTexture and tex.RemoveMaskTexture then
-            for i = 1, 10 do
+            for i = 1, CONSTANTS.MAX_MASK_TEXTURES do
                 local mask = tex:GetMaskTexture(i)
                 if mask then
                     tex:RemoveMaskTexture(mask)
@@ -66,8 +95,11 @@ end
 function Styler.SetupIconOnce(frame)
     if not frame or setupDone[frame] then return end
     setupDone[frame] = true
-    
-    Styler.RemoveMaskTextures(frame)
+
+    local name = frame.GetName and frame:GetName()
+    if not (name and name:find("^uCDMCustomFrame_")) then
+        Styler.RemoveMaskTextures(frame)
+    end
     Styler.StripBlizzardOverlay(frame)
     
     if frame.DebuffBorder then Styler.PreventAtlasBorder(frame.DebuffBorder) end
@@ -99,15 +131,39 @@ function Styler.SetupIconOnce(frame)
         if tex then
             tex:ClearAllPoints()
             tex:SetAllPoints(frame)
+            if tex.SetSnapToPixelGrid then
+                tex:SetSnapToPixelGrid(false)
+            end
+            if tex.SetBlendMode then
+                tex:SetBlendMode("BLEND")
+            end
         end
     end
     
     local cooldown = frame.Cooldown or frame.cooldown
     if cooldown then
-        cooldown:ClearAllPoints()
-        cooldown:SetAllPoints(frame)
-        cooldown:SetSwipeTexture("Interface\\Buttons\\WHITE8X8")
-        cooldown:SetSwipeColor(0, 0, 0, 0.8)
+        local name = frame.GetName and frame:GetName()
+        if name and name:find("^uCDMCustomFrame_") then
+            cooldown:ClearAllPoints()
+            cooldown:SetAllPoints(frame)
+            cooldown:SetSwipeTexture("Interface\\Buttons\\WHITE8X8")
+            cooldown:SetSwipeColor(0, 0, 0, 0.8)
+        else
+            cooldown:SetParent(UIParent)
+            cooldown:Hide()
+            local ours = CreateFrame("Cooldown", nil, frame)
+            ours:SetAllPoints(frame)
+            ours:SetDrawEdge(false)
+            ours:SetDrawBling(false)
+            ours:SetDrawSwipe(true)
+            ours:SetSwipeTexture("Interface\\Buttons\\WHITE8X8")
+            ours:SetSwipeColor(0, 0, 0, 0.8)
+            ours:SetHideCountdownNumbers(false)
+            frame.Cooldown = ours
+            if frame.cooldown and frame.cooldown == cooldown then
+                frame.cooldown = ours
+            end
+        end
     end
 end
 
@@ -116,7 +172,17 @@ function Styler.ApplyTexCoord(frame)
     
     local z = frame._ucdmZoom or 0
     local aspectRatio = frame._ucdmAspectRatio or 1.0
-    local baseCrop = 0.08
+    
+    local iconSize = frame._ucdmIconSize
+    if not iconSize then
+        local width = frame:GetWidth()
+        local height = frame:GetHeight()
+        iconSize = math.max(width or CONSTANTS.TEXTURE_SOURCE_SIZE, height or CONSTANTS.TEXTURE_SOURCE_SIZE)
+    end
+    
+    local cropPixels = CONSTANTS.TEXTURE_BASE_CROP_PIXELS
+    local sourceSize = CONSTANTS.TEXTURE_SOURCE_SIZE
+    local baseCrop = (cropPixels * iconSize) / (sourceSize * sourceSize)
     
     local left = baseCrop + z
     local right = 1 - baseCrop - z
@@ -167,21 +233,21 @@ end
 function Styler.ApplyIconStyleImmediate(frame, config)
     if not frame then return end
     
-    local size = config.iconSize or config.size or 40
+    local size = config.iconSize or config.size
+    if not size then
+        local width = frame:GetWidth()
+        local height = frame:GetHeight()
+        size = math.max(width or 40, height or 40)
+    end
+    
     local aspectRatio = config.aspectRatioCrop or 1.0
     local zoom = config.zoom or 0
     local borderSize = config.iconBorderSize or 0
     local borderColor = config.iconBorderColor or {r = 0, g = 0, b = 0, a = 1}
     
-    local width = size
-    local height = size / aspectRatio
-    
-    pcall(function()
-        frame:SetSize(width, height)
-    end)
-    
     frame._ucdmZoom = zoom
     frame._ucdmAspectRatio = aspectRatio
+    frame._ucdmIconSize = size
     
     Styler.ApplyTexCoord(frame)
     Styler.ApplyBorder(frame, borderSize, borderColor)
@@ -191,6 +257,12 @@ function Styler.ApplyIconStyleImmediate(frame, config)
         if tex then
             tex:ClearAllPoints()
             tex:SetAllPoints(frame)
+            if tex.SetSnapToPixelGrid then
+                tex:SetSnapToPixelGrid(false)
+            end
+            if tex.SetBlendMode then
+                tex:SetBlendMode("BLEND")
+            end
         end
     end
     
@@ -235,12 +307,18 @@ function Styler.ProcessPendingStyling()
     
     for frame, data in pairs(pendingStyling) do
         if frame and frame:IsShown() then
-            local ok = pcall(function()
-                Styler.SetupIconOnce(frame)
-                Styler.ApplyIconStyleImmediate(frame, data.config)
-            end)
-            if ok then
-                frame._ucdmStylingPending = nil
+            if not data or not data.config then
+                module:LogError("Styler.ProcessPendingStyling: Invalid data for frame")
+            else
+                local success, err = pcall(function()
+                    Styler.SetupIconOnce(frame)
+                    Styler.ApplyIconStyleImmediate(frame, data.config)
+                end)
+                if not success then
+                    module:LogError("Styler.ProcessPendingStyling: Error applying styling:", err)
+                else
+                    frame._ucdmStylingPending = nil
+                end
             end
         end
         pendingStyling[frame] = nil
@@ -249,10 +327,13 @@ end
 
 local function SetFontStringPoint(fs, point, relativeTo, relativePoint, offsetX, offsetY)
     if not fs or not fs.SetFont then return end
-    pcall(function()
-        fs:ClearAllPoints()
-        fs:SetPoint(point, relativeTo, relativePoint, offsetX, offsetY)
-    end)
+    if not fs.ClearAllPoints or not fs.SetPoint then
+        module:LogError("SetFontStringPoint: FontString missing required methods")
+        return
+    end
+    
+    fs:ClearAllPoints()
+    fs:SetPoint(point, relativeTo, relativePoint, offsetX, offsetY)
 end
 
 function Styler.ApplyTextStyle(frame, config)
@@ -274,8 +355,10 @@ function Styler.ApplyTextStyle(frame, config)
                 cooldown.text:SetFont(FONT_PATH, durationSize, "OUTLINE")
                 SetFontStringPoint(cooldown.text, durationPoint, frame, durationPoint, durationOffsetX, durationOffsetY)
             end
-            local ok, regions = pcall(function() return { cooldown:GetRegions() } end)
-            if ok and regions then
+            local success, regions = pcall(function() return { cooldown:GetRegions() } end)
+            if not success then
+                module:LogError("Styler.ApplyTextStyle: Failed to get cooldown regions:", regions)
+            elseif regions then
                 for _, region in ipairs(regions) do
                     if region and region.GetObjectType and region:GetObjectType() == "FontString" then
                         region:SetFont(FONT_PATH, durationSize, "OUTLINE")
@@ -304,20 +387,36 @@ function Styler.ApplyTextStyle(frame, config)
     end
 end
 
-function Styler.ApplyViewerStyling(viewer, rowDistribution, activeRows, viewerKey)
+function Styler.ApplyViewerStyling(viewer, rowDistribution, activeRows, viewerKey, forceImmediate)
     if not viewer or not rowDistribution or not activeRows then return end
     
-    local force = module:IsInInitialPhase()
+    local force = forceImmediate or module:IsInInitialPhase()
     
-    for rowNum, entriesInRow in pairs(rowDistribution) do
-        local rowConfig = activeRows[rowNum]
-        if rowConfig then
+    for rowNum, rowConfig in ipairs(activeRows) do
+        local entriesInRow = rowDistribution[rowNum]
+        if entriesInRow then
             for _, entry in ipairs(entriesInRow) do
                 if entry.frame then
+                    if module:GetSetting("general.debug", false) then
+                        local frame = entry.frame
+                        local label = entry.id and tostring(entry.id) or (frame.GetName and frame:GetName()) or "?"
+                        local size = rowConfig.iconSize or rowConfig.size or 0
+                        local pad = rowConfig.padding or 0
+                        module:LogInfo(string.format("Style %s row %d id=%s size=%s padding=%d", viewerKey, rowNum, tostring(label), tostring(size), pad))
+                    end
                     Styler.ApplyIconStyle(entry.frame, rowConfig, force)
                     Styler.ApplyTextStyle(entry.frame, rowConfig)
                 end
             end
+        end
+    end
+    
+    for rowNum, rowConfig in ipairs(activeRows) do
+        local borderKey = "__ucdmRowBorder" .. rowNum
+        local borderTexture = viewer[borderKey]
+        if borderTexture then
+            local color = rowConfig.rowBorderColor or {r = 0, g = 0, b = 0, a = 1}
+            borderTexture:SetColorTexture(color.r, color.g, color.b, color.a)
         end
     end
 end

@@ -2,6 +2,5 @@
 ## Title: TavernUI - ExtendedAnchorFrames
 ## Notes: Registers extended frames (Action Bars, etc.) as anchor targets for TavernUI
 ## Dependencies: TavernUI
-## SavedVariables: TavernUIConfig
 
 ExtendedAnchorFrames.lua

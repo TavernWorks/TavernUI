@@ -25,9 +25,14 @@ function module:OnInitialize()
 end
 
 function module:OnEnable()
-    -- Access settings via self:GetDB() - always returns fresh reference
-    local db = self:GetDB()
-    self:Debug("ExampleModule enabled, setting1 =", tostring(db.setting1))
+    -- Access settings via self:GetSetting() - uses new config system
+    local setting1 = self:GetSetting("setting1", true)
+    self:Debug("ExampleModule enabled, setting1 =", tostring(setting1))
+    
+    -- Example: Watch for setting changes
+    -- self:WatchSetting("setting1", function(newValue, oldValue)
+    --     self:Debug("setting1 changed from", oldValue, "to", newValue)
+    -- end)
     
     -- Example: register for game events here
     -- self:RegisterEvent("PLAYER_ENTERING_WORLD")
@@ -40,11 +45,13 @@ end
 
 function module:OnProfileChanged()
     -- Profile changed - refresh any cached state
+    -- Note: Config system automatically clears callbacks on profile change
     self:Debug("Profile changed, refreshing ExampleModule state")
     
     if self:IsEnabled() then
         -- Refresh your module's state with new profile data
-        local db = self:GetDB()
+        -- Use GetSetting to access new profile values
+        local setting1 = self:GetSetting("setting1", true)
         -- Update frames, settings, etc. with new values
     end
 end
@@ -67,10 +74,14 @@ function module:RegisterOptions()
                 name = "Setting 1",
                 desc = "Toggle this example setting",
                 order = 10,
-                get = function() return self:GetDB().setting1 end,
+                get = function() return self:GetSetting("setting1", true) end,
                 set = function(_, value)
-                    TavernUI.db.profile.ExampleModule.setting1 = value
-                    self:Debug("setting1 changed to", tostring(value))
+                    self:SetSetting("setting1", value, {
+                        callback = function()
+                            self:Debug("setting1 changed to", tostring(value))
+                            -- Add any refresh logic here
+                        end
+                    })
                 end,
             },
             setting2 = {
@@ -81,10 +92,17 @@ function module:RegisterOptions()
                 min = 0,
                 max = 100,
                 step = 1,
-                get = function() return self:GetDB().setting2 end,
+                get = function() return self:GetSetting("setting2", 50) end,
                 set = function(_, value)
-                    TavernUI.db.profile.ExampleModule.setting2 = value
-                    self:Debug("setting2 changed to", value)
+                    self:SetSetting("setting2", value, {
+                        type = "number",
+                        min = 0,
+                        max = 100,
+                        callback = function()
+                            self:Debug("setting2 changed to", value)
+                            -- Add any refresh logic here
+                        end
+                    })
                 end,
             },
             someText = {
@@ -93,9 +111,14 @@ function module:RegisterOptions()
                 desc = "A text setting",
                 order = 30,
                 width = "full",
-                get = function() return self:GetDB().someText end,
+                get = function() return self:GetSetting("someText", "default value") end,
                 set = function(_, value)
-                    TavernUI.db.profile.ExampleModule.someText = value
+                    self:SetSetting("someText", value, {
+                        type = "string",
+                        callback = function()
+                            -- Add any refresh logic here
+                        end
+                    })
                 end,
             },
         },

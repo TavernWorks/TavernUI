@@ -10,12 +10,16 @@ if not Anchor then
     return
 end
 
+--[[
+    Anchoring - Viewer positioning via LibAnchorRegistry
+    
+    Handles anchoring viewers to other UI elements and respects Edit Mode.
+]]
+
 local Anchoring = {}
 
-local VIEWER_NAMES = {
-    essential = "EssentialCooldownViewer",
-    utility = "UtilityCooldownViewer",
-    buff = "BuffIconCooldownViewer",
+local CONSTANTS = {
+    POSITION_CHANGE_THRESHOLD = 1,
 }
 
 local anchorHandles = {}
@@ -23,9 +27,9 @@ local anchorTimers = {}
 local editModeStartPositions = {}
 local editModeHooked = false
 
-local function GetViewerFrame(viewerKey)
-    return _G[VIEWER_NAMES[viewerKey]]
-end
+--------------------------------------------------------------------------------
+-- Helpers
+--------------------------------------------------------------------------------
 
 local function GetViewerPosition(viewer)
     if not viewer or not viewer.GetPoint then return nil end
@@ -54,7 +58,7 @@ end
 local function HasPositionChanged(viewerKey, startPos)
     if not startPos then return false end
     
-    local viewer = GetViewerFrame(viewerKey)
+    local viewer = module:GetViewerFrame(viewerKey)
     if not viewer then return false end
     
     local currentPos = GetViewerPosition(viewer)
@@ -63,29 +67,33 @@ local function HasPositionChanged(viewerKey, startPos)
     local xDiff = math.abs(currentPos.x - startPos.x)
     local yDiff = math.abs(currentPos.y - startPos.y)
     
-    if xDiff > 1 or yDiff > 1 then
+    if xDiff > CONSTANTS.POSITION_CHANGE_THRESHOLD or yDiff > CONSTANTS.POSITION_CHANGE_THRESHOLD then
         return true
     end
     
-    if currentPos.point ~= startPos.point then
-        return true
-    end
-    
-    if currentPos.relativePoint ~= startPos.relativePoint then
-        return true
-    end
-    
-    if currentPos.relativeToName ~= startPos.relativeToName then
-        return true
-    end
-    
-    return false
+    return currentPos.point ~= startPos.point
+        or currentPos.relativePoint ~= startPos.relativePoint
+        or currentPos.relativeToName ~= startPos.relativeToName
 end
+
+local function ShouldApplyAnchor(viewerKey)
+    local settings = module:GetViewerSettings(viewerKey)
+    if not settings or not settings.anchorConfig then return false end
+    
+    local target = settings.anchorConfig.target
+    return target and target ~= "" and target ~= "UIParent"
+end
+
+--------------------------------------------------------------------------------
+-- Anchor Management
+--------------------------------------------------------------------------------
 
 local function ReleaseAnchor(viewerKey)
     local handle = anchorHandles[viewerKey]
     if handle then
-        pcall(function() handle:Release() end)
+        if handle.Release then
+            handle:Release()
+        end
         anchorHandles[viewerKey] = nil
     end
 end
@@ -97,15 +105,8 @@ local function ClearAnchorConfig(viewerKey)
     end
 end
 
-local function ShouldApplyAnchor(viewerKey)
-    local settings = module:GetViewerSettings(viewerKey)
-    return settings and settings.anchorConfig and settings.anchorConfig.target and settings.anchorConfig.target ~= "" and settings.anchorConfig.target ~= "UIParent"
-end
-
 local function ApplyAnchor(viewerKey)
-    if not Anchor then return end
-    
-    local viewer = GetViewerFrame(viewerKey)
+    local viewer = module:GetViewerFrame(viewerKey)
     if not viewer then return end
     
     if not ShouldApplyAnchor(viewerKey) then
@@ -115,13 +116,8 @@ local function ApplyAnchor(viewerKey)
     
     local settings = module:GetViewerSettings(viewerKey)
     local config = settings.anchorConfig
-    if not config or not config.target then
-        ReleaseAnchor(viewerKey)
-        return
-    end
     
     Anchoring.RegisterAnchors()
-    
     ReleaseAnchor(viewerKey)
     
     local handle = Anchor:AnchorTo(viewer, {
@@ -135,21 +131,40 @@ local function ApplyAnchor(viewerKey)
     
     if handle then
         anchorHandles[viewerKey] = handle
+        module:LogInfo("Applied anchor for " .. viewerKey)
+    else
+        module:LogError("Failed to create anchor for " .. viewerKey)
     end
 end
 
-local function ApplyAnchorWithTimer(viewerKey)
+local function ApplyAnchorWithSizeHook(viewerKey)
     local timer = anchorTimers[viewerKey]
     if timer then timer:Cancel() end
     
-    anchorTimers[viewerKey] = C_Timer.NewTimer(0.05, function()
-        anchorTimers[viewerKey] = nil
-        ApplyAnchor(viewerKey)
-    end)
+    local viewer = module:GetViewerFrame(viewerKey)
+    if not viewer then return end
+    
+    -- Hook OnSizeChanged to re-apply anchor
+    if not viewer.__ucdmAnchorSizeHooked then
+        viewer:HookScript("OnSizeChanged", function()
+            if anchorTimers[viewerKey] then
+                anchorTimers[viewerKey]:Cancel()
+                anchorTimers[viewerKey] = nil
+            end
+            ApplyAnchor(viewerKey)
+        end)
+        viewer.__ucdmAnchorSizeHooked = true
+    end
+    
+    ApplyAnchor(viewerKey)
 end
 
+--------------------------------------------------------------------------------
+-- Registration
+--------------------------------------------------------------------------------
+
 function Anchoring.RegisterViewer(viewerKey, viewerFrame)
-    if not Anchor then return end
+    if not viewerFrame then return end
     
     local displayNames = {
         essential = "Essential Cooldowns",
@@ -157,34 +172,33 @@ function Anchoring.RegisterViewer(viewerKey, viewerFrame)
         buff = "Buff Cooldowns",
     }
     
-    if viewerFrame then
-        Anchor:Register("TavernUI.uCDM." .. viewerKey, viewerFrame, {
-            displayName = displayNames[viewerKey] or viewerKey,
-            category = "ucdm",
-        })
-    end
+    Anchor:Register("TavernUI.uCDM." .. viewerKey, viewerFrame, {
+        displayName = displayNames[viewerKey] or viewerKey,
+        category = "ucdm",
+    })
 end
 
 function Anchoring.RegisterAnchors()
-    if not Anchor then return end
-    
-    for viewerKey, viewerName in pairs(VIEWER_NAMES) do
-        local viewer = GetViewerFrame(viewerKey)
+    for viewerKey, viewerName in pairs(module.CONSTANTS.VIEWER_NAMES) do
+        local viewer = _G[viewerName]
         if viewer then
             Anchoring.RegisterViewer(viewerKey, viewer)
         end
     end
-    
 end
+
+--------------------------------------------------------------------------------
+-- Edit Mode Integration
+--------------------------------------------------------------------------------
 
 local function OnEditModeEnter()
     if not module:IsEnabled() then return end
     
     editModeStartPositions = {}
     
-    for _, viewerKey in ipairs({"essential", "utility", "buff"}) do
+    for viewerKey in pairs(module.CONSTANTS.VIEWER_NAMES) do
         if ShouldApplyAnchor(viewerKey) then
-            local viewer = GetViewerFrame(viewerKey)
+            local viewer = module:GetViewerFrame(viewerKey)
             if viewer then
                 editModeStartPositions[viewerKey] = GetViewerPosition(viewer)
             end
@@ -195,17 +209,16 @@ end
 local function OnEditModeSave()
     if not module:IsEnabled() then return end
     
-    for _, viewerKey in ipairs({"essential", "utility", "buff"}) do
+    for viewerKey in pairs(module.CONSTANTS.VIEWER_NAMES) do
         local startPos = editModeStartPositions[viewerKey]
         
         if startPos then
             if HasPositionChanged(viewerKey, startPos) then
                 ReleaseAnchor(viewerKey)
                 ClearAnchorConfig(viewerKey)
-                
                 module:LogInfo(viewerKey .. " anchoring disabled (frame moved in Edit Mode)")
             else
-                ApplyAnchorWithTimer(viewerKey)
+                ApplyAnchorWithSizeHook(viewerKey)
             end
         end
     end
@@ -218,55 +231,54 @@ local function HookEditMode()
     
     local EditModeManagerFrame = _G.EditModeManagerFrame
     if EditModeManagerFrame then
-        EditModeManagerFrame:HookScript("OnShow", function()
-            C_Timer.After(0.1, OnEditModeEnter)
-        end)
-        
-        EditModeManagerFrame:HookScript("OnHide", function()
-            C_Timer.After(0.1, OnEditModeSave)
-        end)
+        EditModeManagerFrame:HookScript("OnShow", OnEditModeEnter)
+        EditModeManagerFrame:HookScript("OnHide", OnEditModeSave)
     end
     
     local eventFrame = CreateFrame("Frame")
     eventFrame:RegisterEvent("EDIT_MODE_LAYOUTS_UPDATED")
     eventFrame:SetScript("OnEvent", function(self, event)
         if event == "EDIT_MODE_LAYOUTS_UPDATED" then
-            C_Timer.After(0.1, OnEditModeSave)
+            OnEditModeSave()
         end
     end)
     
     local C_EditMode = _G.C_EditMode
     if C_EditMode and C_EditMode.SaveLayouts then
-        hooksecurefunc(C_EditMode, "SaveLayouts", function()
-            C_Timer.After(0.1, OnEditModeSave)
-        end)
+        hooksecurefunc(C_EditMode, "SaveLayouts", OnEditModeSave)
     end
     
     editModeHooked = true
 end
 
-function Anchoring.InitializeEditMode()
-    if not module:IsEnabled() then return end
-    HookEditMode()
-end
+--------------------------------------------------------------------------------
+-- Public API
+--------------------------------------------------------------------------------
 
-function Anchoring.ApplyAnchorsAfterLayout(viewerKey)
-    if InCombatLockdown() then return end
+function Anchoring.RefreshViewer(viewerKey)
+    if not module:IsEnabled() then return end
     
+    -- Skip if Edit Mode is active
     local EditModeManagerFrame = _G.EditModeManagerFrame
     if EditModeManagerFrame and EditModeManagerFrame:IsShown() then
         return
     end
     
     if ShouldApplyAnchor(viewerKey) then
-        ApplyAnchorWithTimer(viewerKey)
+        ApplyAnchorWithSizeHook(viewerKey)
+    else
+        ReleaseAnchor(viewerKey)
     end
 end
 
 function Anchoring.Initialize()
     Anchoring.RegisterAnchors()
-    Anchoring.InitializeEditMode()
+    HookEditMode()
     module:LogInfo("Anchoring initialized")
 end
+
+--------------------------------------------------------------------------------
+-- Export
+--------------------------------------------------------------------------------
 
 module.Anchoring = Anchoring
