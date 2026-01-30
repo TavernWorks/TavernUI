@@ -66,6 +66,16 @@ function LayoutEngine.Initialize()
             end
         end)
     end
+
+    module:WatchSetting("general.scaleFactor", function()
+        if module:IsEnabled() then
+            for _, key in ipairs(module.CONSTANTS.VIEWER_KEYS) do
+                if key ~= "custom" then
+                    LayoutEngine.RefreshViewer(key)
+                end
+            end
+        end
+    end)
 end
 
 --------------------------------------------------------------------------------
@@ -366,7 +376,8 @@ function LayoutEngine.RefreshViewer(viewerKey)
     end
     
     viewer:Show()
-    
+    viewer:SetScale(module:GetSetting("general.scaleFactor", 1))
+
     local rows = GetActiveRows(settings)
     if #rows == 0 then
         layoutRunning[viewerKey] = false

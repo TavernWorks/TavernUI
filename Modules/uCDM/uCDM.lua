@@ -33,6 +33,7 @@ local defaults = {
     enabled = true,
     general = {
         debug = false,
+        scaleFactor = 1,
         updateRates = {
             normal = 0.1,
             combat = 0.3,

@@ -962,16 +962,45 @@ end
 
 local function BuildGeneralOptions()
     return {
+        scaleHeader = {
+            type = "header",
+            name = "Display",
+            order = 0,
+        },
+        scaleFactor = {
+            type = "range",
+            name = "Scale",
+            desc = "Overall scale factor for all cooldown viewers",
+            order = 1,
+            min = 0.5,
+            max = 2.0,
+            step = 0.05,
+            get = function()
+                return module:GetSetting("general.scaleFactor", 1)
+            end,
+            set = function(_, value)
+                module:SetSetting("general.scaleFactor", value, {
+                    type = "number",
+                    min = 0.5,
+                    max = 2.0,
+                })
+                for _, viewerKey in ipairs(module.CONSTANTS.VIEWER_KEYS) do
+                    if viewerKey ~= "custom" and module.LayoutEngine then
+                        module.LayoutEngine.RefreshViewer(viewerKey)
+                    end
+                end
+            end,
+        },
         debugHeader = {
             type = "header",
             name = "Debug",
-            order = 1,
+            order = 2,
         },
         debug = {
             type = "toggle",
             name = "Debug Mode",
             desc = "Enable debug messages",
-            order = 2,
+            order = 3,
             get = function()
                 return module:GetSetting("general.debug", false) == true
             end,
