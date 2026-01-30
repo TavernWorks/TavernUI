@@ -243,57 +243,91 @@ local function ParseMacroForSpells(macroIndex)
     return spellIDs, spellNames
 end
 
+local function GetActionSlot(button)
+    local buttonName = button and button.GetName and button:GetName()
+    local action
+
+    if buttonName and buttonName:match("^BT4Button") then
+        action = button._state_action
+        if (not action or action == 0) and button.GetAction then
+            local ok, aType, actionSlot = pcall(function()
+                local t, s = button:GetAction()
+                return t, s
+            end)
+            if ok and aType == "action" and type(actionSlot) == "number" then
+                action = actionSlot
+            end
+        end
+    else
+        if type(button.action) == "number" then
+            action = button.action
+        end
+        if (not action or action == 0) and button.GetAction then
+            local ok, r1, r2 = pcall(function()
+                local a, b = button:GetAction()
+                return a, b
+            end)
+            if ok then
+                if type(r2) == "number" and (r1 == "action" or r1 == nil) then
+                    action = r2
+                elseif type(r1) == "number" then
+                    action = r1
+                end
+            end
+        end
+    end
+
+    if not action or action == 0 then return nil end
+    return action
+end
+
+local function ProcessActionButton(button)
+    local action = GetActionSlot(button)
+    if not action then return end
+
+    local ok, actionType, id = pcall(GetActionInfo, action)
+    if not ok or not actionType then return end
+
+    local keybind = GetKeybindFromActionButton(button)
+    if keybind then
+        if actionType == "spell" and id then
+            if not spellToKeybind[id] then
+                spellToKeybind[id] = keybind
+            end
+            local spellInfo = C_Spell.GetSpellInfo(id)
+            if spellInfo and spellInfo.name and not spellNameToKeybind[spellInfo.name:lower()] then
+                spellNameToKeybind[spellInfo.name:lower()] = keybind
+            end
+        elseif actionType == "item" and id then
+            if not spellToKeybind[id] then
+                spellToKeybind[id] = keybind
+            end
+        elseif actionType == "macro" and id then
+            local spellIDs, spellNames = ParseMacroForSpells(id)
+            for spellID in pairs(spellIDs) do
+                if not spellToKeybind[spellID] then
+                    spellToKeybind[spellID] = keybind
+                end
+            end
+            for spellName in pairs(spellNames) do
+                if not spellNameToKeybind[spellName] then
+                    spellNameToKeybind[spellName] = keybind
+                end
+            end
+        end
+    end
+end
+
 local function RebuildCache(forceRebuild)
     if not forceRebuild and next(spellToKeybind) then return end
-    
+
     BuildActionButtonCache()
-    
+
     spellToKeybind = {}
     spellNameToKeybind = {}
-    
+
     for _, button in ipairs(cachedActionButtons) do
-        local actionType, id = nil, nil
-        
-        if button.GetAction then
-            local ok, result = pcall(function() return button:GetAction() end)
-            if ok and result then
-                local aType, aId = GetActionInfo(result)
-                actionType, id = aType, aId
-            end
-        elseif button.action then
-            local aType, aId = GetActionInfo(button.action)
-            actionType, id = aType, aId
-        end
-        
-        local keybind = GetKeybindFromActionButton(button)
-        if keybind then
-            if actionType == "spell" and id then
-                if not spellToKeybind[id] then
-                    spellToKeybind[id] = keybind
-                end
-                local spellInfo = C_Spell.GetSpellInfo(id)
-                if spellInfo and spellInfo.name and not spellNameToKeybind[spellInfo.name:lower()] then
-                    spellNameToKeybind[spellInfo.name:lower()] = keybind
-                end
-            elseif actionType == "item" and id then
-                if not spellToKeybind[id] then
-                    spellToKeybind[id] = keybind
-                end
-            elseif actionType == "macro" and id then
-                -- Parse macro for spells
-                local spellIDs, spellNames = ParseMacroForSpells(id)
-                for spellID in pairs(spellIDs) do
-                    if not spellToKeybind[spellID] then
-                        spellToKeybind[spellID] = keybind
-                    end
-                end
-                for spellName in pairs(spellNames) do
-                    if not spellNameToKeybind[spellName] then
-                        spellNameToKeybind[spellName] = keybind
-                    end
-                end
-            end
-        end
+        pcall(ProcessActionButton, button)
     end
 end
 
@@ -303,39 +337,39 @@ end
 
 function Keybinds.GetSpellKeybind(spellID)
     if not spellID then return nil end
-    
+
     RebuildCache(false)
-    
-    -- Direct lookup
-    if spellToKeybind[spellID] then
-        return spellToKeybind[spellID]
-    end
-    
-    -- Name lookup
-    local spellInfo = C_Spell.GetSpellInfo(spellID)
-    if spellInfo and spellInfo.name then
-        local nameLower = spellInfo.name:lower()
-        if spellNameToKeybind[nameLower] then
-            return spellNameToKeybind[nameLower]
+
+    local ok, result = pcall(function()
+        if spellToKeybind[spellID] then
+            return spellToKeybind[spellID]
         end
-    end
-    
-    -- Try override spell
-    if C_Spell.GetOverrideSpell then
-        local overrideID = C_Spell.GetOverrideSpell(spellID)
-        if overrideID and overrideID ~= spellID then
-            return Keybinds.GetSpellKeybind(overrideID)
+        local spellInfo = C_Spell.GetSpellInfo(spellID)
+        if spellInfo and spellInfo.name then
+            local nameLower = spellInfo.name:lower()
+            if spellNameToKeybind[nameLower] then
+                return spellNameToKeybind[nameLower]
+            end
         end
-    end
-    
+        if C_Spell.GetOverrideSpell then
+            local overrideID = C_Spell.GetOverrideSpell(spellID)
+            if overrideID and overrideID ~= spellID then
+                return Keybinds.GetSpellKeybind(overrideID)
+            end
+        end
+        return nil
+    end)
+    if ok then return result end
     return nil
 end
 
 function Keybinds.GetItemKeybind(itemID)
     if not itemID then return nil end
-    
+
     RebuildCache(false)
-    return spellToKeybind[itemID]
+    local ok, result = pcall(function() return spellToKeybind[itemID] end)
+    if ok then return result end
+    return nil
 end
 
 function Keybinds.GetTrinketKeybind(slotID)
@@ -375,18 +409,18 @@ function Keybinds.UpdateItem(item)
         keybind = Keybinds.GetTrinketKeybind(item.slotID)
     end
     
-    -- For blizzard frames, also try to extract IDs from the frame itself
     if not keybind and item.source == "blizzard" then
-        local spellID = frame.GetSpellID and frame:GetSpellID() or frame.spellID
-        local itemID = frame.GetItemID and frame:GetItemID() or frame.itemID
-        local slotID = frame.GetSlotID and frame:GetSlotID() or frame.slotID
-        
-        if frame.cooldownData then
-            spellID = spellID or frame.cooldownData.spellID
-            itemID = itemID or frame.cooldownData.itemID
-            slotID = slotID or frame.cooldownData.slotID
-        end
-        
+        local spellID, itemID, slotID = nil, nil, nil
+        pcall(function()
+            spellID = frame.GetSpellID and frame:GetSpellID() or frame.spellID
+            itemID = frame.GetItemID and frame:GetItemID() or frame.itemID
+            slotID = frame.GetSlotID and frame:GetSlotID() or frame.slotID
+            if frame.cooldownData then
+                spellID = spellID or frame.cooldownData.spellID
+                itemID = itemID or frame.cooldownData.itemID
+                slotID = slotID or frame.cooldownData.slotID
+            end
+        end)
         if spellID then
             keybind = Keybinds.GetSpellKeybind(spellID)
         elseif itemID then
