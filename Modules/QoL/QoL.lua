@@ -130,12 +130,12 @@ function module:ApplyScaleForResolution(width, height)
 end
 
 local defaults = {
-    autoRepair = true,
-    repairPriority = "guild_then_player",
-    autoSellJunk = true,
+    autoRepair = false,
+    repairPriority = "none",
+    autoSellJunk = false,
     alwaysAutoLoot = false,
-    speedyAutoLoot = true,
-    autoConfirmBoP = true,
+    speedyAutoLoot = false,
+    autoConfirmBoP = false,
     fpsBackup = nil,
     uiScaleMode = "manual",
     uiScale = 1.0,
@@ -160,6 +160,7 @@ function module:OnEnable()
     self:SetupBoPConfirm()
     self:ApplyLootSettings()
     self:ApplyFrameHider()
+    self:ApplyUIScale()
 end
 
 function module:OnDisable()
@@ -542,8 +543,10 @@ function module:ApplyUIScale()
         scale = self:GetSetting("uiScale", 1.0)
     end
     scale = math.max(0.4, math.min(1.15, scale))
-    pcall(C_CVar.SetCVar, "useUiScale", "1")
-    pcall(C_CVar.SetCVar, "uiScale", tostring(scale))
+    pcall(C_CVar.SetCVar, "useUiScale", "0")
+    if UIParent then
+        UIParent:SetScale(scale)
+    end
 end
 
 local REPAIR_PRIORITY_ORDER = { "none", "guild_then_player", "guild", "player" }

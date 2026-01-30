@@ -1,5 +1,10 @@
 TavernUI Changelog
 ==================
+v1.0.0-beta-6a (2026-01-30)#
+ - Fix: Evoker Essence Tracking
+ - Feature: Custom CDM slot timers
+ - Fix: QoL defaulted to Off.
+
 v1.0.0-beta-6 (2026-01-29)
  - Feature: Add Resource Bars (Health / Power / Alternative Power / Class Specific)
     - Breakpoint based Coloring

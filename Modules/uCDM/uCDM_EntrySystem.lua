@@ -9,6 +9,7 @@ local TRACKING_TYPE = {
     TRINKET = 1,
     ITEM = 2,
     SPELL = 3,
+    ACTION = 4,
 }
 
 EntrySystem.TRACKING_TYPE = TRACKING_TYPE
@@ -28,7 +29,7 @@ function EntrySystem.Initialize()
 end
 
 function EntrySystem.EncodeID(trackingType, id)
-    assert(trackingType >= TRACKING_TYPE.TRINKET and trackingType <= TRACKING_TYPE.SPELL, "Invalid tracking type")
+    assert(trackingType >= TRACKING_TYPE.TRINKET and trackingType <= TRACKING_TYPE.ACTION, "Invalid tracking type")
     assert(type(id) == "number", "ID must be a number")
     assert(id > 0, "ID must be positive")
     return trackingType * 10000000 + id

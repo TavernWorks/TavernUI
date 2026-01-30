@@ -605,4 +605,5 @@ end
 -- Export
 --------------------------------------------------------------------------------
 
+Keybinds.GetActionSlotFromButton = GetActionSlot
 module.Keybinds = Keybinds

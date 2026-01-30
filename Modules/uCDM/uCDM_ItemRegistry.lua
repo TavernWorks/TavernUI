@@ -393,7 +393,10 @@ end
 
 function ItemRegistry._isValidCustomConfig(config)
     if not config or type(config) ~= "table" then return false end
-    if config.viewer == "buff" then return false end  -- Can't add custom to buff viewer
+    if config.viewer == "buff" then return false end
+    if config.actionSlotID and type(config.actionSlotID) == "number" and config.actionSlotID >= 1 and config.actionSlotID <= 120 then
+        return true
+    end
     return config.spellID or config.itemID or config.slotID
 end
 
@@ -433,7 +436,6 @@ function ItemRegistry.CreateCustomItem(config, skipDBSave)
         index = #viewerItems + 1
     end
 
-    -- Create item
     local item = module.CooldownItem.new({
         id = id,
         source = "custom",
@@ -442,6 +444,7 @@ function ItemRegistry.CreateCustomItem(config, skipDBSave)
         spellID = config.spellID,
         itemID = config.itemID,
         slotID = config.slotID,
+        actionSlotID = config.actionSlotID,
         index = index,
         config = config.config or config,
         enabled = config.enabled ~= false,
@@ -491,6 +494,7 @@ function ItemRegistry.CreateCustomItem(config, skipDBSave)
                 spellID = item.spellID,
                 itemID = item.itemID,
                 slotID = item.slotID,
+                actionSlotID = item.actionSlotID,
                 viewer = item.viewerKey,
                 index = item.index,
                 enabled = item.enabled,

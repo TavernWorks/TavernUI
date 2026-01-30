@@ -5,6 +5,49 @@ local module = TavernUI:GetModule("uCDM", true)
 if not module then return end
 
 local RefreshOptions
+local pickingActionSlot = false
+local actionSlotPickHooksInstalled = false
+local actionSlotPickedCallback = nil
+
+local function GetActionBarButtonNames()
+    local names = {}
+    local prefixes = {
+        "ActionButton",
+        "MultiBarBottomLeftButton",
+        "MultiBarBottomRightButton",
+        "MultiBarRightButton",
+        "MultiBarLeftButton",
+    }
+    for _, prefix in ipairs(prefixes) do
+        for i = 1, 12 do
+            names[#names + 1] = prefix .. i
+        end
+    end
+    for i = 1, 120 do
+        names[#names + 1] = "BT4Button" .. i
+    end
+    return names
+end
+
+local function EnsureActionSlotPickHooks()
+    if actionSlotPickHooksInstalled then return end
+    actionSlotPickHooksInstalled = true
+    local names = GetActionBarButtonNames()
+    for _, name in ipairs(names) do
+        local btn = _G[name]
+        if btn and btn.HookScript and not btn.__ucdmPickHooked then
+            btn:HookScript("OnClick", function(clickedBtn)
+                if not pickingActionSlot or not actionSlotPickedCallback then return end
+                local Keybinds = module.Keybinds
+                local slot = Keybinds and Keybinds.GetActionSlotFromButton and Keybinds.GetActionSlotFromButton(clickedBtn)
+                if not slot or slot < 1 or slot > 120 then return end
+                pickingActionSlot = false
+                actionSlotPickedCallback(slot)
+            end)
+            btn.__ucdmPickHooked = true
+        end
+    end
+end
 
 local function RefreshViewerComponents(viewerKey, property)
     if not module:IsEnabled() then return end
@@ -1094,7 +1137,18 @@ local function BuildGeneralOptions()
     }
 end
 
+local function GetActionSlotSelectValues()
+    local values = {}
+    for slot = 1, 120 do
+        local bar = math.ceil(slot / 12)
+        local slotInBar = ((slot - 1) % 12) + 1
+        values[slot] = string.format(L["ACTION_BAR_SLOT_FORMAT"], bar, slotInBar)
+    end
+    return values
+end
+
 local function BuildCustomTabOptions()
+    local actionSlotValues = GetActionSlotSelectValues()
     return {
         addSpell = {
             type = "input",
@@ -1260,11 +1314,103 @@ local function BuildCustomTabOptions()
                 end
             end,
         },
+        addMacro = {
+            type = "select",
+            name = L["ADD_MACRO"],
+            desc = L["ADD_MACRO_DESC"],
+            order = 4,
+            values = actionSlotValues,
+            get = function() return nil end,
+            set = function(_, value)
+                local actionSlotID = value
+                if not actionSlotID or actionSlotID < 1 or actionSlotID > 120 then return end
+                local defaultViewer = module:GetSetting("defaultCustomViewer", "essential")
+                if defaultViewer == "custom" then
+                    defaultViewer = "essential"
+                end
+                local trackingType = module.CONSTANTS.TRACKING_TYPE.ACTION
+                local entryID = module:GenerateItemID(trackingType, actionSlotID)
+                local index = module:GetNextIndex(defaultViewer)
+                local config = {
+                    id = entryID,
+                    actionSlotID = actionSlotID,
+                    viewer = defaultViewer,
+                    enabled = true,
+                }
+                local entryConfig = {
+                    id = entryID,
+                    actionSlotID = actionSlotID,
+                    viewer = defaultViewer,
+                    index = index,
+                    enabled = true,
+                    config = config,
+                }
+                local customEntries = module:GetSetting("customEntries", {})
+                table.insert(customEntries, entryConfig)
+                module:SetSetting("customEntries", customEntries)
+                local entry = module.ItemRegistry.CreateCustomItem(config)
+                if entry then
+                    if module.LayoutEngine then
+                        module.LayoutEngine.RefreshViewer(defaultViewer)
+                    end
+                    RefreshOptions(true)
+                end
+            end,
+        },
+        pickMacro = {
+            type = "execute",
+            name = L["PICK_ACTION_SLOT"],
+            desc = L["PICK_ACTION_SLOT_DESC"],
+            order = 4.5,
+            func = function()
+                actionSlotPickedCallback = function(slot)
+                    local defaultViewer = module:GetSetting("defaultCustomViewer", "essential")
+                    if defaultViewer == "custom" then
+                        defaultViewer = "essential"
+                    end
+                    local trackingType = module.CONSTANTS.TRACKING_TYPE.ACTION
+                    local entryID = module:GenerateItemID(trackingType, slot)
+                    local index = module:GetNextIndex(defaultViewer)
+                    local config = {
+                        id = entryID,
+                        actionSlotID = slot,
+                        viewer = defaultViewer,
+                        enabled = true,
+                    }
+                    local entryConfig = {
+                        id = entryID,
+                        actionSlotID = slot,
+                        viewer = defaultViewer,
+                        index = index,
+                        enabled = true,
+                        config = config,
+                    }
+                    local customEntries = module:GetSetting("customEntries", {})
+                    table.insert(customEntries, entryConfig)
+                    module:SetSetting("customEntries", customEntries)
+                    local entry = module.ItemRegistry.CreateCustomItem(config)
+                    if entry then
+                        if module.LayoutEngine then
+                            module.LayoutEngine.RefreshViewer(defaultViewer)
+                        end
+                        if module and module.Print then
+                            module:Print(string.format(L["ACTION_SLOT_ADDED"], slot))
+                        end
+                    end
+                    RefreshOptions(true)
+                end
+                pickingActionSlot = true
+                EnsureActionSlotPickHooks()
+                if module and module.Print then
+                    module:Print(L["PICK_ACTION_SLOT_PROMPT"])
+                end
+            end,
+        },
         viewerAssignment = {
             type = "select",
             name = L["DEFAULT_VIEWER"],
             desc = L["DEFAULT_VIEWER_DESC"],
-            order = 4,
+            order = 5,
             values = {
                 essential = L["ESSENTIAL_VIEWER"],
                 utility = L["UTILITY_VIEWER"],
@@ -1366,6 +1512,8 @@ function module:BuildOptions()
                     end
                 elseif entryConfig.slotID then
                     entryName = entryConfig.slotID == 13 and L["TRINKET_1"] or L["TRINKET_2"]
+                elseif entryConfig.actionSlotID then
+                    entryName = string.format(L["ACTION_SLOT_N"], entryConfig.actionSlotID)
                 end
 
                 options.args[viewerKey].args["entry" .. entryIndex] = {
@@ -1555,6 +1703,8 @@ function module:BuildOptions()
             end
         elseif entryConfig.slotID then
             entryName = "Trinket " .. (entryConfig.slotID == 13 and "1" or "2")
+        elseif entryConfig.actionSlotID then
+            entryName = string.format(L["ACTION_SLOT_N"], entryConfig.actionSlotID)
         end
 
         local entryViewer = entryConfig.viewer or "essential"

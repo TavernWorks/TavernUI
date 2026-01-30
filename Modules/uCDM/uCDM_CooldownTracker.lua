@@ -52,23 +52,82 @@ function CooldownTracker.UpdateSpell(spellID)
     }
 end
 
+function CooldownTracker.UpdateActionSlot(slot)
+    if not slot or slot < 1 or slot > 120 then return nil end
+    local actionType, id = GetActionInfo(slot)
+    if actionType == "spell" and id then
+        return CooldownTracker.UpdateSpell(id)
+    elseif actionType == "item" and id then
+        return CooldownTracker.UpdateItem(id)
+    end
+    local startTime, duration, enable = GetActionCooldown(slot)
+    if not startTime or not duration or duration <= 0 then
+        return { duration = nil, isOnCooldown = 0, stackDisplay = nil }
+    end
+    local durationObj, isOnCooldown = Helpers.CreateCooldownDuration(startTime, duration)
+    return {
+        duration = durationObj,
+        isOnCooldown = isOnCooldown,
+        stackDisplay = nil,
+    }
+end
+
+function CooldownTracker.UpdateOverride(entry)
+    if not entry or not entry.frame then return nil end
+    local startTime, duration = nil, nil
+    if entry.viewerKey and entry.layoutIndex then
+        startTime, duration = module:GetSlotCooldownOverride(entry.viewerKey, entry.layoutIndex)
+    end
+    if not startTime or not duration then return nil end
+    local durationObj, isOnCooldown = Helpers.CreateCooldownDuration(startTime, duration)
+    local data = {
+        duration = durationObj,
+        isOnCooldown = isOnCooldown,
+        stackDisplay = nil,
+    }
+    local frame = entry.frame
+    local cooldown = frame.Cooldown or frame.cooldown
+    if cooldown and data.duration then
+        cooldown:SetCooldownFromDurationObject(data.duration, true)
+        cooldown:Show()
+    end
+    local icon = frame.Icon or frame.icon
+    if icon then
+        if data.isOnCooldown and data.isOnCooldown > 0 then
+            icon:SetDesaturation(data.isOnCooldown)
+            icon:SetVertexColor(1.0, 1.0, 1.0)
+        else
+            icon:SetDesaturation(0)
+            icon:SetVertexColor(1.0, 1.0, 1.0)
+        end
+    end
+    local countText = frame.Count or frame.count
+    if countText then countText:Hide() end
+    return data
+end
+
+function CooldownTracker.GetEntryData(entry)
+    if entry.spellID then
+        return CooldownTracker.UpdateSpell(entry.spellID)
+    elseif entry.itemID then
+        return CooldownTracker.UpdateItem(entry.itemID)
+    elseif entry.slotID then
+        return CooldownTracker.UpdateTrinket(entry.slotID)
+    elseif entry.actionSlotID then
+        return CooldownTracker.UpdateActionSlot(entry.actionSlotID)
+    end
+    return nil
+end
+
 function CooldownTracker.UpdateEntry(entry)
     if not entry or not entry.frame then return nil end
 
-    local data = nil
+    local data = CooldownTracker.UpdateOverride(entry)
+    if data then return data end
 
-    if entry.spellID then
-        data = CooldownTracker.UpdateSpell(entry.spellID)
-    elseif entry.itemID then
-        data = CooldownTracker.UpdateItem(entry.itemID)
-    elseif entry.slotID then
-        data = CooldownTracker.UpdateTrinket(entry.slotID)
-    else
-        return nil
-    end
-    
+    data = CooldownTracker.GetEntryData(entry)
     if not data then return nil end
-    
+
     local frame = entry.frame
     local cooldown = frame.Cooldown or frame.cooldown
     

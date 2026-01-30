@@ -24,6 +24,7 @@ local CONSTANTS = {
         TRINKET = 1,
         ITEM = 2,
         SPELL = 3,
+        ACTION = 4,
     },
 }
 
@@ -197,10 +198,6 @@ local defaults = {
 
 TavernUI:RegisterModuleDefaults("uCDM", defaults, true)
 
---------------------------------------------------------------------------------
--- Lifecycle
---------------------------------------------------------------------------------
-
 function module:OnInitialize()
     pcall(function() SetCVar("cooldownViewerEnabled", 1) end)
     self:RegisterMessage("TavernUI_ProfileChanged", "OnProfileChanged")
@@ -234,6 +231,13 @@ end
 function module:OnEnable()
     if self.__onEnableCalled then return end
     self.__onEnableCalled = true
+
+    _G.cdm = function(viewer, slot, duration)
+        local m = TavernUI:GetModule("uCDM")
+        if m and m.SetSlotCooldown then
+            m:SetSlotCooldown(viewer, tonumber(slot) or 1, tonumber(duration) or 30)
+        end
+    end
 end
 
 function module:OnDisable()
@@ -245,10 +249,6 @@ function module:OnDisable()
         self.ItemRegistry.Reset()
     end
 end
-
---------------------------------------------------------------------------------
--- Update Loop
---------------------------------------------------------------------------------
 
 function module:GetUpdateInterval()
     local rates = {
@@ -310,10 +310,6 @@ function module:Update()
         end
     end
 end
-
---------------------------------------------------------------------------------
--- Event Handlers
---------------------------------------------------------------------------------
 
 function module:OnPlayerEnteringWorld()
     if not self:IsEnabled() then return end
@@ -416,10 +412,6 @@ function module:HandleEnabledChange(newValue, oldValue)
     end
 end
 
---------------------------------------------------------------------------------
--- Refresh
---------------------------------------------------------------------------------
-
 local refreshTimers = {}
 local contentRefreshTimers = {}
 local REFRESH_DEBOUNCE_SEC = 0.15
@@ -488,10 +480,6 @@ function module:RefreshViewerContent(viewerKey)
     contentRefreshTimers[viewerKey] = C_Timer.NewTimer(REFRESH_DEBOUNCE_SEC, DoContentRefresh)
 end
 
---------------------------------------------------------------------------------
--- Utilities
---------------------------------------------------------------------------------
-
 function module:GetViewerSettings(viewerKey)
     return self:GetSetting(string.format("viewers.%s", viewerKey))
 end
@@ -517,10 +505,6 @@ function module:LogInfo(msg, ...)
     end
 end
 
---------------------------------------------------------------------------------
--- ID Generation (for Options compatibility)
---------------------------------------------------------------------------------
-
 function module:GenerateItemID(trackingType, id)
     if not trackingType or not id then
         return "custom_" .. GetTime() .. "_" .. math.random(1000, 9999)
@@ -535,4 +519,61 @@ function module:GetNextIndex(viewerKey)
         return #items + 1
     end
     return 1
+end
+
+module._slotCooldownOverrides = module._slotCooldownOverrides or {}
+
+function module:SetSlotCooldown(viewerKey, layoutIndex, durationSeconds)
+    if not viewerKey or not layoutIndex or not durationSeconds or durationSeconds <= 0 then return end
+    layoutIndex = math.floor(layoutIndex)
+    if layoutIndex < 1 then return end
+    if not self._slotCooldownOverrides[viewerKey] then
+        self._slotCooldownOverrides[viewerKey] = {}
+    end
+    self._slotCooldownOverrides[viewerKey][layoutIndex] = {
+        startTime = GetTime(),
+        duration = durationSeconds,
+    }
+    local found = false
+    if self.ItemRegistry then
+        local items = self.ItemRegistry.GetItemsForViewer(viewerKey)
+        for _, item in ipairs(items) do
+            if item.layoutIndex == layoutIndex and item.update then
+                item:update()
+                found = true
+                break
+            end
+        end
+    end
+    print("[TavernUI CDM] " .. (found and ("Slot " .. layoutIndex .. " override set, duration " .. durationSeconds .. "s") or ("Override set but no item at " .. viewerKey .. " slot " .. layoutIndex .. " (layoutIndex?)")))
+end
+
+function module:GetSlotCooldownOverride(viewerKey, layoutIndex)
+    local overrides = self._slotCooldownOverrides and self._slotCooldownOverrides[viewerKey]
+    if not overrides then return nil end
+    local o = overrides[layoutIndex]
+    if not o or not o.startTime or not o.duration then return nil end
+    local now = GetTime()
+    if now >= o.startTime + o.duration then
+        overrides[layoutIndex] = nil
+        return nil
+    end
+    return o.startTime, o.duration
+end
+
+SLASH_TAVERNUI_CDM1 = "/cdm"
+SlashCmdList["TAVERNUI_CDM"] = function(msg)
+    local m = TavernUI:GetModule("uCDM", true)
+    if not m or not m.SetSlotCooldown then
+        return
+    end
+    local viewer, slot, duration = msg:match("^%s*(%S+)%s+(%d+)%s+(%d+)%s*$")
+    if not viewer then
+        viewer, slot, duration = msg:match("^%s*(%S+)%s+(%d+)%s+%S+%s+(%d+)%s*$")
+    end
+    if viewer and slot and duration then
+        m:SetSlotCooldown(viewer, tonumber(slot), tonumber(duration))
+    else
+        print("[TavernUI CDM] Parse failed. Use: /cdm <viewer> <slot> [timer] <duration> e.g. /cdm essential 3 30")
+    end
 end

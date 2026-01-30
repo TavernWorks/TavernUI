@@ -193,12 +193,27 @@ local function ProviderEssence()
         return nil
     end
     
-    local segments = {}
+    local partialRaw = (UnitPartialPower and UnitPartialPower("player", POWER_TYPE_ESSENCE)) or 0
+    local partialFill = math.max(0, math.min(1, partialRaw / 1000))
+    local regenRate = (GetPowerRegenForPowerType and GetPowerRegenForPowerType(POWER_TYPE_ESSENCE)) or 0.2
+    local fullDuration = (regenRate and regenRate > 0) and (1 / regenRate) or 5
+    local elapsed = partialFill * fullDuration
+    local startTime = (elapsed > 0 and GetTime) and (GetTime() - elapsed) or 0
     
+    local segments = {}
     for i = 1, max do
-        local charges, maxCharges, chargeStart, chargeDuration = GetSpellCharges(357208)
-        local durationObj = NormalizeDurationObject(chargeStart or 0, chargeDuration or 0, chargeStart == 0)
-        segments[i] = durationObj
+        if i <= current then
+            segments[i] = { ready = true }
+        elseif i == current + 1 and current < max then
+            segments[i] = {
+                fillPercent = partialFill,
+                start = startTime,
+                duration = fullDuration,
+                ready = (partialFill >= 1),
+            }
+        else
+            segments[i] = { ready = false }
+        end
     end
     
     return {

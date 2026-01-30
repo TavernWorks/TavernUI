@@ -41,10 +41,10 @@ function CooldownItem.new(config)
     -- Frame reference
     self.frame = config.frame
     
-    -- What we're tracking (mutually exclusive in most cases)
     self.spellID = config.spellID
     self.itemID = config.itemID
     self.slotID = config.slotID
+    self.actionSlotID = config.actionSlotID
     self.cooldownID = config.cooldownID
     
     -- Ordering
@@ -391,8 +391,18 @@ end
 
 function CooldownItem:update()
     if not self.frame then return end
+    if self.viewerKey and self.layoutIndex and module.GetSlotCooldownOverride then
+        local startTime, duration = module:GetSlotCooldownOverride(self.viewerKey, self.layoutIndex)
+        if startTime and duration then
+            local entry = { frame = self.frame, viewerKey = self.viewerKey, layoutIndex = self.layoutIndex }
+            if module.CooldownTracker then
+                module.CooldownTracker.UpdateEntry(entry)
+            end
+            return
+        end
+    end
     if self.source ~= "custom" then return end
-    if not self.spellID and not self.itemID and not self.slotID then return end
+    if not self.spellID and not self.itemID and not self.slotID and not self.actionSlotID then return end
 
     local entry = {
         frame = self.frame,
@@ -400,6 +410,9 @@ function CooldownItem:update()
         spellID = self.spellID,
         itemID = self.itemID,
         slotID = self.slotID,
+        actionSlotID = self.actionSlotID,
+        viewerKey = self.viewerKey,
+        layoutIndex = self.layoutIndex,
     }
     if module.CooldownTracker then
         module.CooldownTracker.UpdateEntry(entry)
@@ -451,8 +464,13 @@ function CooldownItem:refreshIcon()
                 iconFileID = itemTexture
             end
         end
+    elseif self.actionSlotID then
+        local tex = GetActionTexture(self.actionSlotID)
+        if tex then
+            iconFileID = tex
+        end
     end
-    
+
     self:setIcon(iconFileID)
 end
 
