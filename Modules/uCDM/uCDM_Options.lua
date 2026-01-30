@@ -1,4 +1,5 @@
 local TavernUI = LibStub("AceAddon-3.0"):GetAddon("TavernUI")
+local L = LibStub("AceLocale-3.0"):GetLocale("TavernUI", true)
 local module = TavernUI:GetModule("uCDM", true)
 
 if not module then return end
@@ -11,6 +12,7 @@ local function RefreshViewerComponents(viewerKey, property)
     local layoutProperties = {
         iconCount = true,
         padding = true,
+        rowSpacing = true,
         yOffset = true,
         iconSize = true,
         aspectRatioCrop = true,
@@ -148,152 +150,152 @@ local function BuildRowOptions(viewerKey, rowIndex, orderBase)
     local order = orderBase or 1
 
     args.rowName = MakeRowOption(viewerKey, rowIndex, "name", "input", {
-        order = order, name = "Row Name", desc = "Optional name for this row",
+        order = order, name = L["ROW_NAME"], desc = L["OPTIONAL_ROW_NAME_DESC"],
         default = ""
     })
     order = order + 1
 
     args.iconCount = MakeRowOption(viewerKey, rowIndex, "iconCount", "range", {
-        order = order, name = "Icon Count", desc = "Number of icons in this row",
+        order = order, name = L["ICON_COUNT"], desc = L["NUMBER_OF_ICONS_DESC"],
         min = 1, max = 12, step = 1, default = viewerKey == "essential" and 4 or 6
     })
     order = order + 1
 
     args.iconSize = MakeRowOption(viewerKey, rowIndex, "iconSize", "range", {
-        order = order, name = "Icon Size", desc = "Size of icons in this row",
+        order = order, name = L["ICON_SIZE"], desc = L["SIZE_OF_ICONS_DESC"],
         min = 20, max = 100, step = 1, default = viewerKey == "essential" and 50 or 42
     })
     order = order + 1
 
     args.padding = MakeRowOption(viewerKey, rowIndex, "padding", "range", {
-        order = order, name = "Padding", desc = "Spacing between icons (negative for overlap)",
+        order = order, name = L["PADDING"], desc = L["SPACING_BETWEEN_ICONS_DESC"],
         min = -20, max = 20, step = 1, default = -8
     })
     order = order + 1
 
     args.yOffset = MakeRowOption(viewerKey, rowIndex, "yOffset", "range", {
-        order = order, name = "Y Offset", desc = "Vertical offset for this row",
+        order = order, name = L["Y_OFFSET"], desc = L["VERTICAL_OFFSET_ROW_DESC"],
         min = -50, max = 50, step = 1, default = 0
     })
     order = order + 1
 
     args.keepRowHeightWhenEmpty = MakeRowOption(viewerKey, rowIndex, "keepRowHeightWhenEmpty", "toggle", {
-        order = order, name = "Keep Row Height When Empty", desc = "Maintain row height even when no spells are visible",
+        order = order, name = L["KEEP_ROW_HEIGHT_WHEN_EMPTY"], desc = L["KEEP_ROW_HEIGHT_WHEN_EMPTY_DESC"],
         default = true
     })
     order = order + 1
 
-    args.stylingHeader = {type = "header", name = "Icon Styling", order = order}
+    args.stylingHeader = {type = "header", name = L["ICON_STYLING"], order = order}
     order = order + 1
 
     args.aspectRatioCrop = MakeRowOption(viewerKey, rowIndex, "aspectRatioCrop", "range", {
-        order = order, name = "Aspect Ratio Crop", desc = "Icon aspect ratio (1.0 = square, higher = wider/flatter)",
+        order = order, name = L["ASPECT_RATIO_CROP"], desc = L["ASPECT_RATIO_CROP_DESC"],
         min = 1.0, max = 2.0, step = 0.01, default = 1.0
     })
     order = order + 1
 
     args.zoom = MakeRowOption(viewerKey, rowIndex, "zoom", "range", {
-        order = order, name = "Zoom", desc = "Zoom level for icon texture (0 = default, higher = zoomed in)",
+        order = order, name = L["ZOOM"], desc = L["ZOOM_DESC"],
         min = 0, max = 0.2, step = 0.01, default = 0
     })
     order = order + 1
 
-    args.iconBorderHeader = {type = "header", name = "Icon Border", order = order}
+    args.iconBorderHeader = {type = "header", name = L["ICON_BORDER"], order = order}
     order = order + 1
 
     args.iconBorderSize = MakeRowOption(viewerKey, rowIndex, "iconBorderSize", "range", {
-        order = order, name = "Icon Border Size", desc = "Size of border around each icon (0 = no border)",
+        order = order, name = L["ICON_BORDER_SIZE"], desc = L["SIZE_OF_ICON_BORDER_DESC"],
         min = 0, max = 5, step = 1, default = 0
     })
     order = order + 1
 
     args.iconBorderColor = MakeRowOption(viewerKey, rowIndex, "iconBorderColor", "color", {
-        order = order, name = "Icon Border Color", desc = "Color of the border around each icon",
+        order = order, name = L["ICON_BORDER_COLOR"], desc = L["COLOR_OF_ICON_BORDER_DESC"],
         default = {r = 0, g = 0, b = 0, a = 1},
         disabled = function(row) return (row and row.iconBorderSize or 0) == 0 end
     })
     order = order + 1
 
-    args.rowBorderHeader = {type = "header", name = "Row Border", order = order}
+    args.rowBorderHeader = {type = "header", name = L["ROW_BORDER"], order = order}
     order = order + 1
 
     args.rowBorderSize = MakeRowOption(viewerKey, rowIndex, "rowBorderSize", "range", {
-        order = order, name = "Row Border Size", desc = "Size of border around the entire row (0 = no border)",
+        order = order, name = L["ROW_BORDER_SIZE"], desc = L["SIZE_OF_ROW_BORDER_DESC"],
         min = 0, max = 5, step = 1, default = 0
     })
     order = order + 1
 
     args.rowBorderColor = MakeRowOption(viewerKey, rowIndex, "rowBorderColor", "color", {
-        order = order, name = "Row Border Color", desc = "Color of the border around the entire row",
+        order = order, name = L["ROW_BORDER_COLOR"], desc = L["COLOR_OF_ROW_BORDER_DESC"],
         default = {r = 0, g = 0, b = 0, a = 1},
         disabled = function(row) return (row and row.rowBorderSize or 0) == 0 end
     })
     order = order + 1
 
-    args.textHeader = {type = "header", name = "Text Settings", order = order}
+    args.textHeader = {type = "header", name = L["TEXT_SETTINGS"], order = order}
     order = order + 1
 
     args.durationSize = MakeRowOption(viewerKey, rowIndex, "durationSize", "range", {
-        order = order, name = "Duration Text Size", desc = "Font size for cooldown duration text (0 = hide)",
+        order = order, name = L["DURATION_TEXT_SIZE"], desc = L["DURATION_TEXT_SIZE_DESC"],
         min = 0, max = 96, step = 1, default = 18
     })
     order = order + 1
 
     args.durationPoint = MakeRowOption(viewerKey, rowIndex, "durationPoint", "select", {
-        order = order, name = "Duration Text Position", desc = "Anchor point for duration text on icon",
+        order = order, name = L["DURATION_TEXT_POSITION"], desc = L["ANCHOR_POINT_DURATION_DESC"],
         values = ANCHOR_POINTS, default = "CENTER",
         disabled = function(row) return (row and row.durationSize or 18) == 0 end
     })
     order = order + 1
 
     args.durationOffsetX = MakeRowOption(viewerKey, rowIndex, "durationOffsetX", "range", {
-        order = order, name = "Duration Text Offset X", desc = "Horizontal offset for duration text",
+        order = order, name = L["DURATION_TEXT_OFFSET_X"], desc = L["HORIZONTAL_OFFSET_DURATION_DESC"],
         min = -50, max = 50, step = 1, default = 0,
         disabled = function(row) return (row and row.durationSize or 18) == 0 end
     })
     order = order + 1
 
     args.durationOffsetY = MakeRowOption(viewerKey, rowIndex, "durationOffsetY", "range", {
-        order = order, name = "Duration Text Offset Y", desc = "Vertical offset for duration text",
+        order = order, name = L["DURATION_TEXT_OFFSET_Y"], desc = L["VERTICAL_OFFSET_DURATION_DESC"],
         min = -50, max = 50, step = 1, default = 0,
         disabled = function(row) return (row and row.durationSize or 18) == 0 end
     })
     order = order + 1
 
     args.stackSize = MakeRowOption(viewerKey, rowIndex, "stackSize", "range", {
-        order = order, name = "Stack Text Size", desc = "Font size for stack count text (0 = hide)",
+        order = order, name = L["STACK_TEXT_SIZE"], desc = L["STACK_TEXT_SIZE_DESC"],
         min = 0, max = 96, step = 1, default = 16
     })
     order = order + 1
 
     args.stackPoint = MakeRowOption(viewerKey, rowIndex, "stackPoint", "select", {
-        order = order, name = "Stack Text Position", desc = "Anchor point for stack text on icon",
+        order = order, name = L["STACK_TEXT_POSITION"], desc = L["ANCHOR_POINT_STACK_DESC"],
         values = ANCHOR_POINTS, default = "BOTTOMRIGHT",
         disabled = function(row) return (row and row.stackSize or 16) == 0 end
     })
     order = order + 1
 
     args.stackOffsetX = MakeRowOption(viewerKey, rowIndex, "stackOffsetX", "range", {
-        order = order, name = "Stack Text Offset X", desc = "Horizontal offset for stack text",
+        order = order, name = L["STACK_TEXT_OFFSET_X"], desc = L["HORIZONTAL_OFFSET_STACK_DESC"],
         min = -50, max = 50, step = 1, default = 0,
         disabled = function(row) return (row and row.stackSize or 16) == 0 end
     })
     order = order + 1
 
     args.stackOffsetY = MakeRowOption(viewerKey, rowIndex, "stackOffsetY", "range", {
-        order = order, name = "Stack Text Offset Y", desc = "Vertical offset for stack text",
+        order = order, name = L["STACK_TEXT_OFFSET_Y"], desc = L["VERTICAL_OFFSET_STACK_DESC"],
         min = -50, max = 50, step = 1, default = 0,
         disabled = function(row) return (row and row.stackSize or 16) == 0 end
     })
     order = order + 1
 
-    args.actionsHeader = {type = "header", name = "Actions", order = order}
+    args.actionsHeader = {type = "header", name = L["ACTIONS"], order = order}
     order = order + 1
 
     args.moveUp = {
         type = "execute",
-        name = "Move Up",
-        desc = "Move this row up",
+        name = L["MOVE_UP"],
+        desc = L["MOVE_ROW_UP_DESC"],
         order = order,
         disabled = function()
             return rowIndex == 1
@@ -313,8 +315,8 @@ local function BuildRowOptions(viewerKey, rowIndex, orderBase)
 
     args.moveDown = {
         type = "execute",
-        name = "Move Down",
-        desc = "Move this row down",
+        name = L["MOVE_DOWN"],
+        desc = L["MOVE_ROW_DOWN_DESC"],
         order = order,
         disabled = function()
             local path = string.format("viewers.%s.rows", viewerKey)
@@ -337,8 +339,8 @@ local function BuildRowOptions(viewerKey, rowIndex, orderBase)
 
     args.removeRow = {
         type = "execute",
-        name = "Remove Row",
-        desc = "Remove this row",
+        name = L["REMOVE_ROW"],
+        desc = L["REMOVE_ROW_DESC"],
         order = order,
         func = function()
             local path = string.format("viewers.%s.rows", viewerKey)
@@ -422,29 +424,29 @@ local function BuildAnchorOptions(viewerKey, orderBase)
         return categoryList
     end
 
-    args.anchoringHeader = {type = "header", name = "Anchoring", order = order}
+    args.anchoringHeader = {type = "header", name = L["Anchoring"], order = order}
     order = order + 1
 
     args.anchorCategory = {
         type = "select",
-        name = "Category",
-        desc = "Category of anchor target",
+        name = L["CATEGORY"],
+        desc = L["CATEGORY_OF_ANCHOR_DESC"],
         order = order,
         values = function()
             local values = {
-                None = "None (No Anchoring)",
+                None = L["NONE_NO_ANCHORING"],
             }
 
             local categoryDisplayNames = {
-                actionbars = "Action Bars",
-                bars = "Bars",
-                cooldowns = "Cooldowns",
-                cdm = "CDM",
-                ucdm = "uCDM",
-                unitframes = "Unit Frames",
-                TavernUI = "TavernUI",
-                blizzard = "Blizzard",
-                misc = "Misc",
+                actionbars = L["ACTION_BARS"],
+                bars = L["BARS"],
+                cooldowns = L["COOLDOWNS"],
+                cdm = L["CDM"],
+                ucdm = L["UCDM_CATEGORY"],
+                unitframes = L["UNIT_FRAMES"],
+                TavernUI = L["TAVERN_UI_CATEGORY"],
+                blizzard = L["BLIZZARD"],
+                misc = L["MISC"],
             }
 
             local categories = GetAvailableCategories()
@@ -507,8 +509,8 @@ local function BuildAnchorOptions(viewerKey, orderBase)
 
     args.anchorTarget = {
         type = "select",
-        name = "Anchor Target",
-        desc = "Frame to anchor to",
+        name = L["ANCHOR_TARGET"],
+        desc = L["FRAME_TO_ANCHOR_DESC"],
         order = order,
         disabled = function()
             local viewerPath = string.format("viewers.%s", viewerKey)
@@ -583,8 +585,8 @@ local function BuildAnchorOptions(viewerKey, orderBase)
 
     args.anchorPoint = {
         type = "select",
-        name = "Point",
-        desc = "Anchor point on viewer",
+        name = L["POINT"],
+        desc = L["ANCHOR_POINT_ON_VIEWER_DESC"],
         order = order,
         values = ANCHOR_POINTS,
         disabled = function()
@@ -604,8 +606,8 @@ local function BuildAnchorOptions(viewerKey, orderBase)
 
     args.anchorRelativePoint = {
         type = "select",
-        name = "Relative Point",
-        desc = "Anchor point on target frame",
+        name = L["RELATIVE_POINT"],
+        desc = L["ANCHOR_POINT_ON_TARGET_DESC"],
         order = order,
         values = ANCHOR_POINTS,
         disabled = function()
@@ -625,8 +627,8 @@ local function BuildAnchorOptions(viewerKey, orderBase)
 
     args.anchorOffsetX = {
         type = "range",
-        name = "Offset X",
-        desc = "Horizontal offset",
+        name = L["OFFSET_X"],
+        desc = L["HORIZONTAL_OFFSET"],
         order = order,
         min = -500,
         max = 500,
@@ -652,8 +654,8 @@ local function BuildAnchorOptions(viewerKey, orderBase)
 
     args.anchorOffsetY = {
         type = "range",
-        name = "Offset Y",
-        desc = "Vertical offset",
+        name = L["OFFSET_Y"],
+        desc = L["VERTICAL_OFFSET"],
         order = order,
         min = -500,
         max = 500,
@@ -685,8 +687,8 @@ local function BuildViewerOptions(viewerKey, viewerName, orderBase)
 
     args.enabled = {
         type = "toggle",
-        name = "Enabled",
-        desc = "Enable " .. viewerName .. " cooldown viewer",
+        name = L["ENABLED"],
+        desc = string.format(L["ENABLE_S_COOLDOWN_VIEWER"], viewerName),
         order = order,
         get = function()
             return module:GetSetting(string.format("viewers.%s.enabled", viewerKey), true) ~= false
@@ -700,12 +702,12 @@ local function BuildViewerOptions(viewerKey, viewerName, orderBase)
 
     args.rowGrowDirection = {
         type = "select",
-        name = "Row Growth Direction",
-        desc = "Direction rows grow (Up = bottom to top, Down = top to bottom)",
+        name = L["ROW_GROWTH_DIRECTION"],
+        desc = L["ROW_GROWTH_DIRECTION_DESC"],
         order = order,
         values = {
-            down = "Down",
-            up = "Up",
+            down = L["DOWN"],
+            up = L["UP"],
         },
         get = function()
             return module:GetSetting(string.format("viewers.%s.rowGrowDirection", viewerKey), "down")
@@ -713,6 +715,25 @@ local function BuildViewerOptions(viewerKey, viewerName, orderBase)
         set = function(_, value)
             local path = string.format("viewers.%s.rowGrowDirection", viewerKey)
             module:SetSetting(path, value)
+        end,
+    }
+    order = order + 1
+
+    args.rowSpacing = {
+        type = "range",
+        name = L["ROW_SPACING"],
+        desc = L["ROW_SPACING_DESC"],
+        order = order,
+        min = -20,
+        max = 30,
+        step = 1,
+        get = function()
+            return module:GetSetting(string.format("viewers.%s.rowSpacing", viewerKey), 5)
+        end,
+        set = function(_, value)
+            local path = string.format("viewers.%s.rowSpacing", viewerKey)
+            module:SetSetting(path, value, { type = "number", min = -20, max = 30 })
+            RefreshViewerComponents(viewerKey, "rowSpacing")
         end,
     }
     order = order + 1
@@ -727,13 +748,13 @@ local function BuildViewerOptions(viewerKey, viewerName, orderBase)
         end
     end
 
-    args.keybindHeader = {type = "header", name = "Keybind Display", order = order}
+    args.keybindHeader = {type = "header", name = L["KEYBIND_DISPLAY"], order = order}
     order = order + 1
 
     args.showKeybinds = {
         type = "toggle",
-        name = "Show Keybinds",
-        desc = "Display action bar keybinds on cooldown icons",
+        name = L["SHOW_KEYBINDS"],
+        desc = L["SHOW_KEYBINDS_DESC"],
         order = order,
         get = function()
             return module:GetSetting(string.format("viewers.%s.showKeybinds", viewerKey), false) == true
@@ -748,8 +769,8 @@ local function BuildViewerOptions(viewerKey, viewerName, orderBase)
 
     args.keybindSize = {
         type = "range",
-        name = "Keybind Text Size",
-        desc = "Font size for keybind text",
+        name = L["KEYBIND_TEXT_SIZE"],
+        desc = L["KEYBIND_TEXT_SIZE_DESC"],
         order = order,
         min = 6,
         max = 24,
@@ -774,8 +795,8 @@ local function BuildViewerOptions(viewerKey, viewerName, orderBase)
 
     args.keybindPoint = {
         type = "select",
-        name = "Keybind Position",
-        desc = "Anchor point for keybind text on icon",
+        name = L["KEYBIND_POSITION"],
+        desc = L["ANCHOR_POINT_KEYBIND_DESC"],
         order = order,
         values = ANCHOR_POINTS,
         disabled = function()
@@ -794,8 +815,8 @@ local function BuildViewerOptions(viewerKey, viewerName, orderBase)
 
     args.keybindOffsetX = {
         type = "range",
-        name = "Keybind Offset X",
-        desc = "Horizontal offset for keybind text",
+        name = L["KEYBIND_OFFSET_X"],
+        desc = L["HORIZONTAL_OFFSET_KEYBIND_DESC"],
         order = order,
         min = -50,
         max = 50,
@@ -820,8 +841,8 @@ local function BuildViewerOptions(viewerKey, viewerName, orderBase)
 
     args.keybindOffsetY = {
         type = "range",
-        name = "Keybind Offset Y",
-        desc = "Vertical offset for keybind text",
+        name = L["KEYBIND_OFFSET_Y"],
+        desc = L["VERTICAL_OFFSET_KEYBIND_DESC"],
         order = order,
         min = -50,
         max = 50,
@@ -846,8 +867,8 @@ local function BuildViewerOptions(viewerKey, viewerName, orderBase)
 
     args.keybindColor = {
         type = "color",
-        name = "Keybind Text Color",
-        desc = "Color of the keybind text",
+        name = L["KEYBIND_TEXT_COLOR"],
+        desc = L["COLOR_OF_KEYBIND_DESC"],
         order = order,
         hasAlpha = true,
         disabled = function()
@@ -865,13 +886,13 @@ local function BuildViewerOptions(viewerKey, viewerName, orderBase)
     }
     order = order + 1
 
-    args.rowsHeader = {type = "header", name = "Rows", order = order}
+    args.rowsHeader = {type = "header", name = L["Rows"], order = order}
     order = order + 1
 
     args.addRow = {
         type = "execute",
-        name = "Add Row",
-        desc = "Add a new row",
+        name = L["ADD_ROW"],
+        desc = L["ADD_NEW_ROW_DESC"],
         order = order,
         func = function()
             local path = string.format("viewers.%s.rows", viewerKey)
@@ -884,7 +905,7 @@ local function BuildViewerOptions(viewerKey, viewerName, orderBase)
             local defaultIconSize = viewerKey == "essential" and 50 or 42
 
             table.insert(rows, {
-                name = "Row " .. (#rows + 1),
+                name = string.format(L["ROW_N"], #rows + 1),
                 iconCount = defaultIconCount,
                 iconSize = defaultIconSize,
                 padding = -8,
@@ -923,7 +944,7 @@ local function BuildViewerOptions(viewerKey, viewerName, orderBase)
         local defaultIconCount = viewerKey == "essential" and 4 or 6
         local defaultIconSize = viewerKey == "essential" and 50 or 42
         table.insert(rows, {
-            name = "Default",
+            name = L["DEFAULT"],
             iconCount = defaultIconCount,
             iconSize = defaultIconSize,
             padding = -8,
@@ -948,7 +969,7 @@ local function BuildViewerOptions(viewerKey, viewerName, orderBase)
     end
 
     for rowIndex, row in ipairs(rows) do
-        local rowName = row.name or ("Row " .. rowIndex)
+        local rowName = row.name or string.format(L["ROW_N"], rowIndex)
         args["row" .. rowIndex] = {
             type = "group",
             name = rowName,
@@ -964,13 +985,13 @@ local function BuildGeneralOptions()
     return {
         scaleHeader = {
             type = "header",
-            name = "Display",
+            name = L["DISPLAY"],
             order = 0,
         },
         scaleFactor = {
             type = "range",
-            name = "Scale",
-            desc = "Overall scale factor for all cooldown viewers",
+            name = L["SCALE"],
+            desc = L["SCALE_FACTOR_DESC"],
             order = 1,
             min = 0.5,
             max = 2.0,
@@ -993,13 +1014,13 @@ local function BuildGeneralOptions()
         },
         debugHeader = {
             type = "header",
-            name = "Debug",
+            name = L["DEBUG"],
             order = 2,
         },
         debug = {
             type = "toggle",
-            name = "Debug Mode",
-            desc = "Enable debug messages",
+            name = L["DEBUG_MODE"],
+            desc = L["ENABLE_DEBUG_MESSAGES"],
             order = 3,
             get = function()
                 return module:GetSetting("general.debug", false) == true
@@ -1010,13 +1031,13 @@ local function BuildGeneralOptions()
         },
         updateRatesHeader = {
             type = "header",
-            name = "Update Rates",
+            name = L["UPDATE_RATES"],
             order = 10,
         },
         updateRateNormal = {
             type = "range",
-            name = "Normal Update Rate",
-            desc = "Update interval in seconds when out of combat (lower = more frequent updates)",
+            name = L["NORMAL_UPDATE_RATE"],
+            desc = L["NORMAL_UPDATE_RATE_DESC"],
             order = 11,
             min = 0.05,
             max = 1.0,
@@ -1034,8 +1055,8 @@ local function BuildGeneralOptions()
         },
         updateRateCombat = {
             type = "range",
-            name = "Combat Update Rate",
-            desc = "Update interval in seconds when in combat (higher = better performance)",
+            name = L["COMBAT_UPDATE_RATE"],
+            desc = L["COMBAT_UPDATE_RATE_DESC"],
             order = 12,
             min = 0.1,
             max = 2.0,
@@ -1053,8 +1074,8 @@ local function BuildGeneralOptions()
         },
         updateRateInitial = {
             type = "range",
-            name = "Initial Update Rate",
-            desc = "Update interval in seconds during first 5 seconds after load (lower = faster initial styling)",
+            name = L["INITIAL_UPDATE_RATE"],
+            desc = L["INITIAL_UPDATE_RATE_DESC"],
             order = 13,
             min = 0.01,
             max = 0.2,
@@ -1077,8 +1098,8 @@ local function BuildCustomTabOptions()
     return {
         addSpell = {
             type = "input",
-            name = "Add Spell",
-            desc = "Enter spell ID to track",
+            name = L["ADD_SPELL"],
+            desc = L["ENTER_SPELL_ID_DESC"],
             order = 1,
             get = function() return "" end,
             set = function(_, value)
@@ -1130,8 +1151,8 @@ local function BuildCustomTabOptions()
         },
         addItem = {
             type = "input",
-            name = "Add Item",
-            desc = "Enter item ID to track",
+            name = L["ADD_ITEM"],
+            desc = L["ENTER_ITEM_ID_DESC"],
             order = 2,
             get = function() return "" end,
             set = function(_, value)
@@ -1183,12 +1204,12 @@ local function BuildCustomTabOptions()
         },
         addTrinket = {
             type = "select",
-            name = "Add Trinket",
-            desc = "Select trinket slot to track",
+            name = L["ADD_TRINKET"],
+            desc = L["SELECT_TRINKET_SLOT_DESC"],
             order = 3,
             values = {
-                [13] = "Trinket 1",
-                [14] = "Trinket 2",
+                [13] = L["TRINKET_1"],
+                [14] = L["TRINKET_2"],
             },
             get = function() return nil end,
             set = function(_, value)
@@ -1241,12 +1262,12 @@ local function BuildCustomTabOptions()
         },
         viewerAssignment = {
             type = "select",
-            name = "Default Viewer",
-            desc = "Default viewer for new custom entries",
+            name = L["DEFAULT_VIEWER"],
+            desc = L["DEFAULT_VIEWER_DESC"],
             order = 4,
             values = {
-                essential = "Essential Viewer",
-                utility = "Utility Viewer",
+                essential = L["ESSENTIAL_VIEWER"],
+                utility = L["UTILITY_VIEWER"],
             },
             get = function()
                 return module:GetSetting("defaultCustomViewer", "essential")
@@ -1257,7 +1278,7 @@ local function BuildCustomTabOptions()
         },
         entriesHeader = {
             type = "header",
-            name = "Custom Entries",
+            name = L["CUSTOM_ENTRIES"],
             order = 10,
         },
     }
@@ -1270,42 +1291,42 @@ function module:BuildOptions()
     
     local options = {
         type = "group",
-        name = "uCDM",
+        name = L["UCDM"],
         childGroups = "tab",
         args = {
             general = {
                 type = "group",
-                name = "General",
+                name = L["GENERAL"],
                 order = 0,
                 args = BuildGeneralOptions(),
             },
             essential = {
                 type = "group",
-                name = "Essential Cooldowns",
+                name = L["ESSENTIAL_COOLDOWNS"],
                 order = 1,
                 args = {},
             },
             utility = {
                 type = "group",
-                name = "Utility Cooldowns",
+                name = L["UTILITY_COOLDOWNS"],
                 order = 2,
                 args = {},
             },
             buff = {
                 type = "group",
-                name = "Buff Cooldowns",
+                name = L["BUFF_COOLDOWNS"],
                 order = 3,
                 args = {
                     note = {
                         type = "description",
-                        name = "Buff viewer contains Blizzard entries only. No custom entries can be added.",
+                        name = L["BUFF_VIEWER_BLIZZARD_ONLY_DESC"],
                         order = 1,
                     },
                 },
             },
             custom = {
                 type = "group",
-                name = "Custom Items",
+                name = L["CUSTOM_ITEMS"],
                 order = 4,
                 args = {},
             },
@@ -1318,9 +1339,9 @@ function module:BuildOptions()
     end
     
     for _, viewerKey in ipairs({"essential", "utility", "buff"}) do
-        local viewerName = viewerKey == "essential" and "Essential" or
-                          viewerKey == "utility" and "Utility" or
-                          viewerKey == "buff" and "Buff"
+                local viewerName = viewerKey == "essential" and L["ESSENTIAL"] or
+                          viewerKey == "utility" and L["UTILITY"] or
+                          viewerKey == "buff" and L["BUFF"]
         
         options.args[viewerKey].args = BuildViewerOptions(viewerKey, viewerName, 1)
 
@@ -1332,7 +1353,7 @@ function module:BuildOptions()
                 entryConfig.viewer = "essential"
             end
             if entryViewer == viewerKey then
-                local entryName = "Entry " .. entryIndex
+                local entryName = string.format(L["ENTRY_N"], entryIndex)
                 if entryConfig.spellID then
                     local ok, spellInfo = pcall(C_Spell.GetSpellInfo, entryConfig.spellID)
                     if ok and spellInfo then
@@ -1344,7 +1365,7 @@ function module:BuildOptions()
                         entryName = itemInfo.itemName
                     end
                 elseif entryConfig.slotID then
-                    entryName = "Trinket " .. (entryConfig.slotID == 13 and "1" or "2")
+                    entryName = entryConfig.slotID == 13 and L["TRINKET_1"] or L["TRINKET_2"]
                 end
 
                 options.args[viewerKey].args["entry" .. entryIndex] = {
@@ -1354,7 +1375,7 @@ function module:BuildOptions()
                     args = {
                         enabled = {
                             type = "toggle",
-                            name = "Enabled",
+                            name = L["ENABLED"],
                             order = 1,
                             get = function()
                                 return entryConfig.enabled ~= false
@@ -1387,8 +1408,8 @@ function module:BuildOptions()
                         },
                         index = {
                             type = "range",
-                            name = "Index",
-                            desc = "Display order (lower = earlier)",
+                            name = L["Index"],
+                            desc = L["DISPLAY_ORDER_DESC"],
                             order = 2,
                             min = 1,
                             max = 13,
@@ -1445,12 +1466,12 @@ function module:BuildOptions()
                             },
                             viewer = {
                             type = "select",
-                            name = "Viewer",
-                            desc = "Assign entry to viewer",
+                            name = L["VIEWER"],
+                            desc = L["ASSIGN_ENTRY_TO_VIEWER_DESC"],
                             order = 5,
                             values = {
-                                essential = "Essential Viewer",
-                                utility = "Utility Viewer",
+                                essential = L["ESSENTIAL_VIEWER"],
+                                utility = L["UTILITY_VIEWER"],
                             },
                             get = function()
                                 local viewer = entryConfig.viewer or "essential"
@@ -1506,7 +1527,7 @@ function module:BuildOptions()
                         },
                         remove = {
                             type = "execute",
-                            name = "Remove",
+                            name = L["REMOVE"],
                             order = 6,
                             func = function()
                                 module.ItemRegistry.RemoveCustomItem(entryConfig.id)
@@ -1521,7 +1542,7 @@ function module:BuildOptions()
     
     local customEntries = module:GetSetting("customEntries", {})
     for entryIndex, entryConfig in ipairs(customEntries) do
-        local entryName = "Entry " .. entryIndex
+        local entryName = string.format(L["ENTRY_N"], entryIndex)
         if entryConfig.spellID then
             local ok, spellInfo = pcall(C_Spell.GetSpellInfo, entryConfig.spellID)
             if ok and spellInfo then
@@ -1543,12 +1564,12 @@ function module:BuildOptions()
 
         options.args.custom.args["entry" .. entryIndex] = {
             type = "group",
-            name = entryName .. " (" .. (entryViewer == "essential" and "Essential" or "Utility") .. ")",
+            name = entryName .. " (" .. (entryViewer == "essential" and L["ESSENTIAL"] or L["UTILITY"]) .. ")",
             order = 200 + entryIndex,
             args = {
                 enabled = {
                     type = "toggle",
-                    name = "Enabled",
+                    name = L["ENABLED"],
                     order = 1,
                     get = function()
                         return entryConfig.enabled ~= false
@@ -1576,8 +1597,8 @@ function module:BuildOptions()
                 },
                 index = {
                     type = "range",
-                    name = "Index",
-                    desc = "Display order (lower = earlier)",
+                    name = L["Index"],
+                    desc = L["DISPLAY_ORDER_DESC"],
                     order = 2,
                     min = 1,
                     max = 13,
@@ -1634,12 +1655,12 @@ function module:BuildOptions()
                 },
                 viewer = {
                     type = "select",
-                    name = "Viewer",
-                    desc = "Assign entry to viewer",
+                    name = L["Viewer"],
+                    desc = L["ASSIGN_ENTRY_TO_VIEWER_DESC"],
                     order = 5,
                     values = {
-                        essential = "Essential Viewer",
-                        utility = "Utility Viewer",
+                        essential = L["ESSENTIAL_VIEWER"],
+                        utility = L["UTILITY_VIEWER"],
                     },
                     get = function()
                         local viewer = entryConfig.viewer or "essential"
@@ -1695,7 +1716,7 @@ function module:BuildOptions()
                 },
                 remove = {
                     type = "execute",
-                    name = "Remove",
+                    name = L["REMOVE"],
                     order = 6,
                     func = function()
                         module.ItemRegistry.RemoveCustomItem(entryConfig.id)
@@ -1706,7 +1727,7 @@ function module:BuildOptions()
         }
     end
     
-    TavernUI:RegisterModuleOptions("uCDM", options, "uCDM")
+    TavernUI:RegisterModuleOptions("uCDM", options, L["UCDM"])
 end
 
 function module:RegisterOptions()

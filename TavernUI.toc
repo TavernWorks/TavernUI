@@ -21,5 +21,8 @@ libs\Libs.xml
 Core.lua
 Core_Config.lua
 
+# Localization (load before modules that use L)
+Localization\enUS.lua
+
 # Modules (each module registers its defaults at load time, before OnInitialize)
 Modules\Modules.xml

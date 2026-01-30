@@ -20,8 +20,6 @@ if not module then return end
 local CooldownItem = {}
 CooldownItem.__index = CooldownItem
 
-local FONT_PATH = "Fonts\\FRIZQT__.TTF"
-
 local CONSTANTS = {
     MAX_MASK_TEXTURES = 10,
     TEXTURE_BASE_CROP_PIXELS = 4,
@@ -144,8 +142,9 @@ function CooldownItem:applyStyle(rowConfig)
     local aspectRatio = rowConfig.aspectRatioCrop or 1.0
     local iconHeight = iconSize / aspectRatio
     
-    -- Size
-    frame:SetSize(iconSize, iconHeight)
+    local pxW = TavernUI:GetPixelSize(frame, iconSize, 0)
+    local pxH = TavernUI:GetPixelSize(frame, iconHeight, 1)
+    frame:SetSize(pxW, pxH)
     
     -- Store for tex coord calculation
     frame._ucdmZoom = rowConfig.zoom or 0
@@ -285,6 +284,7 @@ function CooldownItem:_applyBorder(borderSize, borderColor)
         return
     end
     
+    local pxBorder = TavernUI:GetPixelSize(frame, borderSize, 0)
     if not frame._ucdmBorder then
         frame._ucdmBorder = frame:CreateTexture(nil, "BACKGROUND", nil, -8)
     end
@@ -292,11 +292,11 @@ function CooldownItem:_applyBorder(borderSize, borderColor)
     local bc = borderColor or {r = 0, g = 0, b = 0, a = 1}
     frame._ucdmBorder:SetColorTexture(bc.r, bc.g, bc.b, bc.a)
     frame._ucdmBorder:ClearAllPoints()
-    frame._ucdmBorder:SetPoint("TOPLEFT", frame, "TOPLEFT", -borderSize, borderSize)
-    frame._ucdmBorder:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", borderSize, -borderSize)
+    frame._ucdmBorder:SetPoint("TOPLEFT", frame, "TOPLEFT", -pxBorder, pxBorder)
+    frame._ucdmBorder:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", pxBorder, -pxBorder)
     frame._ucdmBorder:Show()
     
-    frame:SetHitRectInsets(-borderSize, -borderSize, -borderSize, -borderSize)
+    frame:SetHitRectInsets(-pxBorder, -pxBorder, -pxBorder, -pxBorder)
 end
 
 function CooldownItem:_applyTextStyle(rowConfig)
@@ -312,50 +312,49 @@ function CooldownItem:_applyTextStyle(rowConfig)
     local stackOffsetX = rowConfig.stackOffsetX or 0
     local stackOffsetY = rowConfig.stackOffsetY or 0
     
-    -- Duration text on cooldown
+    local pxDurX = TavernUI:GetPixelSize(frame, durationOffsetX, 0)
+    local pxDurY = TavernUI:GetPixelSize(frame, durationOffsetY, 1)
+    local pxStackX = TavernUI:GetPixelSize(frame, stackOffsetX, 0)
+    local pxStackY = TavernUI:GetPixelSize(frame, stackOffsetY, 1)
+    
     if durationSize > 0 then
         local cooldown = frame.Cooldown or frame.cooldown
         if cooldown then
-            -- Style cooldown's text element
             if cooldown.text then
-                cooldown.text:SetFont(FONT_PATH, durationSize, "OUTLINE")
+                TavernUI:ApplyFont(cooldown.text, frame, durationSize)
                 cooldown.text:ClearAllPoints()
-                cooldown.text:SetPoint(durationPoint, frame, durationPoint, durationOffsetX, durationOffsetY)
+                cooldown.text:SetPoint(durationPoint, frame, durationPoint, pxDurX, pxDurY)
             end
             
-            -- Also check for FontString regions within cooldown
             local ok, regions = pcall(function() return {cooldown:GetRegions()} end)
             if ok and regions then
                 for _, region in ipairs(regions) do
                     if region and region.GetObjectType and region:GetObjectType() == "FontString" then
-                        region:SetFont(FONT_PATH, durationSize, "OUTLINE")
+                        TavernUI:ApplyFont(region, frame, durationSize)
                         region:ClearAllPoints()
-                        region:SetPoint(durationPoint, frame, durationPoint, durationOffsetX, durationOffsetY)
+                        region:SetPoint(durationPoint, frame, durationPoint, pxDurX, pxDurY)
                     end
                 end
             end
         end
     end
     
-    -- Stack/charge count text
     if stackSize > 0 then
-        -- ChargeCount frame (for spell charges)
         local chargeFrame = frame.ChargeCount
         if chargeFrame then
             local fs = chargeFrame.Current or chargeFrame.Count or chargeFrame.count
             if fs then
-                fs:SetFont(FONT_PATH, stackSize, "OUTLINE")
+                TavernUI:ApplyFont(fs, frame, stackSize)
                 fs:ClearAllPoints()
-                fs:SetPoint(stackPoint, frame, stackPoint, stackOffsetX, stackOffsetY)
+                fs:SetPoint(stackPoint, frame, stackPoint, pxStackX, pxStackY)
             end
         end
         
-        -- Count text (for item stacks, buff stacks)
         local countText = frame.Count or frame.count
         if countText then
-            countText:SetFont(FONT_PATH, stackSize, "OUTLINE")
+            TavernUI:ApplyFont(countText, frame, stackSize)
             countText:ClearAllPoints()
-            countText:SetPoint(stackPoint, frame, stackPoint, stackOffsetX, stackOffsetY)
+            countText:SetPoint(stackPoint, frame, stackPoint, pxStackX, pxStackY)
         end
     end
 end

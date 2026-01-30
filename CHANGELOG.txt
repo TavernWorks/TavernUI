@@ -1,5 +1,21 @@
 TavernUI Changelog
 ==================
+v1.0.0-beta-6 (2026-01-29)
+ - Feature: Add Resource Bars (Health / Power / Alternative Power / Class Specific)
+    - Breakpoint based Coloring
+    - Class Colors
+    - Solid Colors
+    - Size Control
+    - Class / Resource Color Control
+    - Background / Border / Text / Anchoring
+ - Feature: QoL features such as Speedy Loot / Force Auto Loot / Auto Repair / Auto Sell Junk / FPS Settings / UI Scale 
+ - Feature: Font Support - Set a global font for all Tavern UI elements
+ - Feature: Updated Edit Mode for Custom Resource Bars
+ - Feature: Add CDM Scaling
+ - Feature: Multi Language Support - Resource File based
+ - Fix: Support Macros to Spell Keybinds in CDM
+ - Feature: QoL Frame Hider (Player Frame if you want to replace with Resource bars)
+
 v1.0.0-beta-5a (2026-01-29)
  - Fix keybind error, that breaks the layout. Blizz / BT4 with assisted highlight
 

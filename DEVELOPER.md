@@ -1,4 +1,4 @@
-﻿# Developer Setup Guide
+# Developer Setup Guide
 
 This guide explains how to set up the TavernUI development environment, including downloading required libraries.
 
@@ -58,6 +58,8 @@ The BigWigs Packager is the standard tool for managing WoW addon libraries.
    # Check that libs folder contains the libraries
    ls libs/
    ```
+
+4. **EditModeExpanded-1.0:** If the packager does not support the `path` option and `libs/EditModeExpanded-1.0` is missing or contains the full repo, copy only the library folder: clone [EditModeExpanded](https://github.com/teelolws/EditModeExpanded), then copy `Source/libs/EditModeExpanded-1.0` into `TavernUI/libs/EditModeExpanded-1.0`. The library is used for Resource Bars Edit Mode integration (credit: Teelo).
 
 #### Troubleshooting
 

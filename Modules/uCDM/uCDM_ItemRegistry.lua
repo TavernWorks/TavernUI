@@ -581,8 +581,7 @@ function ItemRegistry._acquireCustomFrame(id, parent)
         cooldown:SetHideCountdownNumbers(false)
         frame.Cooldown = cooldown
 
-        local count = frame:CreateFontString(nil, "OVERLAY")
-        count:SetFont("Fonts\\FRIZQT__.TTF", 16, "OUTLINE")
+        local count = TavernUI:CreateFontString(frame, 16)
         count:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", 0, 0)
         frame.Count = count
     end

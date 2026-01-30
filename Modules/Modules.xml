@@ -2,4 +2,7 @@
 	<Script file="Options\Options.lua"/>
 	<Script file="ExtendedAnchorFrames\ExtendedAnchorFrames.lua"/>
 	<Include file="uCDM\uCDM.xml"/>
+	<Include file="ResourceBars\ResourceBars.xml"/>
+	<Include file="Skins\Skins.xml"/>
+	<Script file="QoL\QoL.lua"/>
 </Ui>

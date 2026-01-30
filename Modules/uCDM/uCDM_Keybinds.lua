@@ -25,7 +25,6 @@ local macroNameCache = {}
 local macroCacheBuilt = false
 
 local RANGE_INDICATOR = "●"
-local FONT_PATH = "Fonts\\FRIZQT__.TTF"
 
 --------------------------------------------------------------------------------
 -- Keybind Formatting
@@ -89,10 +88,21 @@ end
 
 local function BuildActionButtonCache()
     if actionButtonsCached then return end
-    
+
     cachedActionButtons = {}
-    
-    -- Standard action bars
+    local added = {}
+
+    for globalName, frame in pairs(_G) do
+        if type(globalName) == "string" and type(frame) == "table" and not added[frame] then
+            if type(frame.GetObjectType) == "function" and (frame.action or (frame.GetAction and type(frame.GetAction) == "function")) then
+                if globalName:match("ActionButton%d+$") or (globalName:match("Button%d+$") and globalName:match("Bar")) then
+                    cachedActionButtons[#cachedActionButtons + 1] = frame
+                    added[frame] = true
+                end
+            end
+        end
+    end
+
     local barPrefixes = {
         "ActionButton",
         "MultiBarBottomLeftButton",
@@ -104,38 +114,39 @@ local function BuildActionButtonCache()
     for _, prefix in ipairs(barPrefixes) do
         for i = 1, 12 do
             local button = _G[prefix .. i]
-            if button then
+            if button and not added[button] then
                 cachedActionButtons[#cachedActionButtons + 1] = button
+                added[button] = true
             end
         end
     end
-    
-    -- Bartender4
+
     for i = 1, 120 do
         local button = _G["BT4Button" .. i]
-        if button then
+        if button and not added[button] then
             cachedActionButtons[#cachedActionButtons + 1] = button
+            added[button] = true
         end
     end
-    
-    -- Dominos
+
     for i = 1, 120 do
         local button = _G["DominosActionButton" .. i]
-        if button then
+        if button and not added[button] then
             cachedActionButtons[#cachedActionButtons + 1] = button
+            added[button] = true
         end
     end
-    
-    -- ElvUI
+
     for bar = 1, 10 do
         for i = 1, 12 do
             local button = _G["ElvUI_Bar" .. bar .. "Button" .. i]
-            if button then
+            if button and not added[button] then
                 cachedActionButtons[#cachedActionButtons + 1] = button
+                added[button] = true
             end
         end
     end
-    
+
     actionButtonsCached = true
 end
 
@@ -167,7 +178,25 @@ local function GetKeybindFromActionButton(button)
         local key = GetBindingKey("CLICK " .. buttonName .. ":LeftButton")
         if key then return FormatKeybind(key) end
     end
-    
+
+    return nil
+end
+
+local function GetBindingCommandForActionSlot(slot)
+    if not slot or slot < 1 or slot > 120 then return nil end
+    if slot <= 12 then
+        return "ACTIONBUTTON" .. slot
+    end
+    local bar = math.floor((slot - 1) / 12)
+    local btn = ((slot - 1) % 12) + 1
+    return "MULTIACTIONBAR" .. bar .. "BUTTON" .. btn
+end
+
+local function GetKeybindFromActionSlot(slot)
+    local cmd = GetBindingCommandForActionSlot(slot)
+    if not cmd then return nil end
+    local key = GetBindingKey(cmd)
+    if key then return FormatKeybind(key) end
     return nil
 end
 
@@ -227,19 +256,52 @@ local function ParseMacroForSpells(macroIndex)
                     end
                 end
             end
+
+            -- #showspell / #show (display spell for macro icon/cooldown)
+            local showToken = nil
+            if lineLower:match("#showspell") then
+                showToken = line:match("#[sS][hH][oO][wW][sS][pP][eE][lL][lL]%s+(.+)")
+            elseif lineLower:match("^%s*#show%s+") and not lineLower:match("^%s*#showtooltip") then
+                showToken = line:match("#[sS][hH][oO][wW]%s+(.+)")
+            end
+            if showToken then
+                showToken = showToken:match("^%s*([^%s;/]+)")
+                if showToken and showToken ~= "" and showToken ~= "?" and showToken:lower() ~= "tooltip" and showToken:lower() ~= "spell" then
+                    local id = tonumber(showToken)
+                    if id then
+                        spellIDs[id] = true
+                        local spellInfo = C_Spell.GetSpellInfo(id)
+                        if spellInfo and spellInfo.name then
+                            spellNames[spellInfo.name:lower()] = true
+                        end
+                    else
+                        spellNames[showToken:lower()] = true
+                    end
+                end
+            end
             
             if spellName and spellName ~= "" and spellName ~= "?" then
-                spellName = spellName:match("^([^;/]+)")
-                if spellName then
-                    spellName = spellName:match("^%s*(.-)%s*$")
-                end
+                spellName = spellName:match("^%s*([^%s;/]+)")
                 if spellName and spellName ~= "" then
-                    spellNames[spellName:lower()] = true
+                    local id = tonumber(spellName)
+                    if id then
+                        spellIDs[id] = true
+                        local spellInfo = C_Spell.GetSpellInfo(id)
+                        if spellInfo and spellInfo.name then
+                            spellNames[spellInfo.name:lower()] = true
+                        end
+                    else
+                        spellNames[spellName:lower()] = true
+                        local spellInfo = C_Spell.GetSpellInfo(spellName)
+                        if spellInfo and spellInfo.spellID then
+                            spellIDs[spellInfo.spellID] = true
+                        end
+                    end
                 end
             end
         end
     end
-    
+
     return spellIDs, spellNames
 end
 
@@ -288,7 +350,7 @@ local function ProcessActionButton(button)
     local ok, actionType, id = pcall(GetActionInfo, action)
     if not ok or not actionType then return end
 
-    local keybind = GetKeybindFromActionButton(button)
+    local keybind = GetKeybindFromActionButton(button) or GetKeybindFromActionSlot(action)
     if keybind then
         if actionType == "spell" and id then
             if not spellToKeybind[id] then
@@ -303,13 +365,25 @@ local function ProcessActionButton(button)
                 spellToKeybind[id] = keybind
             end
         elseif actionType == "macro" and id then
-            local spellIDs, spellNames = ParseMacroForSpells(id)
-            for spellID in pairs(spellIDs) do
+            local macroSpellIDs, macroSpellNames = ParseMacroForSpells(id)
+            if not next(macroSpellIDs) and not next(macroSpellNames) then
+                local actionText = GetActionText and GetActionText(action)
+                if actionText and actionText ~= "" then
+                    for i = 1, 138 do
+                        local mName = GetMacroInfo(i)
+                        if mName and mName:lower() == actionText:lower() then
+                            macroSpellIDs, macroSpellNames = ParseMacroForSpells(i)
+                            break
+                        end
+                    end
+                end
+            end
+            for spellID in pairs(macroSpellIDs) do
                 if not spellToKeybind[spellID] then
                     spellToKeybind[spellID] = keybind
                 end
             end
-            for spellName in pairs(spellNames) do
+            for spellName in pairs(macroSpellNames) do
                 if not spellNameToKeybind[spellName] then
                     spellNameToKeybind[spellName] = keybind
                 end
@@ -430,13 +504,11 @@ function Keybinds.UpdateItem(item)
         end
     end
     
-    -- Create or update keybind text
     if not frame._ucdmKeybindText then
-        frame._ucdmKeybindText = frame:CreateFontString(nil, "OVERLAY")
+        frame._ucdmKeybindText = TavernUI:CreateFontString(frame, settings.keybindSize or CONSTANTS.DEFAULT_KEYBIND_SIZE)
     end
-    
     local keybindText = frame._ucdmKeybindText
-    keybindText:SetFont(FONT_PATH, settings.keybindSize or CONSTANTS.DEFAULT_KEYBIND_SIZE, "OUTLINE")
+    TavernUI:ApplyFont(keybindText, frame, settings.keybindSize or CONSTANTS.DEFAULT_KEYBIND_SIZE)
     
     local bindPoint = frame
     if frame.Icon then

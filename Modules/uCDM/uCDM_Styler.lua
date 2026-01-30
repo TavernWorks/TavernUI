@@ -14,8 +14,6 @@ local CONSTANTS = {
 local pendingStyling = {}
 local setupDone = {}
 
-local FONT_PATH = "Fonts\\FRIZQT__.TTF"
-
 function Styler.RefreshViewer(viewerKey)
     local settings = module:GetViewerSettings(viewerKey)
     if not settings then return end
@@ -335,7 +333,7 @@ function Styler.ApplyTextStyle(frame, config)
         local cooldown = frame.Cooldown or frame.cooldown
         if cooldown then
             if cooldown.text then
-                cooldown.text:SetFont(FONT_PATH, durationSize, "OUTLINE")
+                TavernUI:ApplyFont(cooldown.text, frame, durationSize)
                 SetFontStringPoint(cooldown.text, durationPoint, frame, durationPoint, durationOffsetX, durationOffsetY)
             end
             local success, regions = pcall(function() return { cooldown:GetRegions() } end)
@@ -344,7 +342,7 @@ function Styler.ApplyTextStyle(frame, config)
             elseif regions then
                 for _, region in ipairs(regions) do
                     if region and region.GetObjectType and region:GetObjectType() == "FontString" then
-                        region:SetFont(FONT_PATH, durationSize, "OUTLINE")
+                        TavernUI:ApplyFont(region, frame, durationSize)
                         SetFontStringPoint(region, durationPoint, frame, durationPoint, durationOffsetX, durationOffsetY)
                     end
                 end
@@ -357,14 +355,14 @@ function Styler.ApplyTextStyle(frame, config)
         if chargeFrame then
             local fs = chargeFrame.Current or chargeFrame.Count or chargeFrame.count
             if fs then
-                fs:SetFont(FONT_PATH, stackSize, "OUTLINE")
+                TavernUI:ApplyFont(fs, frame, stackSize)
                 SetFontStringPoint(fs, stackPoint, frame, stackPoint, stackOffsetX, stackOffsetY)
             end
         end
         
         local countText = frame.Count or frame.count
         if countText then
-            countText:SetFont(FONT_PATH, stackSize, "OUTLINE")
+            TavernUI:ApplyFont(countText, frame, stackSize)
             SetFontStringPoint(countText, stackPoint, frame, stackPoint, stackOffsetX, stackOffsetY)
         end
     end

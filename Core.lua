@@ -24,6 +24,13 @@ TavernUI.defaults = {
         modules = {}, -- Individual module states (true/false), no wildcard
         general = {
             debug = false,
+            font = {
+                face = "",
+                size = 12,
+                flags = "OUTLINE",
+                pixelPerfect = true,
+                shadow = false,
+            },
         },
     },
     global = {},
@@ -104,6 +111,169 @@ end
 TavernUI:SetDefaultModulePrototype(TavernUI.modulePrototype)
 TavernUI:SetDefaultModuleState(false) -- Modules disabled by default, we control enabling
 
+function TavernUI:GetPixelSize(region, physicalPixels, direction)
+    if not region or not physicalPixels or physicalPixels <= 0 then
+        return physicalPixels or 0
+    end
+    if PixelUtil and PixelUtil.GetNearestPixelSize then
+        local scale = region.GetEffectiveScale and region:GetEffectiveScale()
+        if scale and scale > 0 then
+            return PixelUtil.GetNearestPixelSize(physicalPixels, scale, direction or 0)
+        end
+    end
+    return physicalPixels
+end
+
+function TavernUI:GetTexturePath(key, mediaType, default)
+    if not key or key == "" then
+        return default or "Interface\\Buttons\\WHITE8x8"
+    end
+    local LSM = LibStub("LibSharedMedia-3.0", true)
+    if LSM then
+        local path = LSM:Fetch(mediaType or "statusbar", key)
+        if path then return path end
+    end
+    if type(key) == "string" then
+        return key
+    end
+    return default or "Interface\\Buttons\\WHITE8x8"
+end
+
+local DEFAULT_FONT_PATH = "Fonts\\FRIZQT__.TTF"
+
+function TavernUI:GetFontPath(key, default)
+    local path = default or DEFAULT_FONT_PATH
+    if key == nil and self.db and self.db.profile and self.db.profile.general and self.db.profile.general.font then
+        key = self.db.profile.general.font.face
+    end
+    if not key or key == "" then
+        return path
+    end
+    local LSM = LibStub("LibSharedMedia-3.0", true)
+    if LSM then
+        local fetched = LSM:Fetch("font", key)
+        if fetched then return fetched end
+    end
+    if type(key) == "string" and key:match("\\") then
+        return key
+    end
+    return path
+end
+
+function TavernUI:GetFontSize(default)
+    if not self.db or not self.db.profile or not self.db.profile.general or not self.db.profile.general.font then
+        return default or 12
+    end
+    local size = self.db.profile.general.font.size
+    return (type(size) == "number" and size > 0) and size or (default or 12)
+end
+
+function TavernUI:GetFontFlags()
+    if not self.db or not self.db.profile or not self.db.profile.general or not self.db.profile.general.font then
+        return "OUTLINE"
+    end
+    local flags = self.db.profile.general.font.flags
+    return (type(flags) == "string" and flags ~= "") and flags or "OUTLINE"
+end
+
+function TavernUI:GetFontSizeForRegion(region, requestedSize)
+    local size = (type(requestedSize) == "number" and requestedSize > 0) and requestedSize or self:GetFontSize(12)
+    if not region then return size end
+    if not self.db or not self.db.profile or not self.db.profile.general or not self.db.profile.general.font then
+        return size
+    end
+    if not self.db.profile.general.font.pixelPerfect then return size end
+    local scale = (region.GetEffectiveScale and region:GetEffectiveScale()) or (UIParent and UIParent.GetEffectiveScale and UIParent:GetEffectiveScale()) or 1
+    if not scale or scale <= 0 then return size end
+    return math.floor(size / scale + 0.5) * scale
+end
+
+function TavernUI:GetFontShadow()
+    if not self.db or not self.db.profile or not self.db.profile.general or not self.db.profile.general.font then
+        return false
+    end
+    return self.db.profile.general.font.shadow == true
+end
+
+local function SetupPixelPerfectText(fontString, region, size, path, flags)
+    local scale = (region and region.GetEffectiveScale and region:GetEffectiveScale()) or (UIParent and UIParent.GetEffectiveScale and UIParent:GetEffectiveScale()) or 1
+    if not scale or scale <= 0 then return end
+    local pixelSize = math.floor(size / scale + 0.5) * scale
+    fontString:SetFont(path, pixelSize, flags)
+    if PixelUtil and PixelUtil.GetNearestPixelSize and fontString.GetPoint and fontString.ClearAllPoints and fontString.SetPoint then
+        local point, relativeTo, relativePoint, x, y = fontString:GetPoint(1)
+        if point and x and y and relativeTo == region then
+            local ok, px, py = pcall(function()
+                return PixelUtil.GetNearestPixelSize(x, scale, 0), PixelUtil.GetNearestPixelSize(y, scale, 1)
+            end)
+            if ok and px and py then
+                fontString:ClearAllPoints()
+                fontString:SetPoint(point, relativeTo, relativePoint, px, py)
+            end
+        end
+    end
+end
+
+function TavernUI:ApplyFont(fontString, region, defaultSize)
+    if not fontString or not fontString.SetFont then return end
+    local size = (type(defaultSize) == "number" and defaultSize > 0) and defaultSize or self:GetFontSize(12)
+    local path = self:GetFontPath()
+    local flags = self:GetFontFlags()
+    local usePixelPerfect = self.db and self.db.profile and self.db.profile.general and self.db.profile.general.font and self.db.profile.general.font.pixelPerfect
+    if usePixelPerfect and (region or UIParent) then
+        SetupPixelPerfectText(fontString, region or UIParent, size, path, flags)
+    else
+        fontString:SetFont(path, size, flags)
+    end
+    if fontString.SetShadowColor and fontString.SetShadowOffset then
+        if self:GetFontShadow() then
+            fontString:SetShadowColor(0, 0, 0, 1)
+            fontString:SetShadowOffset(1, -1)
+        else
+            fontString:SetShadowOffset(0, 0)
+            fontString:SetShadowColor(0, 0, 0, 0)
+        end
+    end
+    if not self._fontStringRegistry then
+        self._fontStringRegistry = setmetatable({}, { __mode = "k" })
+    end
+    self._fontStringRegistry[fontString] = { region, defaultSize or 12 }
+end
+
+function TavernUI:RefreshAllFonts()
+    if not self._fontStringRegistry then return end
+    for fs, data in pairs(self._fontStringRegistry) do
+        if fs.SetFont then
+            self:ApplyFont(fs, data[1], data[2])
+        end
+    end
+end
+
+function TavernUI:CreateFontString(parent, defaultSize, name, layer, fontRegion)
+    if not parent or not parent.CreateFontString then return nil end
+    local fs = parent:CreateFontString(name, layer or "OVERLAY")
+    if not fs then return nil end
+    self:ApplyFont(fs, fontRegion or parent, defaultSize or 12)
+    return fs
+end
+
+function TavernUI:GetLSMMediaList(mediaType)
+    local LSM = LibStub("LibSharedMedia-3.0", true)
+    if not LSM then return {} end
+    return LSM:List(mediaType or "statusbar") or {}
+end
+
+function TavernUI:GetLSMMediaDropdownValues(mediaType, defaultKey, defaultLabel)
+    local values = {}
+    if defaultKey ~= nil then
+        values[defaultKey] = defaultLabel or ""
+    end
+    for _, key in ipairs(self:GetLSMMediaList(mediaType or "statusbar")) do
+        values[key] = key
+    end
+    return values
+end
+
 function TavernUI:Debug(...)
     if self.db and self.db.profile.general.debug then
         self:Print("|cff999999[Core]|r", ...)
@@ -146,6 +316,13 @@ end
 
 function TavernUI:OnEnable()
     self:RefreshModuleStates()
+    if not self._scaleFrame then
+        self._scaleFrame = CreateFrame("Frame")
+        self._scaleFrame:RegisterEvent("UI_SCALE_CHANGED")
+        self._scaleFrame:SetScript("OnEvent", function()
+            TavernUI:RefreshAllFonts()
+        end)
+    end
     self:SendMessage("TavernUI_CoreEnabled")
     self:Print(string.format("|cff00ff00TavernUI|r v%s loaded!", self.version))
 end
@@ -210,9 +387,9 @@ function TavernUI:IsModuleEnabled(moduleName)
 end
 
 function TavernUI:RefreshConfig()
-    -- Notify modules first so they can update their state
     self:SendMessage("TavernUI_ProfileChanged")
     self:RefreshModuleStates()
+    self:RefreshAllFonts()
     self:Debug("Profile refreshed")
 end
 
@@ -234,6 +411,121 @@ function TavernUI:GetOptions()
                             get = function() return self.db.profile.general.debug end,
                             set = function(_, value) self.db.profile.general.debug = value end,
                             order = 10,
+                        },
+                        font = {
+                            type = "group",
+                            name = "Font",
+                            desc = "Changing font may require a /reload to take full effect.",
+                            order = 20,
+                            args = {
+                                fontReloadWarning = {
+                                    type = "description",
+                                    name = "|cffffcc00Changing font face or style may require a /reload to take full effect.|r",
+                                    order = 0,
+                                },
+                                face = {
+                                    type = "select",
+                                    name = "Font Face",
+                                    desc = "Font used for TavernUI text (LibSharedMedia). Affects addon-wide text when modules use the global font.",
+                                    values = function()
+                                        return self:GetLSMMediaDropdownValues("font", "", "Default (Game)")
+                                    end,
+                                    get = function()
+                                        local g = self.db.profile.general
+                                        local v = g.font and g.font.face
+                                        return (v ~= nil and v ~= "") and v or ""
+                                    end,
+                                    set = function(_, value)
+                                        if not self.db.profile.general.font then
+                                            self.db.profile.general.font = { face = "", size = 12, flags = "OUTLINE", pixelPerfect = true, shadow = false }
+                                        end
+                                        self.db.profile.general.font.face = (value ~= nil and value ~= "") and value or ""
+                                        self:RefreshAllFonts()
+                                    end,
+                                    order = 10,
+                                },
+                                size = {
+                                    type = "range",
+                                    name = "Font Size",
+                                    desc = "Default font size for TavernUI text (used when modules reference the global font).",
+                                    min = 6,
+                                    max = 24,
+                                    step = 1,
+                                    get = function()
+                                        local g = self.db.profile.general
+                                        local v = g.font and g.font.size
+                                        return (type(v) == "number" and v >= 6 and v <= 24) and v or 12
+                                    end,
+                                    set = function(_, value)
+                                        if not self.db.profile.general.font then
+                                            self.db.profile.general.font = { face = "", size = 12, flags = "OUTLINE", pixelPerfect = true, shadow = false }
+                                        end
+                                        self.db.profile.general.font.size = (type(value) == "number" and value >= 6 and value <= 24) and value or 12
+                                        self:RefreshAllFonts()
+                                    end,
+                                    order = 20,
+                                },
+                                flags = {
+                                    type = "select",
+                                    name = "Outline",
+                                    desc = "Font outline / style (Blizzard-style). Outline + Monochrome gives crisp text.",
+                                    values = {
+                                        [""] = "None",
+                                        ["OUTLINE"] = "Outline",
+                                        ["THICKOUTLINE"] = "Thick Outline",
+                                        ["MONOCHROME"] = "Monochrome",
+                                        ["OUTLINE,MONOCHROME"] = "Outline + Monochrome",
+                                    },
+                                    get = function()
+                                        local g = self.db.profile.general
+                                        local v = g.font and g.font.flags
+                                        return (type(v) == "string") and v or "OUTLINE"
+                                    end,
+                                    set = function(_, value)
+                                        if not self.db.profile.general.font then
+                                            self.db.profile.general.font = { face = "", size = 12, flags = "OUTLINE", pixelPerfect = true, shadow = false }
+                                        end
+                                        self.db.profile.general.font.flags = (type(value) == "string") and value or "OUTLINE"
+                                        self:RefreshAllFonts()
+                                    end,
+                                    order = 30,
+                                },
+                                shadow = {
+                                    type = "toggle",
+                                    name = "Text Shadow",
+                                    desc = "Draw a drop shadow behind text. Some prefer this over outline.",
+                                    get = function()
+                                        local g = self.db.profile.general
+                                        return g.font and g.font.shadow == true
+                                    end,
+                                    set = function(_, value)
+                                        if not self.db.profile.general.font then
+                                            self.db.profile.general.font = { face = "", size = 12, flags = "OUTLINE", pixelPerfect = true, shadow = false }
+                                        end
+                                        self.db.profile.general.font.shadow = value == true
+                                        self:RefreshAllFonts()
+                                    end,
+                                    order = 35,
+                                },
+                                pixelPerfect = {
+                                    type = "toggle",
+                                    name = "Pixel Perfect Size",
+                                    desc = "Snap font height to pixel grid (Blizzard PixelUtil). Makes text look crisp at various UI scales.",
+                                    get = function()
+                                        local g = self.db.profile.general
+                                        local v = g.font and g.font.pixelPerfect
+                                        return v == nil or v == true
+                                    end,
+                                    set = function(_, value)
+                                        if not self.db.profile.general.font then
+                                            self.db.profile.general.font = { face = "", size = 12, flags = "OUTLINE", pixelPerfect = true, shadow = false }
+                                        end
+                                        self.db.profile.general.font.pixelPerfect = value
+                                        self:RefreshAllFonts()
+                                    end,
+                                    order = 40,
+                                },
+                            },
                         },
                     },
                 },

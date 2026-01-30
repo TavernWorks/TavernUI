@@ -1,0 +1,6 @@
+## Interface: 120000
+## Title: TavernUI - QoL
+## Notes: Quality of life: auto repair (guild/player priority), auto sell junk, loot options
+## Dependencies: TavernUI
+
+QoL.lua

@@ -13,16 +13,14 @@
 	<Include file="libs\AceEvent-3.0\AceEvent-3.0.xml"/>
 	<Include file="libs\AceConsole-3.0\AceConsole-3.0.xml"/>
 	<Include file="libs\AceConfig-3.0\AceConfig-3.0.xml"/>
-	
+	<Include file="libs\AceLocale-3.0\AceLocale-3.0.xml"/>
+
 	<!-- oUF (unit frame library) - must use XML to load in correct order -->
 	<Include file="libs\oUF\oUF.xml"/>
 
     	<!-- LibAnchorRegistry-1.0 (inter-addon frame anchoring system) -->
 	<Script file="libs\LibAnchorRegistry-1.0\LibAnchorRegistry-1.0.lua"/>
-	
-	<!-- LibDogTag-3.0 (base library for dynamic text tags) -->
-	<Include file="libs\LibDogTag-3.0\lib.xml"/>
-	
-	<!-- LibDogTag-Unit-3.0 (unit extension, depends on LibDogTag-3.0) -->
-	<Include file="libs\LibDogTag-Unit-3.0\lib.xml"/>
+
+	<!-- LibEditMode (Edit Mode integration for resource bars) -->
+	<Include file="libs\LibEditMode\embed.xml"/>
 </Ui>

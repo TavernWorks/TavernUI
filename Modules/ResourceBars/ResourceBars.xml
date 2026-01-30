@@ -1,0 +1,26 @@
+<Ui xmlns="http://www.blizzard.com/wow/ui/" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.blizzard.com/wow/ui/ ..\FrameXML\UI.xsd">
+    <!-- Core module -->
+    <Script file="ResourceBars.lua"/>
+    <Script file="ResourceBars_Data.lua"/>
+    
+    <!-- Providers -->
+    <Script file="ResourceBars_Providers.lua"/>
+    
+    <!-- Color modes and gradient -->
+    <Script file="ResourceBars_ColorModes.lua"/>
+    
+    <!-- Throttling -->
+    <Script file="ResourceBars_Throttle.lua"/>
+    
+    <!-- Bar widgets and factory -->
+    <Script file="ResourceBars_Bar.lua"/>
+    
+    <!-- Anchoring -->
+    <Script file="ResourceBars_Anchoring.lua"/>
+    
+    <!-- Bar text -->
+    <Script file="ResourceBars_Text.lua"/>
+    
+    <!-- Options -->
+    <Script file="ResourceBars_Options.lua"/>
+</Ui>

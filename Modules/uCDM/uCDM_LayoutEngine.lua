@@ -65,6 +65,11 @@ function LayoutEngine.Initialize()
                 LayoutEngine.RefreshViewer(viewerKey)
             end
         end)
+        module:WatchSetting(string.format("viewers.%s.rowSpacing", viewerKey), function()
+            if module:IsEnabled() then
+                LayoutEngine.RefreshViewer(viewerKey)
+            end
+        end)
     end
 
     module:WatchSetting("general.scaleFactor", function()
@@ -195,10 +200,12 @@ end
 -- Dimension Calculation (from row config capacity so viewer size is stable)
 --------------------------------------------------------------------------------
 
-local function CalculateDimensions(rowAssignments, rows)
+local function CalculateDimensions(viewer, rowAssignments, rows, viewerKey)
     local maxRowWidth = 0
     local totalHeight = 0
-    local rowGap = CONSTANTS.DEFAULT_ROW_GAP
+    local settings = viewerKey and module:GetViewerSettings(viewerKey) or nil
+    local rowSpacing = (settings and settings.rowSpacing ~= nil) and settings.rowSpacing or CONSTANTS.DEFAULT_ROW_GAP
+    local pxRowGap = viewer and TavernUI:GetPixelSize(viewer, rowSpacing, 1) or rowSpacing
     
     for rowNum, rowConfig in ipairs(rows) do
         local rowItems = rowAssignments[rowNum] or {}
@@ -206,16 +213,20 @@ local function CalculateDimensions(rowAssignments, rows)
         local iconSize = rowConfig.iconSize
         local aspectRatio = rowConfig.aspectRatioCrop
         local iconHeight = iconSize / aspectRatio
+        local padding = rowConfig.padding or 0
         local keepHeight = rowConfig.keepRowHeightWhenEmpty
         
         if actualIcons > 0 or keepHeight then
-            local rowWidth = rowConfig.iconCount * iconSize + (rowConfig.iconCount - 1) * rowConfig.padding
+            local pxIcon = viewer and TavernUI:GetPixelSize(viewer, iconSize, 0) or iconSize
+            local pxIconH = viewer and TavernUI:GetPixelSize(viewer, iconHeight, 1) or iconHeight
+            local pxPad = viewer and TavernUI:GetPixelSize(viewer, padding, 0) or padding
+            local rowWidth = rowConfig.iconCount * pxIcon + (rowConfig.iconCount - 1) * pxPad
             maxRowWidth = math.max(maxRowWidth, rowWidth)
-            totalHeight = totalHeight + iconHeight + (rowNum > 1 and rowGap or 0)
+            totalHeight = totalHeight + pxIconH + (rowNum > 1 and pxRowGap or 0)
         end
     end
     
-    return maxRowWidth, totalHeight, rowGap
+    return maxRowWidth, totalHeight, pxRowGap
 end
 
 --------------------------------------------------------------------------------
@@ -223,10 +234,10 @@ end
 --------------------------------------------------------------------------------
 
 local function ApplyRowBorder(viewer, rowNum, rowConfig, rowWidth, rowHeight, rowCenterY)
-    local borderSize = rowConfig.rowBorderSize or 0
+    local rawBorderSize = rowConfig.rowBorderSize or 0
     local borderKey = "__ucdmRowBorder" .. rowNum
     
-    if borderSize <= 0 then
+    if rawBorderSize <= 0 then
         if viewer[borderKey] then
             viewer[borderKey]:Hide()
         end
@@ -237,6 +248,7 @@ local function ApplyRowBorder(viewer, rowNum, rowConfig, rowWidth, rowHeight, ro
         viewer[borderKey] = viewer:CreateTexture(nil, "BACKGROUND", nil, -7)
     end
     
+    local borderSize = TavernUI:GetPixelSize(viewer, rawBorderSize, 0)
     local border = viewer[borderKey]
     local halfWidth = rowWidth / 2
     local halfHeight = rowHeight / 2
@@ -253,7 +265,7 @@ local function ApplyLayout(viewer, rowAssignments, rows, viewerKey)
     local settings = module:GetViewerSettings(viewerKey)
     local growDirection = (settings and settings.rowGrowDirection) or "down"
     
-    local maxRowWidth, totalHeight, rowGap = CalculateDimensions(rowAssignments, rows)
+    local maxRowWidth, totalHeight, rowGap = CalculateDimensions(viewer, rowAssignments, rows, viewerKey)
     
     -- Hide all row borders first to prevent artifacts
     for rowNum = 1, #rows do
@@ -274,37 +286,39 @@ local function ApplyLayout(viewer, rowAssignments, rows, viewerKey)
         local iconSize = rowConfig.iconSize
         local aspectRatio = rowConfig.aspectRatioCrop
         local iconHeight = iconSize / aspectRatio
-        local padding = rowConfig.padding
+        local padding = rowConfig.padding or 0
+        local pxIcon = TavernUI:GetPixelSize(viewer, iconSize, 0)
+        local pxIconH = TavernUI:GetPixelSize(viewer, iconHeight, 1)
+        local pxPad = TavernUI:GetPixelSize(viewer, padding, 0)
         
         if actualIcons > 0 or keepHeight then
-            local rowWidth = rowConfig.iconCount * iconSize + (rowConfig.iconCount - 1) * padding
-            
+            local rowWidth = rowConfig.iconCount * pxIcon + (rowConfig.iconCount - 1) * pxPad
+            local yOffset = rowConfig.yOffset or 0
             local rowCenterY = (growDirection == "up")
-                and (currentY + iconHeight / 2 + (rowConfig.yOffset or 0))
-                or (currentY - iconHeight / 2 + (rowConfig.yOffset or 0))
+                and (currentY + pxIconH / 2 + yOffset)
+                or (currentY - pxIconH / 2 + yOffset)
             
             if actualIcons > 0 then
-                local actualBlockWidth = actualIcons * iconSize + (actualIcons - 1) * padding
-                local startX = -actualBlockWidth / 2 + iconSize / 2
+                local actualBlockWidth = actualIcons * pxIcon + (actualIcons - 1) * pxPad
+                local startX = -actualBlockWidth / 2 + pxIcon / 2
                 for col, item in ipairs(rowItems) do
                     local frame = item.frame
                     if frame then
-                        local offsetX = startX + (col - 1) * (iconSize + padding)
+                        local offsetX = startX + (col - 1) * (pxIcon + pxPad)
                         frame:SetParent(viewer)
                         frame:ClearAllPoints()
                         frame:SetPoint("CENTER", viewer, "CENTER", offsetX, rowCenterY)
 
-                        -- Let the item style itself with this row's config
                         item:applyStyle(rowConfig)
 
                         if item.source == "custom" then
                             frame:SetScale(viewer.iconScale or 1)
-                            local cellW = iconSize + 2 * padding
-                            local cellH = iconHeight + 2 * padding
+                            local cellW = pxIcon + 2 * pxPad
+                            local cellH = pxIconH + 2 * pxPad
                             frame:SetSize(cellW, cellH)
                             if frame.Icon then
                                 frame.Icon:ClearAllPoints()
-                                frame.Icon:SetSize(iconSize, iconHeight)
+                                frame.Icon:SetSize(pxIcon, pxIconH)
                                 frame.Icon:SetPoint("CENTER", frame, "CENTER", 0, 0)
                                 if frame.IconMask then
                                     frame.IconMask:ClearAllPoints()
@@ -313,7 +327,7 @@ local function ApplyLayout(viewer, rowAssignments, rows, viewerKey)
                             end
                             if frame.Cooldown then
                                 frame.Cooldown:ClearAllPoints()
-                                frame.Cooldown:SetSize(iconSize, iconHeight)
+                                frame.Cooldown:SetSize(pxIcon, pxIconH)
                                 frame.Cooldown:SetPoint("CENTER", frame, "CENTER", 0, 0)
                             end
                         end
@@ -323,14 +337,12 @@ local function ApplyLayout(viewer, rowAssignments, rows, viewerKey)
                 end
             end
             
-            -- Apply row border
-            ApplyRowBorder(viewer, rowNum, rowConfig, rowWidth, iconHeight, rowCenterY)
+            ApplyRowBorder(viewer, rowNum, rowConfig, rowWidth, pxIconH, rowCenterY)
             
-            -- Advance to next row
             if growDirection == "up" then
-                currentY = currentY + iconHeight + rowGap
+                currentY = currentY + pxIconH + rowGap
             else
-                currentY = currentY - iconHeight - rowGap
+                currentY = currentY - pxIconH - rowGap
             end
         end
     end
