@@ -1,5 +1,8 @@
 TavernUI Changelog
 ==================
+v1.0.0-beta-5a (2026-01-29)
+ - Fix keybind error, that breaks the layout. Blizz / BT4 with assisted highlight
+
 v1.0.0-beta-5 (2026-01-29)
  - Fix layout jumps and swing timer / cooldown artifacts
 
