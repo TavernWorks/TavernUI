@@ -4,5 +4,6 @@
 	<Include file="uCDM\uCDM.xml"/>
 	<Include file="ResourceBars\ResourceBars.xml"/>
 	<Include file="Skins\Skins.xml"/>
+	<Include file="CursorCrosshair\CursorCrosshair.xml"/>
 	<Script file="QoL\QoL.lua"/>
 </Ui>
