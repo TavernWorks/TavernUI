@@ -5,7 +5,6 @@ local Bar = {}
 
 local DEFAULT_SEGMENT_TEXTURE = "Interface\\TargetingFrame\\UI-StatusBar"
 local DEFAULT_BACKGROUND_TEXTURE = "Interface\\Buttons\\WHITE8x8"
-local SEGMENTED_PARENT_PADDING = 5
 
 local function GetSegmentTexturePath(config)
     local key = config and config.segmentTexture
@@ -289,13 +288,16 @@ local function CreateSegmentedBar(barId, config)
         local border = config.segmentBorder
         local borderInset = (border and border.enabled and type(border.size) == "number" and border.size >= 0) and TavernUI:GetPixelSize(self, border.size, 0) or 0
         local borderPadding = 2 * borderInset
-        local parentPadding = TavernUI:GetPixelSize(self, SEGMENTED_PARENT_PADDING, 0)
-        local inset = parentPadding + borderPadding
-        local segmentWidthPx = TavernUI:GetPixelSize(self, (type(config.segmentWidth) == "number" and config.segmentWidth > 0) and config.segmentWidth or 50, 0)
-        local segmentHeightPx = TavernUI:GetPixelSize(self, (type(config.segmentHeight) == "number" and config.segmentHeight > 0) and config.segmentHeight or 20, 1)
-        local contentW = max * segmentWidthPx + (max - 1) * gapPx
-        local contentH = segmentHeightPx
-        
+        local inset = borderPadding
+        local parentWidthPx = TavernUI:GetPixelSize(self, (type(config.width) == "number" and config.width > 0) and config.width or 200, 0)
+        local parentHeightPx = TavernUI:GetPixelSize(self, (type(config.height) == "number" and config.height > 0) and config.height or 20, 1)
+        local contentW = parentWidthPx - 2 * inset
+        local contentH = parentHeightPx - 2 * inset
+        local segmentWidthPx = (max > 0) and math.max(1, (contentW - (max - 1) * gapPx) / max) or 1
+        local segmentHeightPx = math.max(1, contentH)
+
+        self:SetSize(parentWidthPx, parentHeightPx)
+
         for i = 1, max do
             local segment = self.segments[i]
             if not segment then
@@ -349,11 +351,7 @@ local function CreateSegmentedBar(barId, config)
             
             segment:Show()
         end
-        
-        local totalWidth = contentW + 2 * inset
-        local totalHeight = contentH + 2 * inset
-        self:SetSize(totalWidth, totalHeight)
-        
+
         for i = max + 1, #self.segments do
             self.segments[i]:Hide()
         end

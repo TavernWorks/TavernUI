@@ -494,40 +494,40 @@ local function BuildBarOptions(barId)
             end,
         }
         order = order + 1
-        args.segmentSizeHeader = { type = "header", name = L["SEGMENT_SIZE"], order = order }
+        args.segmentSizeHeader = { type = "header", name = L["SIZE"], order = order }
         order = order + 1
-        args.segmentWidth = {
+        args.width = {
             type = "range",
-            name = L["SEGMENT_WIDTH"],
-            desc = L["WIDTH_OF_EACH_SEGMENT_DESC"],
+            name = L["WIDTH"],
+            desc = L["SEGMENTED_BAR_SIZE_DESC"],
             order = order,
-            min = 0,
-            max = 200,
+            min = 50,
+            max = 500,
             step = 1,
             get = function()
-                local v = GetEffectiveConfig(barId)[CONSTANTS.KEY_SEGMENT_WIDTH]
-                return (type(v) == "number" and v >= 0) and v or 50
+                local c = GetEffectiveConfig(barId)
+                return (type(c[CONSTANTS.KEY_WIDTH]) == "number") and c[CONSTANTS.KEY_WIDTH] or 200
             end,
             set = function(_, value)
-                SetBarSetting(barId, CONSTANTS.KEY_SEGMENT_WIDTH, (value and value > 0) and value or nil)
+                SetBarSetting(barId, CONSTANTS.KEY_WIDTH, value)
                 RefreshBar(barId)
             end,
         }
         order = order + 1
-        args.segmentHeight = {
+        args.height = {
             type = "range",
-            name = L["SEGMENT_HEIGHT"],
-            desc = L["HEIGHT_OF_EACH_SEGMENT_DESC"],
+            name = L["HEIGHT"],
+            desc = L["SEGMENTED_BAR_SIZE_DESC"],
             order = order,
-            min = 0,
+            min = 5,
             max = 100,
             step = 1,
             get = function()
-                local v = GetEffectiveConfig(barId)[CONSTANTS.KEY_SEGMENT_HEIGHT]
-                return (type(v) == "number" and v >= 0) and v or 20
+                local c = GetEffectiveConfig(barId)
+                return (type(c[CONSTANTS.KEY_HEIGHT]) == "number") and c[CONSTANTS.KEY_HEIGHT] or 20
             end,
             set = function(_, value)
-                SetBarSetting(barId, CONSTANTS.KEY_SEGMENT_HEIGHT, (value and value > 0) and value or nil)
+                SetBarSetting(barId, CONSTANTS.KEY_HEIGHT, value)
                 RefreshBar(barId)
             end,
         }
