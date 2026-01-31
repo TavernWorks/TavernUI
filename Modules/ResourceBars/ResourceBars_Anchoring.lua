@@ -95,6 +95,16 @@ local function GetEditModeLayoutPositions()
     return db.editModeLayoutPositions
 end
 
+function Anchoring:ClearLayoutPositionForBar(barId)
+    if not useLibEditMode or not LibEditMode or not LibEditMode.GetActiveLayoutName then return end
+    local layoutName = LibEditMode:GetActiveLayoutName()
+    if not layoutName then return end
+    local positions = GetEditModeLayoutPositions()
+    if not positions[layoutName] then return end
+    local key = module:IsSpecialResourceType(barId) and "SpecialResource" or (module:IsResourceBarType(barId) and "ResourceBar" or barId)
+    positions[layoutName][key] = nil
+end
+
 local function SetBarDraggable(barId, frame, enable)
     if not frame or not frame.SetMovable then return end
     if enable then
@@ -284,6 +294,20 @@ function Anchoring:RegisterBar(barId, frame)
             local positions = GetEditModeLayoutPositions()
             if not positions[layoutName] then positions[layoutName] = {} end
             positions[layoutName][key] = { point = point, x = x, y = y }
+            local config = module:GetBarConfig(id)
+            local ac = (config and config.anchorConfig and type(config.anchorConfig) == "table") and config.anchorConfig or {}
+            local newConfig = {
+                target = "UIParent",
+                point = point,
+                relativePoint = point,
+                offsetX = x,
+                offsetY = y,
+            }
+            SetBarAnchorConfig(id, newConfig)
+            positions[layoutName][key] = nil
+            if not module:IsResourceBarType(id) and not module:IsSpecialResourceType(id) then
+                Anchoring:ApplyAnchor(id)
+            end
         end, default, displayName)
         libEditModeRegisteredBars[barId] = true
         CreateEditOverlay(barId, frame)
@@ -465,6 +489,8 @@ local function OnEditModeSave()
             local current = GetBarPosition(barId)
             if current then
                 local target = (current.relativeToName and current.relativeToName ~= "") and current.relativeToName or "UIParent"
+                local config = module:GetBarConfig(barId)
+                local ac = (config and config.anchorConfig and type(config.anchorConfig) == "table") and config.anchorConfig or {}
                 SetBarAnchorConfig(barId, {
                     target = target,
                     point = current.point or "CENTER",
@@ -515,7 +541,37 @@ function Anchoring.RefreshBar(barId)
     end
 end
 
+local SCREEN_ANCHOR_NAME = "TavernUI.Screen"
+local screenAnchorFrame = nil
+local screenAnchorRegistered = false
+
+local function GetOrCreateScreenAnchorFrame()
+    if screenAnchorFrame then return screenAnchorFrame end
+    if not UIParent then return nil end
+    local f = CreateFrame("Frame", "TavernUI_ScreenAnchor", UIParent)
+    f:SetSize(10, 10)
+    f:SetPoint("CENTER", UIParent, "CENTER", 0, 0)
+    f:SetAlpha(0)
+    f:EnableMouse(false)
+    screenAnchorFrame = f
+    return f
+end
+
+local function RegisterScreenAnchor()
+    if not screenAnchorRegistered and Anchor then
+        local frame = GetOrCreateScreenAnchorFrame()
+        if frame then
+            Anchor:Register(SCREEN_ANCHOR_NAME, frame, {
+                displayName = "Screen",
+                category = "screen",
+            })
+            screenAnchorRegistered = true
+        end
+    end
+end
+
 function Anchoring:Initialize()
+    RegisterScreenAnchor()
     self:UpdateAnchors()
     HookEditMode()
 end
