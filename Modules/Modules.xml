@@ -3,6 +3,7 @@
 	<Script file="ExtendedAnchorFrames\ExtendedAnchorFrames.lua"/>
 	<Include file="uCDM\uCDM.xml"/>
 	<Include file="ResourceBars\ResourceBars.xml"/>
+	<Include file="Castbar\Castbar.xml"/>
 	<Include file="Skins\Skins.xml"/>
 	<Script file="QoL\QoL.lua"/>
 </Ui>
