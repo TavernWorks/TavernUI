@@ -182,6 +182,7 @@ local CATEGORY_DISPLAY_NAMES = {
     actionbars = "ACTION_BARS",
     bars = "BARS",
     resourcebars = "RESOURCE_BARS",
+    castbars = "CASTBARS",
     cooldowns = "COOLDOWNS",
     cdm = "CDM",
     ucdm = "UCDM_CATEGORY",
@@ -191,8 +192,8 @@ local CATEGORY_DISPLAY_NAMES = {
     misc = "MISC",
 }
 local CATEGORY_ORDER = {
-    screen = 0, actionbars = 1, bars = 2, resourcebars = 3, cooldowns = 4, cdm = 5, ucdm = 6,
-    unitframes = 7, TavernUI = 8, blizzard = 9, misc = 10,
+    screen = 0, actionbars = 1, bars = 2, resourcebars = 3, castbars = 4, cooldowns = 5, cdm = 6, ucdm = 7,
+    unitframes = 8, TavernUI = 9, blizzard = 10, misc = 11,
 }
 
 local function GetAvailableCategories(barId)

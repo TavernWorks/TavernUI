@@ -113,11 +113,26 @@ local function RegisterBTActionBars()
     end
 end
 
+local function RegisterBlizzardUnitFrames()
+    local unitFrames = {
+        { global = "TargetFrame", name = "Target Frame", anchor = "Blizzard.TargetFrame" },
+        { global = "FocusFrame", name = "Focus Frame", anchor = "Blizzard.FocusFrame" },
+    }
+
+    for _, info in ipairs(unitFrames) do
+        local frame = _G[info.global]
+        if frame then
+            RegisterFrame(info.anchor, frame, info.name, "unitframes")
+        end
+    end
+end
+
 local function RegisterAllFrames()
     if not module:IsEnabled() then return end
     if not Anchor then return end
-    
+
     RegisterBlizzardActionBars()
+    RegisterBlizzardUnitFrames()
     RegisterDominoesActionBars()
     RegisterBTActionBars()
 end
