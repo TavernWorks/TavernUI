@@ -60,7 +60,32 @@ local function GetAnchorConfig(barId)
     return GetBarSetting(barId, "anchorConfig", {}) or {}
 end
 
+local function MergeAnchorConfig(barId, overrides)
+    local c = GetAnchorConfig(barId)
+    if type(c) ~= "table" then c = {} end
+    return {
+        target = (overrides.target ~= nil) and overrides.target or c.target,
+        point = overrides.point or c.point or "CENTER",
+        relativePoint = overrides.relativePoint or c.relativePoint or "CENTER",
+        offsetX = (overrides.offsetX ~= nil) and overrides.offsetX or (type(c.offsetX) == "number" and c.offsetX or 0),
+        offsetY = (overrides.offsetY ~= nil) and overrides.offsetY or (type(c.offsetY) == "number" and c.offsetY or 0),
+    }
+end
+
 local function SetAnchorConfig(barId, anchorConfig)
+    if module.Anchoring and anchorConfig and anchorConfig.target and anchorConfig.target ~= "" then
+        if module:IsResourceBarType(barId) then
+            for _, rid in ipairs(module:GetResourceBarIds()) do
+                module.Anchoring:ClearLayoutPositionForBar(rid)
+            end
+        elseif module:IsSpecialResourceType(barId) then
+            for _, rid in ipairs(module:GetSpecialResourceBarIds()) do
+                module.Anchoring:ClearLayoutPositionForBar(rid)
+            end
+        else
+            module.Anchoring:ClearLayoutPositionForBar(barId)
+        end
+    end
     if module:IsResourceBarType(barId) then
         module:SetSetting("resourceBarAnchorConfig", anchorConfig)
         if not anchorConfig or not anchorConfig.target then
@@ -142,16 +167,10 @@ local function SetAnchorCategory(barId, value)
     else
         module:SetSetting(setCategoryPath, value)
         local cur = GetAnchorConfig(barId)
-        if cur and cur.target then
+            if cur and cur.target then
             local currentCategory = GetCategoryForAnchor(cur.target)
             if currentCategory ~= value then
-                SetAnchorConfig(barId, {
-                    target = nil,
-                    point = cur.point or "CENTER",
-                    relativePoint = cur.relativePoint or "CENTER",
-                    offsetX = cur.offsetX or 0,
-                    offsetY = cur.offsetY or 0,
-                })
+                SetAnchorConfig(barId, MergeAnchorConfig(barId, { target = nil }))
             end
         end
     end
@@ -159,6 +178,7 @@ local function SetAnchorCategory(barId, value)
 end
 
 local CATEGORY_DISPLAY_NAMES = {
+    screen = "SCREEN",
     actionbars = "ACTION_BARS",
     bars = "BARS",
     resourcebars = "RESOURCE_BARS",
@@ -171,7 +191,7 @@ local CATEGORY_DISPLAY_NAMES = {
     misc = "MISC",
 }
 local CATEGORY_ORDER = {
-    actionbars = 1, bars = 2, resourcebars = 3, cooldowns = 4, cdm = 5, ucdm = 6,
+    screen = 0, actionbars = 1, bars = 2, resourcebars = 3, cooldowns = 4, cdm = 5, ucdm = 6,
     unitframes = 7, TavernUI = 8, blizzard = 9, misc = 10,
 }
 
@@ -412,48 +432,48 @@ local function BuildBarOptions(barId)
     }
     order = order + 1
 
-    args.sizeHeader = { type = "header", name = L["SIZE"], order = order }
-    order = order + 1
-    args.width = {
-        type = "range",
-        name = L["WIDTH"],
-        desc = L["BAR_WIDTH_DESC"],
-        order = order,
-        min = 50,
-        max = 500,
-        step = 1,
-        get = function()
-            local c = GetEffectiveConfig(barId)
-            return (type(c[CONSTANTS.KEY_WIDTH]) == "number") and c[CONSTANTS.KEY_WIDTH] or 200
-        end,
-        set = function(_, value)
-            SetBarSetting(barId, CONSTANTS.KEY_WIDTH, value)
-            RefreshBar(barId)
-        end,
-    }
-    order = order + 1
-    
-    args.height = {
-        type = "range",
-        name = L["HEIGHT"],
-        desc = L["BAR_HEIGHT_DESC"],
-        order = order,
-        min = 5,
-        max = 100,
-        step = 1,
-        get = function()
-            local c = GetEffectiveConfig(barId)
-            return (type(c[CONSTANTS.KEY_HEIGHT]) == "number") and c[CONSTANTS.KEY_HEIGHT] or 14
-        end,
-        set = function(_, value)
-            SetBarSetting(barId, CONSTANTS.KEY_HEIGHT, value)
-            RefreshBar(barId)
-        end,
-    }
-    order = order + 1
-
     local function isSegmentedBar()
         return module:GetBarType(barId) == CONSTANTS.BAR_TYPE_SEGMENTED
+    end
+    if not isSegmentedBar() then
+        args.sizeHeader = { type = "header", name = L["SIZE"], order = order }
+        order = order + 1
+        args.width = {
+            type = "range",
+            name = L["WIDTH"],
+            desc = L["BAR_WIDTH_DESC"],
+            order = order,
+            min = 50,
+            max = 500,
+            step = 1,
+            get = function()
+                local c = GetEffectiveConfig(barId)
+                return (type(c[CONSTANTS.KEY_WIDTH]) == "number") and c[CONSTANTS.KEY_WIDTH] or 200
+            end,
+            set = function(_, value)
+                SetBarSetting(barId, CONSTANTS.KEY_WIDTH, value)
+                RefreshBar(barId)
+            end,
+        }
+        order = order + 1
+        args.height = {
+            type = "range",
+            name = L["HEIGHT"],
+            desc = L["BAR_HEIGHT_DESC"],
+            order = order,
+            min = 5,
+            max = 100,
+            step = 1,
+            get = function()
+                local c = GetEffectiveConfig(barId)
+                return (type(c[CONSTANTS.KEY_HEIGHT]) == "number") and c[CONSTANTS.KEY_HEIGHT] or 14
+            end,
+            set = function(_, value)
+                SetBarSetting(barId, CONSTANTS.KEY_HEIGHT, value)
+                RefreshBar(barId)
+            end,
+        }
+        order = order + 1
     end
     if isSegmentedBar() then
         args.segmentTextureHeader = { type = "header", name = L["SEGMENT_APPEARANCE"], order = order }
@@ -474,40 +494,58 @@ local function BuildBarOptions(barId)
             end,
         }
         order = order + 1
-        args.segmentSizeHeader = { type = "header", name = L["SEGMENT_SIZE"], order = order }
+        args.segmentSizeHeader = { type = "header", name = L["SIZE"], order = order }
         order = order + 1
-        args.segmentWidth = {
+        args.width = {
             type = "range",
-            name = L["SEGMENT_WIDTH"],
-            desc = L["WIDTH_OF_EACH_SEGMENT_DESC"],
+            name = L["WIDTH"],
+            desc = L["SEGMENTED_BAR_SIZE_DESC"],
             order = order,
-            min = 0,
-            max = 200,
+            min = 50,
+            max = 500,
             step = 1,
             get = function()
-                local v = GetEffectiveConfig(barId)[CONSTANTS.KEY_SEGMENT_WIDTH]
-                return (type(v) == "number" and v >= 0) and v or 50
+                local c = GetEffectiveConfig(barId)
+                return (type(c[CONSTANTS.KEY_WIDTH]) == "number") and c[CONSTANTS.KEY_WIDTH] or 200
             end,
             set = function(_, value)
-                SetBarSetting(barId, CONSTANTS.KEY_SEGMENT_WIDTH, (value and value > 0) and value or nil)
+                SetBarSetting(barId, CONSTANTS.KEY_WIDTH, value)
                 RefreshBar(barId)
             end,
         }
         order = order + 1
-        args.segmentHeight = {
+        args.height = {
             type = "range",
-            name = L["SEGMENT_HEIGHT"],
-            desc = L["HEIGHT_OF_EACH_SEGMENT_DESC"],
+            name = L["HEIGHT"],
+            desc = L["SEGMENTED_BAR_SIZE_DESC"],
             order = order,
-            min = 0,
+            min = 5,
             max = 100,
             step = 1,
             get = function()
-                local v = GetEffectiveConfig(barId)[CONSTANTS.KEY_SEGMENT_HEIGHT]
-                return (type(v) == "number" and v >= 0) and v or 20
+                local c = GetEffectiveConfig(barId)
+                return (type(c[CONSTANTS.KEY_HEIGHT]) == "number") and c[CONSTANTS.KEY_HEIGHT] or 20
             end,
             set = function(_, value)
-                SetBarSetting(barId, CONSTANTS.KEY_SEGMENT_HEIGHT, (value and value > 0) and value or nil)
+                SetBarSetting(barId, CONSTANTS.KEY_HEIGHT, value)
+                RefreshBar(barId)
+            end,
+        }
+        order = order + 1
+        args.segmentSpacing = {
+            type = "range",
+            name = L["SEGMENT_SPACING"],
+            desc = L["SEGMENT_SPACING_DESC"],
+            order = order,
+            min = -1,
+            max = 50,
+            step = 1,
+            get = function()
+                local v = GetEffectiveConfig(barId)[CONSTANTS.KEY_SEGMENT_SPACING]
+                return (type(v) == "number" and v >= -1) and v or 2
+            end,
+            set = function(_, value)
+                SetBarSetting(barId, CONSTANTS.KEY_SEGMENT_SPACING, (type(value) == "number" and value >= -1) and value or nil)
                 RefreshBar(barId)
             end,
         }
@@ -1083,14 +1121,7 @@ local function BuildBarOptions(barId)
                 SetAnchorConfig(barId, nil)
                 SetAnchorCategory(barId, "None")
             else
-                local newConfig = {
-                    target = value,
-                    point = anchorConfig.point or "CENTER",
-                    relativePoint = anchorConfig.relativePoint or "CENTER",
-                    offsetX = anchorConfig.offsetX or 0,
-                    offsetY = anchorConfig.offsetY or 0,
-                }
-                SetAnchorConfig(barId, newConfig)
+                SetAnchorConfig(barId, MergeAnchorConfig(barId, { target = value }))
                 local category = GetCategoryForAnchor(value)
                 if category then
                     if module:IsResourceBarType(barId) then
@@ -1129,15 +1160,7 @@ local function BuildBarOptions(barId)
             return (anchorConfig and anchorConfig.point) or "CENTER"
         end,
         set = function(_, value)
-            local cur = GetAnchorConfig(barId)
-            local anchorConfig = (cur and type(cur) == "table") and cur or {}
-            SetAnchorConfig(barId, {
-                target = anchorConfig.target,
-                point = value,
-                relativePoint = anchorConfig.relativePoint or "CENTER",
-                offsetX = anchorConfig.offsetX or 0,
-                offsetY = anchorConfig.offsetY or 0,
-            })
+            SetAnchorConfig(barId, MergeAnchorConfig(barId, { point = value }))
         end,
     }
     order = order + 1
@@ -1156,15 +1179,7 @@ local function BuildBarOptions(barId)
             return (anchorConfig and anchorConfig.relativePoint) or "CENTER"
         end,
         set = function(_, value)
-            local cur = GetAnchorConfig(barId)
-            local anchorConfig = (cur and type(cur) == "table") and cur or {}
-            SetAnchorConfig(barId, {
-                target = anchorConfig.target,
-                point = anchorConfig.point or "CENTER",
-                relativePoint = value,
-                offsetX = anchorConfig.offsetX or 0,
-                offsetY = anchorConfig.offsetY or 0,
-            })
+            SetAnchorConfig(barId, MergeAnchorConfig(barId, { relativePoint = value }))
         end,
     }
     order = order + 1
@@ -1185,15 +1200,7 @@ local function BuildBarOptions(barId)
             return (anchorConfig and type(anchorConfig.offsetX) == "number") and anchorConfig.offsetX or 0
         end,
         set = function(_, value)
-            local cur = GetAnchorConfig(barId)
-            local anchorConfig = (cur and type(cur) == "table") and cur or {}
-            SetAnchorConfig(barId, {
-                target = anchorConfig.target,
-                point = anchorConfig.point or "CENTER",
-                relativePoint = anchorConfig.relativePoint or "CENTER",
-                offsetX = value,
-                offsetY = anchorConfig.offsetY or 0,
-            })
+            SetAnchorConfig(barId, MergeAnchorConfig(barId, { offsetX = value }))
         end,
     }
     order = order + 1
@@ -1214,19 +1221,11 @@ local function BuildBarOptions(barId)
             return (anchorConfig and type(anchorConfig.offsetY) == "number") and anchorConfig.offsetY or 0
         end,
         set = function(_, value)
-            local cur = GetAnchorConfig(barId)
-            local anchorConfig = (cur and type(cur) == "table") and cur or {}
-            SetAnchorConfig(barId, {
-                target = anchorConfig.target,
-                point = anchorConfig.point or "CENTER",
-                relativePoint = anchorConfig.relativePoint or "CENTER",
-                offsetX = anchorConfig.offsetX or 0,
-                offsetY = value,
-            })
+            SetAnchorConfig(barId, MergeAnchorConfig(barId, { offsetY = value }))
         end,
     }
     order = order + 1
-    
+
     return args
 end
 

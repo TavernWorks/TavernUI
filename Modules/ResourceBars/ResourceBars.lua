@@ -27,6 +27,7 @@ local CONSTANTS = {
     KEY_SEGMENT_TEXTURE = "segmentTexture",
     KEY_SEGMENT_WIDTH = "segmentWidth",
     KEY_SEGMENT_HEIGHT = "segmentHeight",
+    KEY_SEGMENT_SPACING = "segmentSpacing",
     KEY_SEGMENT_BORDER = "segmentBorder",
     KEY_SEGMENT_BACKGROUND = "segmentBackground",
     KEY_BREAKPOINTS = "breakpoints",
@@ -49,12 +50,11 @@ local DEFAULT_BACKGROUND = { enabled = true, texture = nil, color = { r = 0, g =
 
 local DEFAULTS_SEGMENTED = {
     enabled = true,
-    width = 150,
-    height = 20,
     colorMode = CONSTANTS.COLOR_MODE_RESOURCE_TYPE,
     segmentTexture = nil,
-    segmentWidth = 50,
-    segmentHeight = 20,
+    width = 200,
+    height = 20,
+    segmentSpacing = 2,
     segmentBorder = { enabled = true, size = 1, color = { r = 0, g = 0, b = 0, a = 1 } },
     segmentBackground = { enabled = true, texture = nil, color = { r = 0, g = 0, b = 0, a = 0.5 } },
 }

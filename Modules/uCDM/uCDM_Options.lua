@@ -481,6 +481,7 @@ local function BuildAnchorOptions(viewerKey, orderBase)
             }
 
             local categoryDisplayNames = {
+                screen = L["SCREEN"],
                 actionbars = L["ACTION_BARS"],
                 bars = L["BARS"],
                 cooldowns = L["COOLDOWNS"],
