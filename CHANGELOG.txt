@@ -1,6 +1,10 @@
 TavernUI Changelog
 ==================
 
+v1.0.0-beta-6d (2026-01-31)
+ - Fix: Logging when auto selling grays 
+ - Fix: Druids can now have combo points in cat form
+
 v1.0.0-beta-6c (2026-01-31)
  - Change: Set your resource bar width, and it's segments will size accordingly.
 

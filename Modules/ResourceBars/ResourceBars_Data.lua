@@ -214,7 +214,7 @@ function Data:IsResourceRelevant(resourceId, class, spec, form)
     end
     
     if resourceId == "COMBO_POINTS" and class == CLASS_DRUID then
-        if form and form ~= 3 then
+        if form and form ~= 2 then
             return false
         end
     end
