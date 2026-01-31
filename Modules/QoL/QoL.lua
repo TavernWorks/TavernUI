@@ -240,7 +240,7 @@ function module:DoAutoRepair()
 
     if useGuild or GetMoney() >= cost then
         RepairAllItems(useGuild)
-        self:Print(GetCoinTextureString(cost) .. " " .. (useGuild and "(" .. GUILD .. ")" or ""))
+        TavernUI:Print(GetCoinTextureString(cost) .. " " .. (useGuild and "(" .. GUILD .. ")" or ""))
     end
 end
 
@@ -321,7 +321,7 @@ function module:SellJunk()
     local remaining = self:GetJunkValue()
     if remaining == 0 or count == 0 then
         if count > 0 and self.saleTotal and self.saleTotal > remaining then
-            self:Print(GetCoinTextureString(self.saleTotal - remaining) .. " from junk")
+            TavernUI:Print(GetCoinTextureString(self.saleTotal - remaining) .. " from junk")
         end
         self.saleTotal = nil
         self:UnregisterEvent("BAG_UPDATE_DELAYED")
@@ -488,7 +488,7 @@ function module:RestorePreviousFPSSettings()
     local L = LibStub("AceLocale-3.0"):GetLocale("TavernUI", true)
     local backup = self:GetSetting("fpsBackup")
     if not backup or type(backup) ~= "table" then
-        self:Print(L["NO_GRAPHICS_BACKUP"] or "No backup found. Apply FPS settings first to create a backup.")
+        TavernUI:Print(L["NO_GRAPHICS_BACKUP"] or "No backup found. Apply FPS settings first to create a backup.")
         return false
     end
     local successCount = 0
@@ -497,7 +497,7 @@ function module:RestorePreviousFPSSettings()
         if ok then successCount = successCount + 1 end
     end
     self:SetSetting("fpsBackup", nil)
-    self:Print(string.format(L["RESTORED_N_GRAPHICS_SETTINGS"] or "Restored %d previous settings.", successCount))
+    TavernUI:Print(string.format(L["RESTORED_N_GRAPHICS_SETTINGS"] or "Restored %d previous settings.", successCount))
     return true
 end
 
@@ -516,9 +516,9 @@ function module:ApplyQuaziiFPSSettings()
             failCount = failCount + 1
         end
     end
-    self:Print(L["PREVIOUS_SETTINGS_BACKED_UP"] or "Previous settings backed up. Applied FPS settings. Use Restore to revert.")
+    TavernUI:Print(L["PREVIOUS_SETTINGS_BACKED_UP"] or "Previous settings backed up. Applied FPS settings. Use Restore to revert.")
     if failCount > 0 then
-        self:Print(string.format(L["N_SETTINGS_COULD_NOT_BE_APPLIED"] or "%d settings could not be applied (may require restart).", failCount))
+        TavernUI:Print(string.format(L["N_SETTINGS_COULD_NOT_BE_APPLIED"] or "%d settings could not be applied (may require restart).", failCount))
     end
 end
 
