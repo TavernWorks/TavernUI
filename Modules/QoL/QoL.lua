@@ -124,6 +124,7 @@ end
 
 function module:ApplyScaleForResolution(width, height)
     local scale = GetScaleForHeight(height)
+    self:SetSetting("controlUIScale", true)
     self:SetSetting("uiScaleMode", "manual")
     self:SetSetting("uiScale", scale)
     self:ApplyUIScale()
@@ -137,6 +138,7 @@ local defaults = {
     speedyAutoLoot = false,
     autoConfirmBoP = false,
     fpsBackup = nil,
+    controlUIScale = false,
     uiScaleMode = "manual",
     uiScale = 1.0,
     hidePlayerFrame = false,
@@ -535,6 +537,9 @@ function module:CheckCVarsMatch()
 end
 
 function module:ApplyUIScale()
+    if not self:GetSetting("controlUIScale", false) then
+        return
+    end
     local mode = self:GetSetting("uiScaleMode", "manual")
     local scale
     if mode == "pixelperfect" then
@@ -717,6 +722,17 @@ function module:RegisterOptions()
                 name = L["UI_SCALE"],
                 order = 50,
                 args = {
+                    controlUIScale = {
+                        type = "toggle",
+                        name = L["CONTROL_UI_SCALE"],
+                        desc = L["CONTROL_UI_SCALE_DESC"],
+                        order = 0,
+                        get = function() return self:GetSetting("controlUIScale", false) end,
+                        set = function(_, v)
+                            self:SetSetting("controlUIScale", v)
+                            self:ApplyUIScale()
+                        end,
+                    },
                     uiScaleMode = {
                         type = "select",
                         name = L["SCALE_MODE"],
@@ -728,9 +744,11 @@ function module:RegisterOptions()
                         },
                         get = function() return self:GetSetting("uiScaleMode", "manual") end,
                         set = function(_, v)
+                            self:SetSetting("controlUIScale", true)
                             self:SetSetting("uiScaleMode", v)
                             self:ApplyUIScale()
                         end,
+                        disabled = function() return not self:GetSetting("controlUIScale", false) end,
                     },
                     uiScale = {
                         type = "range",
@@ -743,10 +761,14 @@ function module:RegisterOptions()
                         bigStep = 0.05,
                         get = function() return self:GetSetting("uiScale", 1.0) end,
                         set = function(_, v)
+                            self:SetSetting("controlUIScale", true)
                             self:SetSetting("uiScale", v)
                             self:ApplyUIScale()
                         end,
-                        disabled = function() return self:GetSetting("uiScaleMode", "manual") ~= "manual" end,
+                        disabled = function()
+                            return not self:GetSetting("controlUIScale", false)
+                                or self:GetSetting("uiScaleMode", "manual") ~= "manual"
+                        end,
                     },
                     uiScaleInfo = {
                         type = "description",

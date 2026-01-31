@@ -62,6 +62,8 @@ L["GRAPHICS_ALL_APPLIED"] = "Graphics: All applied"
 L["GRAPHICS_N_MATCH"] = "Graphics: %d/%d match"
 
 L["UI_SCALE"] = "UI Scale"
+L["CONTROL_UI_SCALE"] = "Control UI scale"
+L["CONTROL_UI_SCALE_DESC"] = "When enabled, TavernUI sets the game's UI scale. When disabled, your current scale is left unchanged."
 L["SCALE_MODE"] = "Scale Mode"
 L["SCALE_MODE_DESC"] = "Manual: use the scale slider. Pixel Perfect: 768/height formula (ElvUI-style)."
 L["MANUAL"] = "Manual"
