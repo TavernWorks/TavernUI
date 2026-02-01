@@ -150,6 +150,9 @@ function module:OnInitialize()
     if TavernUI.RegisterModuleOptions then
         self:RegisterOptions()
     end
+    self.playerFrameHiddenParent = CreateFrame("Frame", nil, UIParent)
+    self.playerFrameHiddenParent:SetAllPoints()
+    self.playerFrameHiddenParent:Hide()
 end
 
 function module:OnEnable()
@@ -168,15 +171,28 @@ function module:OnEnable()
 end
 
 function module:OnDisable()
+    if PlayerFrame and not InCombatLockdown() then
+        PlayerFrame:SetParent(UIParent)
+    elseif PlayerFrame then
+        self.pendingFrameHiderRestore = true
+    end
     self:UnregisterAllEvents()
+    if self.pendingFrameHiderRestore then
+        self:RegisterEvent("PLAYER_REGEN_ENABLED", "OnDisableRestorePlayerFrame")
+    end
     self.saleTotal = nil
     self:CancelLootTicker()
     if self.bopFrame then
         self.bopFrame:UnregisterEvent("LOOT_BIND_CONFIRM")
         self.bopFrame:SetScript("OnEvent", nil)
     end
+end
+
+function module:OnDisableRestorePlayerFrame()
+    self:UnregisterEvent("PLAYER_REGEN_ENABLED", "OnDisableRestorePlayerFrame")
+    self.pendingFrameHiderRestore = nil
     if PlayerFrame then
-        PlayerFrame:SetShown(true)
+        PlayerFrame:SetParent(UIParent)
     end
 end
 
@@ -192,7 +208,38 @@ end
 
 function module:ApplyFrameHider()
     if not PlayerFrame then return end
-    PlayerFrame:SetShown(not self:GetSetting("hidePlayerFrame", false))
+    if InCombatLockdown() then
+        if not self.pendingFrameHiderApply then
+            self.pendingFrameHiderApply = true
+            self:RegisterEvent("PLAYER_REGEN_ENABLED", "ApplyFrameHiderDeferred")
+        end
+        return
+    end
+    local hide = self:GetSetting("hidePlayerFrame", false)
+    if hide then
+        if not self.playerFrameSetParentHook then
+            self.playerFrameSetParentHook = true
+            hooksecurefunc(PlayerFrame, "SetParent", function(frame, parent)
+                if parent ~= module.playerFrameHiddenParent and module:IsEnabled() and module:GetSetting("hidePlayerFrame", false) then
+                    if InCombatLockdown() and frame:IsProtected() then
+                        module.pendingFrameHiderApply = true
+                        module:RegisterEvent("PLAYER_REGEN_ENABLED", "ApplyFrameHiderDeferred")
+                    else
+                        frame:SetParent(module.playerFrameHiddenParent)
+                    end
+                end
+            end)
+        end
+        PlayerFrame:SetParent(self.playerFrameHiddenParent)
+    else
+        PlayerFrame:SetParent(UIParent)
+    end
+end
+
+function module:ApplyFrameHiderDeferred()
+    self:UnregisterEvent("PLAYER_REGEN_ENABLED", "ApplyFrameHiderDeferred")
+    self.pendingFrameHiderApply = nil
+    self:ApplyFrameHider()
 end
 
 function module:OnMerchantShow()
