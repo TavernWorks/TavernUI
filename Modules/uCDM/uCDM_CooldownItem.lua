@@ -14,7 +14,7 @@ if not module then return end
     3. Know how to update their own cooldown state
     4. Know how to get their keybind
     
-    This eliminates the need for separate Styler, CooldownTracker, Conditions modules.
+    This eliminates the need for separate CooldownTracker, Conditions modules.
 ]]
 
 local CooldownItem = {}
@@ -172,8 +172,14 @@ end
 function CooldownItem:_setupFrame()
     local frame = self.frame
     if not frame then return end
-    
-    -- Our frames are created clean, but ensure cooldown is properly configured
+
+    local name = frame.GetName and frame:GetName()
+    local isCustomFrame = name and name:find("^uCDMCustomFrame_")
+
+    if not isCustomFrame then
+        self:_stripBlizzardCruft()
+    end
+
     local cooldown = frame.Cooldown or frame.cooldown
     if cooldown then
         if cooldown.SetDrawEdge then
@@ -189,8 +195,7 @@ function CooldownItem:_setupFrame()
             cooldown:SetSwipeColor(0, 0, 0, 0.8)
         end
     end
-    
-    -- Hide various Blizzard border elements
+
     local borderElements = {
         frame.DebuffBorder,
         frame.BuffBorder,
@@ -201,8 +206,7 @@ function CooldownItem:_setupFrame()
             self:_preventAtlasBorder(border)
         end
     end
-    
-    -- Hide normal texture
+
     if frame.NormalTexture then
         frame.NormalTexture:SetAlpha(0)
     end
@@ -210,8 +214,7 @@ function CooldownItem:_setupFrame()
         local normalTex = frame:GetNormalTexture()
         if normalTex then normalTex:SetAlpha(0) end
     end
-    
-    -- Suppress cooldown flash
+
     if frame.CooldownFlash then
         frame.CooldownFlash:SetAlpha(0)
         if not frame.CooldownFlash.__ucdmHooked then
@@ -219,6 +222,42 @@ function CooldownItem:_setupFrame()
             hooksecurefunc(frame.CooldownFlash, "Show", function(self)
                 self:SetAlpha(0)
             end)
+        end
+    end
+end
+
+function CooldownItem:_stripBlizzardCruft()
+    local frame = self.frame
+    if not frame then return end
+
+    local iconTex = frame.Icon or frame.icon
+    if iconTex and iconTex.GetMaskTexture and iconTex.RemoveMaskTexture then
+        for i = 1, CONSTANTS.MAX_MASK_TEXTURES do
+            local mask = iconTex:GetMaskTexture(i)
+            if mask then
+                iconTex:RemoveMaskTexture(mask)
+            end
+        end
+    end
+
+    if frame.GetRegions then
+        for _, region in ipairs({frame:GetRegions()}) do
+            if region:IsObjectType("Texture") and region ~= iconTex and region:IsShown() then
+                region:SetTexture(nil)
+                region:Hide()
+                if not region.__ucdmShowHooked then
+                    region.__ucdmShowHooked = true
+                    region.Show = function() end
+                end
+            end
+        end
+    end
+
+    if frame.OutOfRange then
+        frame.OutOfRange:Hide()
+        if not frame.OutOfRange.__ucdmShowHooked then
+            frame.OutOfRange.__ucdmShowHooked = true
+            frame.OutOfRange.Show = function() end
         end
     end
 end
