@@ -39,6 +39,7 @@ local CONSTANTS = {
     KEY_BAR_TEXT_OFFSET_Y = "barTextOffsetY",
     KEY_BAR_TEXT_COLOR = "barTextColor",
     KEY_BAR_TEXT_FONT_SIZE = "barTextFontSize",
+    KEY_FRAME_LEVEL = "frameLevel",
 }
 
 module.CONSTANTS = CONSTANTS
@@ -103,6 +104,23 @@ local defaults = {
             barTextColor = {r = 1, g = 1, b = 1, a = 1},
             barTextFontSize = 12,
         },
+        ALTERNATE_POWER = {
+            enabled = true,
+            anchorConfig = nil,
+            width = 200,
+            height = 14,
+            barTexture = nil,
+            barBackground = DEFAULT_BACKGROUND,
+            barBorder = DEFAULT_BAR_BORDER,
+            colorMode = CONSTANTS.COLOR_MODE_RESOURCE_TYPE,
+            barText = "none",
+            barTextPoint = "CENTER",
+            barTextRelativePoint = "CENTER",
+            barTextOffsetX = 0,
+            barTextOffsetY = 0,
+            barTextColor = {r = 1, g = 1, b = 1, a = 1},
+            barTextFontSize = 12,
+        },
         STAGGER = {
             enabled = true,
             anchorConfig = nil,
@@ -117,23 +135,6 @@ local defaults = {
                 {threshold = 0.60, color = {r = 1.0, g = 1.0, b = 0.0}},
                 {threshold = 1.0, color = {r = 1.0, g = 0.0, b = 0.0}},
             },
-            barText = "none",
-            barTextPoint = "CENTER",
-            barTextRelativePoint = "CENTER",
-            barTextOffsetX = 0,
-            barTextOffsetY = 0,
-            barTextColor = {r = 1, g = 1, b = 1, a = 1},
-            barTextFontSize = 12,
-        },
-        ALTERNATE_POWER = {
-            enabled = true,
-            anchorConfig = nil,
-            width = 200,
-            height = 14,
-            barTexture = nil,
-            barBackground = DEFAULT_BACKGROUND,
-            barBorder = DEFAULT_BAR_BORDER,
-            colorMode = CONSTANTS.COLOR_MODE_RESOURCE_TYPE,
             barText = "none",
             barTextPoint = "CENTER",
             barTextRelativePoint = "CENTER",
@@ -571,6 +572,11 @@ function module:UpdateBar(barId)
 
     if self.Text and self.Text.Apply then
         self.Text:Apply(barId, bars[barId], config, result)
+    end
+
+    local frame = bars[barId]
+    if frame and frame.SetFrameLevel and type(config[CONSTANTS.KEY_FRAME_LEVEL]) == "number" then
+        frame:SetFrameLevel(config[CONSTANTS.KEY_FRAME_LEVEL])
     end
 end
 

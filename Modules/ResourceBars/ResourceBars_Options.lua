@@ -431,6 +431,24 @@ local function BuildBarOptions(barId)
         end,
     }
     order = order + 1
+    args.frameLevel = {
+        type = "range",
+        name = L["FRAME_LEVEL"],
+        desc = L["FRAME_LEVEL_DESC"],
+        order = order,
+        min = 0,
+        max = 10,
+        step = 1,
+        get = function()
+            local v = GetEffectiveConfig(barId)[CONSTANTS.KEY_FRAME_LEVEL]
+            return (type(v) == "number") and v or 0
+        end,
+        set = function(_, value)
+            SetBarSetting(barId, CONSTANTS.KEY_FRAME_LEVEL, (value and value > 0) and value or nil)
+            RefreshBar(barId)
+        end,
+    }
+    order = order + 1
 
     local function isSegmentedBar()
         return module:GetBarType(barId) == CONSTANTS.BAR_TYPE_SEGMENTED

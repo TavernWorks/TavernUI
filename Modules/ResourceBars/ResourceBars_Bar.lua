@@ -185,7 +185,10 @@ local function CreatePowerBar(barId, config)
     ApplyBarBorder(frame, config)
     frame.barId = barId
     frame.config = config
-    
+    if type(config.frameLevel) == "number" then
+        frame:SetFrameLevel(config.frameLevel)
+    end
+
     function frame:Update(data)
         if not data then
             self:Hide()
@@ -245,7 +248,10 @@ local function CreateSegmentedBar(barId, config)
     frame.segments = {}
     frame.barId = barId
     frame.config = config
-    
+    if type(config.frameLevel) == "number" then
+        frame:SetFrameLevel(config.frameLevel)
+    end
+
     local function CreateSegment(parent, index, segConfig)
         local segment = CreateFrame("Frame", nil, parent)
         segment.index = index

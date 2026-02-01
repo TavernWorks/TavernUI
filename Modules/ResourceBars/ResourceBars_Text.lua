@@ -93,12 +93,14 @@ local function FormatTag(barId, tag, result)
     return FormatOneTag(barId, tag, result)
 end
 
-local function GetTopFrameLevel(bar)
-    if not bar or not bar.GetFrameLevel then return 0 end
-    local level = bar:GetFrameLevel()
-    if bar.GetNumChildren and bar.GetChildren then
-        for i = 1, bar:GetNumChildren() do
-            local child = select(i, bar:GetChildren())
+local TEXT_ABOVE_FRAME_LEVEL_OFFSET = 1
+
+local function GetTopFrameLevel(region)
+    if not region or not region.GetFrameLevel then return 0 end
+    local level = region:GetFrameLevel()
+    if region.GetNumChildren and region.GetChildren then
+        for i = 1, region:GetNumChildren() do
+            local child = select(i, region:GetChildren())
             if child and child.GetFrameLevel then
                 local childLevel = child:GetFrameLevel()
                 if childLevel > level then level = childLevel end
@@ -141,9 +143,9 @@ function Text:Apply(barId, frame, config, result)
     end
     local fs = GetOrCreateFontString(frame, config)
     if not fs then return end
-    local barLevel = (frame.bar and GetTopFrameLevel(frame.bar)) or (frame.bar and frame.bar.GetFrameLevel and frame.bar:GetFrameLevel()) or 0
+    local topLevel = GetTopFrameLevel(frame)
     if fs.SetFrameLevel then
-        fs:SetFrameLevel(math.max(barLevel, 1) + 1)
+        fs:SetFrameLevel(math.max(topLevel, 1) + TEXT_ABOVE_FRAME_LEVEL_OFFSET)
     end
     local point = config.barTextPoint or "CENTER"
     local relPoint = config.barTextRelativePoint or point
