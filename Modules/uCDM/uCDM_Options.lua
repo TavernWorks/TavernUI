@@ -1431,6 +1431,632 @@ local function BuildCustomTabOptions()
     }
 end
 
+local FRAME_STRATA_VALUES = {
+    LOW = "LOW",
+    MEDIUM = "MEDIUM",
+    HIGH = "HIGH",
+}
+
+local VISIBILITY_VALUES = {
+    always = L["VISIBILITY_ALWAYS"],
+    combat = L["VISIBILITY_COMBAT"],
+    hostile = L["VISIBILITY_HOSTILE"],
+}
+
+local HIGHLIGHT_STYLE_VALUES = {
+    border = L["STYLE_BORDER"],
+    glow = L["STYLE_GLOW"],
+}
+
+local function BuildRotationAssistOptions()
+    -- Use sub-groups so each section gets its own scrollable area
+    local args = {}
+
+    -- Sub-group 1: CDM Highlight
+    local cdmArgs = {}
+    local order = 1
+
+    cdmArgs.cdmDesc = {
+        type = "description",
+        name = L["CDM_HIGHLIGHT_DESC"],
+        order = order,
+    }
+    order = order + 1
+
+    for _, viewerKey in ipairs({"essential", "utility"}) do
+        local viewerName = viewerKey == "essential" and L["ESSENTIAL"] or L["UTILITY"]
+        local prefix = "cdmHighlight." .. viewerKey
+
+        cdmArgs[viewerKey .. "CdmEnabled"] = {
+            type = "toggle",
+            name = viewerName,
+            desc = string.format(L["CDM_HIGHLIGHT_DESC"] .. " (%s)", viewerName),
+            order = order,
+            get = function()
+                return module:GetSetting("rotationAssist." .. prefix .. ".enabled", false) == true
+            end,
+            set = function(_, value)
+                module:SetSetting("rotationAssist." .. prefix .. ".enabled", value)
+            end,
+        }
+        order = order + 1
+
+        cdmArgs[viewerKey .. "CdmColor"] = {
+            type = "color",
+            name = L["HIGHLIGHT_COLOR"] .. " (" .. viewerName .. ")",
+            desc = L["HIGHLIGHT_COLOR_DESC"],
+            order = order,
+            hasAlpha = true,
+            disabled = function()
+                return not module:GetSetting("rotationAssist." .. prefix .. ".enabled", false)
+            end,
+            get = function()
+                local c = module:GetSetting("rotationAssist." .. prefix .. ".color", {r = 0, g = 1, b = 0.84, a = 0.8})
+                return c.r or 0, c.g or 1, c.b or 0.84, c.a or 0.8
+            end,
+            set = function(_, r, g, b, a)
+                module:SetSetting("rotationAssist." .. prefix .. ".color", {r = r, g = g, b = b, a = a})
+            end,
+        }
+        order = order + 1
+
+        cdmArgs[viewerKey .. "CdmStyle"] = {
+            type = "select",
+            name = L["HIGHLIGHT_STYLE"] .. " (" .. viewerName .. ")",
+            desc = L["HIGHLIGHT_STYLE_DESC"],
+            order = order,
+            values = HIGHLIGHT_STYLE_VALUES,
+            disabled = function()
+                return not module:GetSetting("rotationAssist." .. prefix .. ".enabled", false)
+            end,
+            get = function()
+                return module:GetSetting("rotationAssist." .. prefix .. ".style", "border")
+            end,
+            set = function(_, value)
+                module:SetSetting("rotationAssist." .. prefix .. ".style", value)
+            end,
+        }
+        order = order + 1
+
+        cdmArgs[viewerKey .. "CdmThickness"] = {
+            type = "range",
+            name = L["HIGHLIGHT_THICKNESS"] .. " (" .. viewerName .. ")",
+            desc = L["HIGHLIGHT_THICKNESS_DESC"],
+            order = order,
+            min = 1,
+            max = 5,
+            step = 1,
+            disabled = function()
+                return not module:GetSetting("rotationAssist." .. prefix .. ".enabled", false)
+                    or module:GetSetting("rotationAssist." .. prefix .. ".style", "border") == "glow"
+            end,
+            get = function()
+                return module:GetSetting("rotationAssist." .. prefix .. ".thickness", 2)
+            end,
+            set = function(_, value)
+                module:SetSetting("rotationAssist." .. prefix .. ".thickness", value, {
+                    type = "number", min = 1, max = 5,
+                })
+            end,
+        }
+        order = order + 1
+    end
+
+    args.cdmHighlight = {
+        type = "group",
+        name = L["CDM_HIGHLIGHT"],
+        order = 1,
+        args = cdmArgs,
+    }
+
+    -- Sub-group 2: Action Bar Highlight
+    local abArgs = {}
+    order = 1
+
+    abArgs.abDesc = {
+        type = "description",
+        name = L["ACTION_BAR_HIGHLIGHT_DESC"],
+        order = order,
+    }
+    order = order + 1
+
+    abArgs.abEnabled = {
+        type = "toggle",
+        name = L["ENABLED"],
+        desc = L["ACTION_BAR_HIGHLIGHT_DESC"],
+        order = order,
+        get = function()
+            return module:GetSetting("rotationAssist.actionBarHighlight.enabled", false) == true
+        end,
+        set = function(_, value)
+            module:SetSetting("rotationAssist.actionBarHighlight.enabled", value)
+        end,
+    }
+    order = order + 1
+
+    abArgs.abColor = {
+        type = "color",
+        name = L["HIGHLIGHT_COLOR"],
+        desc = L["HIGHLIGHT_COLOR_DESC"],
+        order = order,
+        hasAlpha = true,
+        disabled = function()
+            return not module:GetSetting("rotationAssist.actionBarHighlight.enabled", false)
+        end,
+        get = function()
+            local c = module:GetSetting("rotationAssist.actionBarHighlight.color", {r = 0, g = 1, b = 0.84, a = 0.8})
+            return c.r or 0, c.g or 1, c.b or 0.84, c.a or 0.8
+        end,
+        set = function(_, r, g, b, a)
+            module:SetSetting("rotationAssist.actionBarHighlight.color", {r = r, g = g, b = b, a = a})
+        end,
+    }
+    order = order + 1
+
+    abArgs.abStyle = {
+        type = "select",
+        name = L["HIGHLIGHT_STYLE"],
+        desc = L["HIGHLIGHT_STYLE_DESC"],
+        order = order,
+        values = HIGHLIGHT_STYLE_VALUES,
+        disabled = function()
+            return not module:GetSetting("rotationAssist.actionBarHighlight.enabled", false)
+        end,
+        get = function()
+            return module:GetSetting("rotationAssist.actionBarHighlight.style", "border")
+        end,
+        set = function(_, value)
+            module:SetSetting("rotationAssist.actionBarHighlight.style", value)
+        end,
+    }
+    order = order + 1
+
+    abArgs.abThickness = {
+        type = "range",
+        name = L["HIGHLIGHT_THICKNESS"],
+        desc = L["HIGHLIGHT_THICKNESS_DESC"],
+        order = order,
+        min = 1,
+        max = 5,
+        step = 1,
+        disabled = function()
+            return not module:GetSetting("rotationAssist.actionBarHighlight.enabled", false)
+                or module:GetSetting("rotationAssist.actionBarHighlight.style", "border") == "glow"
+        end,
+        get = function()
+            return module:GetSetting("rotationAssist.actionBarHighlight.thickness", 2)
+        end,
+        set = function(_, value)
+            module:SetSetting("rotationAssist.actionBarHighlight.thickness", value, {
+                type = "number", min = 1, max = 5,
+            })
+        end,
+    }
+
+    args.actionBarHighlight = {
+        type = "group",
+        name = L["ACTION_BAR_HIGHLIGHT"],
+        order = 2,
+        args = abArgs,
+    }
+
+    -- Sub-group 3: Standalone Button
+    local btnArgs = {}
+    order = 1
+
+    btnArgs.btnDesc = {
+        type = "description",
+        name = L["ROTATION_ASSIST_BUTTON_DESC"],
+        order = order,
+    }
+    order = order + 1
+
+    btnArgs.btnEnabled = {
+        type = "toggle",
+        name = L["ENABLED"],
+        desc = L["ROTATION_ASSIST_BUTTON_DESC"],
+        order = order,
+        get = function()
+            return module:GetSetting("rotationAssist.button.enabled", false) == true
+        end,
+        set = function(_, value)
+            module:SetSetting("rotationAssist.button.enabled", value)
+        end,
+    }
+    order = order + 1
+
+    btnArgs.btnLocked = {
+        type = "toggle",
+        name = L["LOCK_POSITION"],
+        desc = L["LOCK_POSITION_DESC"],
+        order = order,
+        disabled = function()
+            return not module:GetSetting("rotationAssist.button.enabled", false)
+        end,
+        get = function()
+            return module:GetSetting("rotationAssist.button.isLocked", true) ~= false
+        end,
+        set = function(_, value)
+            module:SetSetting("rotationAssist.button.isLocked", value)
+        end,
+    }
+    order = order + 1
+
+    btnArgs.btnSize = {
+        type = "range",
+        name = L["BUTTON_SIZE"],
+        desc = L["BUTTON_SIZE_DESC"],
+        order = order,
+        min = 24,
+        max = 128,
+        step = 1,
+        disabled = function()
+            return not module:GetSetting("rotationAssist.button.enabled", false)
+        end,
+        get = function()
+            return module:GetSetting("rotationAssist.button.iconSize", 56)
+        end,
+        set = function(_, value)
+            module:SetSetting("rotationAssist.button.iconSize", value, {
+                type = "number", min = 24, max = 128,
+            })
+        end,
+    }
+    order = order + 1
+
+    btnArgs.btnVisibility = {
+        type = "select",
+        name = L["VISIBILITY_MODE"],
+        desc = L["VISIBILITY_MODE_DESC"],
+        order = order,
+        values = VISIBILITY_VALUES,
+        disabled = function()
+            return not module:GetSetting("rotationAssist.button.enabled", false)
+        end,
+        get = function()
+            return module:GetSetting("rotationAssist.button.visibility", "always")
+        end,
+        set = function(_, value)
+            module:SetSetting("rotationAssist.button.visibility", value)
+        end,
+    }
+    order = order + 1
+
+    btnArgs.btnStrata = {
+        type = "select",
+        name = L["FRAME_STRATA"],
+        desc = L["FRAME_STRATA_DESC"],
+        order = order,
+        values = FRAME_STRATA_VALUES,
+        disabled = function()
+            return not module:GetSetting("rotationAssist.button.enabled", false)
+        end,
+        get = function()
+            return module:GetSetting("rotationAssist.button.frameStrata", "MEDIUM")
+        end,
+        set = function(_, value)
+            module:SetSetting("rotationAssist.button.frameStrata", value)
+        end,
+    }
+    order = order + 1
+
+    btnArgs.btnGCDSwipe = {
+        type = "toggle",
+        name = L["SHOW_GCD_SWIPE"],
+        desc = L["SHOW_GCD_SWIPE_DESC"],
+        order = order,
+        disabled = function()
+            return not module:GetSetting("rotationAssist.button.enabled", false)
+        end,
+        get = function()
+            return module:GetSetting("rotationAssist.button.cooldownSwipeEnabled", true) ~= false
+        end,
+        set = function(_, value)
+            module:SetSetting("rotationAssist.button.cooldownSwipeEnabled", value)
+        end,
+    }
+    order = order + 1
+
+    btnArgs.btnBorderHeader = {type = "header", name = L["BORDER"], order = order}
+    order = order + 1
+
+    btnArgs.btnShowBorder = {
+        type = "toggle",
+        name = L["SHOW_BORDER"],
+        desc = L["SHOW_BORDER_DESC"],
+        order = order,
+        disabled = function()
+            return not module:GetSetting("rotationAssist.button.enabled", false)
+        end,
+        get = function()
+            return module:GetSetting("rotationAssist.button.showBorder", true) ~= false
+        end,
+        set = function(_, value)
+            module:SetSetting("rotationAssist.button.showBorder", value)
+        end,
+    }
+    order = order + 1
+
+    btnArgs.btnBorderThickness = {
+        type = "range",
+        name = L["BORDER_THICKNESS"],
+        desc = L["HIGHLIGHT_THICKNESS_DESC"],
+        order = order,
+        min = 1,
+        max = 5,
+        step = 1,
+        disabled = function()
+            return not module:GetSetting("rotationAssist.button.enabled", false) or
+                   not module:GetSetting("rotationAssist.button.showBorder", true)
+        end,
+        get = function()
+            return module:GetSetting("rotationAssist.button.borderThickness", 2)
+        end,
+        set = function(_, value)
+            module:SetSetting("rotationAssist.button.borderThickness", value, {
+                type = "number", min = 1, max = 5,
+            })
+        end,
+    }
+    order = order + 1
+
+    btnArgs.btnBorderColor = {
+        type = "color",
+        name = L["BORDER_COLOR"],
+        desc = L["BORDER_COLOR_ALPHA_DESC"],
+        order = order,
+        hasAlpha = true,
+        disabled = function()
+            return not module:GetSetting("rotationAssist.button.enabled", false) or
+                   not module:GetSetting("rotationAssist.button.showBorder", true)
+        end,
+        get = function()
+            local c = module:GetSetting("rotationAssist.button.borderColor", {r = 0, g = 0, b = 0, a = 1})
+            return c.r or 0, c.g or 0, c.b or 0, c.a or 1
+        end,
+        set = function(_, r, g, b, a)
+            module:SetSetting("rotationAssist.button.borderColor", {r = r, g = g, b = b, a = a})
+        end,
+    }
+    order = order + 1
+
+    btnArgs.btnKeybindHeader = {type = "header", name = L["KEYBIND_DISPLAY"], order = order}
+    order = order + 1
+
+    btnArgs.btnShowKeybind = {
+        type = "toggle",
+        name = L["SHOW_KEYBIND"],
+        desc = L["SHOW_KEYBIND_DESC"],
+        order = order,
+        disabled = function()
+            return not module:GetSetting("rotationAssist.button.enabled", false)
+        end,
+        get = function()
+            return module:GetSetting("rotationAssist.button.showKeybind", true) ~= false
+        end,
+        set = function(_, value)
+            module:SetSetting("rotationAssist.button.showKeybind", value)
+        end,
+    }
+    order = order + 1
+
+    btnArgs.btnKeybindSize = {
+        type = "range",
+        name = L["KEYBIND_TEXT_SIZE"],
+        desc = L["KEYBIND_TEXT_SIZE_DESC"],
+        order = order,
+        min = 6,
+        max = 24,
+        step = 1,
+        disabled = function()
+            return not module:GetSetting("rotationAssist.button.enabled", false) or
+                   not module:GetSetting("rotationAssist.button.showKeybind", true)
+        end,
+        get = function()
+            return module:GetSetting("rotationAssist.button.keybindSize", 13)
+        end,
+        set = function(_, value)
+            module:SetSetting("rotationAssist.button.keybindSize", value, {
+                type = "number", min = 6, max = 24,
+            })
+        end,
+    }
+    order = order + 1
+
+    btnArgs.btnKeybindColor = {
+        type = "color",
+        name = L["KEYBIND_TEXT_COLOR"],
+        desc = L["COLOR_OF_KEYBIND_DESC"],
+        order = order,
+        hasAlpha = true,
+        disabled = function()
+            return not module:GetSetting("rotationAssist.button.enabled", false) or
+                   not module:GetSetting("rotationAssist.button.showKeybind", true)
+        end,
+        get = function()
+            local c = module:GetSetting("rotationAssist.button.keybindColor", {r = 1, g = 1, b = 1, a = 1})
+            return c.r or 1, c.g or 1, c.b or 1, c.a or 1
+        end,
+        set = function(_, r, g, b, a)
+            module:SetSetting("rotationAssist.button.keybindColor", {r = r, g = g, b = b, a = a})
+        end,
+    }
+    order = order + 1
+
+    btnArgs.btnKeybindPoint = {
+        type = "select",
+        name = L["KEYBIND_POSITION"],
+        desc = L["ANCHOR_POINT_KEYBIND_DESC"],
+        order = order,
+        values = ANCHOR_POINTS,
+        disabled = function()
+            return not module:GetSetting("rotationAssist.button.enabled", false) or
+                   not module:GetSetting("rotationAssist.button.showKeybind", true)
+        end,
+        get = function()
+            return module:GetSetting("rotationAssist.button.keybindPoint", "BOTTOMRIGHT")
+        end,
+        set = function(_, value)
+            module:SetSetting("rotationAssist.button.keybindPoint", value)
+        end,
+    }
+    order = order + 1
+
+    btnArgs.btnKeybindOffsetX = {
+        type = "range",
+        name = L["KEYBIND_OFFSET_X"],
+        desc = L["HORIZONTAL_OFFSET_KEYBIND_DESC"],
+        order = order,
+        min = -50,
+        max = 50,
+        step = 1,
+        disabled = function()
+            return not module:GetSetting("rotationAssist.button.enabled", false) or
+                   not module:GetSetting("rotationAssist.button.showKeybind", true)
+        end,
+        get = function()
+            return module:GetSetting("rotationAssist.button.keybindOffsetX", -2)
+        end,
+        set = function(_, value)
+            module:SetSetting("rotationAssist.button.keybindOffsetX", value, {
+                type = "number", min = -50, max = 50,
+            })
+        end,
+    }
+    order = order + 1
+
+    btnArgs.btnKeybindOffsetY = {
+        type = "range",
+        name = L["KEYBIND_OFFSET_Y"],
+        desc = L["VERTICAL_OFFSET_KEYBIND_DESC"],
+        order = order,
+        min = -50,
+        max = 50,
+        step = 1,
+        disabled = function()
+            return not module:GetSetting("rotationAssist.button.enabled", false) or
+                   not module:GetSetting("rotationAssist.button.showKeybind", true)
+        end,
+        get = function()
+            return module:GetSetting("rotationAssist.button.keybindOffsetY", 2)
+        end,
+        set = function(_, value)
+            module:SetSetting("rotationAssist.button.keybindOffsetY", value, {
+                type = "number", min = -50, max = 50,
+            })
+        end,
+    }
+    order = order + 1
+
+    btnArgs.btnPositionHeader = {type = "header", name = L["POSITION"], order = order}
+    order = order + 1
+
+    btnArgs.btnAnchorFrom = {
+        type = "select",
+        name = L["POINT"],
+        desc = L["ANCHOR_POINT_ON_VIEWER_DESC"],
+        order = order,
+        values = ANCHOR_POINTS,
+        disabled = function()
+            return not module:GetSetting("rotationAssist.button.enabled", false)
+        end,
+        get = function()
+            return module:GetSetting("rotationAssist.button.anchorFrom", "CENTER")
+        end,
+        set = function(_, value)
+            module:SetSetting("rotationAssist.button.anchorFrom", value)
+        end,
+    }
+    order = order + 1
+
+    btnArgs.btnAnchorTo = {
+        type = "select",
+        name = L["RELATIVE_POINT"],
+        desc = L["ANCHOR_POINT_ON_TARGET_DESC"],
+        order = order,
+        values = ANCHOR_POINTS,
+        disabled = function()
+            return not module:GetSetting("rotationAssist.button.enabled", false)
+        end,
+        get = function()
+            return module:GetSetting("rotationAssist.button.anchorTo", "CENTER")
+        end,
+        set = function(_, value)
+            module:SetSetting("rotationAssist.button.anchorTo", value)
+        end,
+    }
+    order = order + 1
+
+    btnArgs.btnOffsetX = {
+        type = "range",
+        name = L["OFFSET_X"],
+        desc = L["HORIZONTAL_OFFSET"],
+        order = order,
+        min = -1000,
+        max = 1000,
+        step = 1,
+        disabled = function()
+            return not module:GetSetting("rotationAssist.button.enabled", false)
+        end,
+        get = function()
+            return module:GetSetting("rotationAssist.button.offsetX", 0)
+        end,
+        set = function(_, value)
+            module:SetSetting("rotationAssist.button.offsetX", value, {
+                type = "number", min = -1000, max = 1000,
+            })
+        end,
+    }
+    order = order + 1
+
+    btnArgs.btnOffsetY = {
+        type = "range",
+        name = L["OFFSET_Y"],
+        desc = L["VERTICAL_OFFSET"],
+        order = order,
+        min = -1000,
+        max = 1000,
+        step = 1,
+        disabled = function()
+            return not module:GetSetting("rotationAssist.button.enabled", false)
+        end,
+        get = function()
+            return module:GetSetting("rotationAssist.button.offsetY", -180)
+        end,
+        set = function(_, value)
+            module:SetSetting("rotationAssist.button.offsetY", value, {
+                type = "number", min = -1000, max = 1000,
+            })
+        end,
+    }
+    order = order + 1
+
+    btnArgs.btnResetPosition = {
+        type = "execute",
+        name = L["RESET_POSITION"],
+        desc = L["RESET_POSITION_DESC"],
+        order = order,
+        disabled = function()
+            return not module:GetSetting("rotationAssist.button.enabled", false)
+        end,
+        func = function()
+            module:SetSetting("rotationAssist.button.anchorFrom", "CENTER")
+            module:SetSetting("rotationAssist.button.anchorTo", "CENTER")
+            module:SetSetting("rotationAssist.button.offsetX", 0)
+            module:SetSetting("rotationAssist.button.offsetY", -180)
+        end,
+    }
+
+    args.button = {
+        type = "group",
+        name = L["ROTATION_ASSIST_BUTTON"],
+        order = 3,
+        args = btnArgs,
+    }
+
+    return args
+end
+
 function module:BuildOptions()
     if not TavernUI.db or not TavernUI.db.profile then
         return
@@ -1477,9 +2103,15 @@ function module:BuildOptions()
                 order = 4,
                 args = {},
             },
+            rotationAssist = {
+                type = "group",
+                name = L["ROTATION_ASSIST"],
+                order = 5,
+                args = BuildRotationAssistOptions(),
+            },
         },
     }
-    
+
     local customTabOptions = BuildCustomTabOptions()
     for k, v in pairs(customTabOptions) do
         options.args.custom.args[k] = v

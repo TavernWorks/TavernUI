@@ -15,7 +15,10 @@
     
     <!-- Keybind display -->
     <Script file="uCDM_Keybinds.lua"/>
-    
+
+    <!-- Rotation assist highlighting -->
+    <Script file="uCDM_RotationAssist.lua"/>
+
     <!-- Viewer anchoring -->
     <Script file="uCDM_Anchoring.lua"/>
     

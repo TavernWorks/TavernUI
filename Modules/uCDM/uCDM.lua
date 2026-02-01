@@ -192,6 +192,49 @@ local defaults = {
             },
         },
     },
+    rotationAssist = {
+        cdmHighlight = {
+            essential = {
+                enabled = false,
+                color = {r = 0, g = 1, b = 0.84, a = 0.8},
+                thickness = 2,
+                style = "border",
+            },
+            utility = {
+                enabled = false,
+                color = {r = 0, g = 1, b = 0.84, a = 0.8},
+                thickness = 2,
+                style = "border",
+            },
+        },
+        actionBarHighlight = {
+            enabled = false,
+            color = {r = 0, g = 1, b = 0.84, a = 0.8},
+            thickness = 2,
+            style = "border",
+        },
+        button = {
+            enabled = false,
+            isLocked = true,
+            iconSize = 56,
+            visibility = "always",
+            frameStrata = "MEDIUM",
+            showBorder = true,
+            borderThickness = 2,
+            borderColor = {r = 0, g = 0, b = 0, a = 1},
+            cooldownSwipeEnabled = true,
+            showKeybind = true,
+            keybindSize = 13,
+            keybindColor = {r = 1, g = 1, b = 1, a = 1},
+            keybindPoint = "BOTTOMRIGHT",
+            keybindOffsetX = -2,
+            keybindOffsetY = 2,
+            anchorFrom = "CENTER",
+            anchorTo = "CENTER",
+            offsetX = 0,
+            offsetY = -180,
+        },
+    },
     customEntries = {},
     positions = {},
 }
@@ -208,6 +251,7 @@ function module:OnInitialize()
     if self.LayoutEngine then self.LayoutEngine.Initialize() end
     if self.Keybinds then self.Keybinds.Initialize() end
     if self.Anchoring then self.Anchoring.Initialize() end
+    if self.RotationAssist then self.RotationAssist.Initialize() end
 
     -- Register events
     self:RegisterEvent("PLAYER_EQUIPMENT_CHANGED", "OnEquipmentChanged")
