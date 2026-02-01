@@ -61,7 +61,7 @@ function CooldownTracker.UpdateActionSlot(slot)
         return CooldownTracker.UpdateItem(id)
     end
     local startTime, duration, enable = GetActionCooldown(slot)
-    if not startTime or not duration or duration <= 0 then
+    if type(startTime) ~= "number" or type(duration) ~= "number" or duration <= 0 then
         return { duration = nil, isOnCooldown = 0, stackDisplay = nil }
     end
     local durationObj, isOnCooldown = Helpers.CreateCooldownDuration(startTime, duration)
