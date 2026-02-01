@@ -3,10 +3,249 @@ local module = TavernUI:GetModule("uCDM", true)
 
 if not module then return end
 
-local Helpers = module.CooldownTrackerHelpers
+local CooldownCurves = {
+    initialized = false,
+    Binary = nil,
+}
+
+local function SetupCooldownCurves()
+    if CooldownCurves.initialized then return true end
+    if not C_CurveUtil or not C_CurveUtil.CreateCurve then
+        return false
+    end
+
+    CooldownCurves.Binary = C_CurveUtil.CreateCurve()
+    CooldownCurves.Binary:AddPoint(0.0, 0)
+    CooldownCurves.Binary:AddPoint(0.001, 1)
+    CooldownCurves.Binary:AddPoint(1.0, 1)
+
+    CooldownCurves.initialized = true
+    return true
+end
+
+local function GetHasCharges(spellID, chargesCache)
+    if not spellID or type(spellID) ~= "number" then return false end
+
+    local ok, cacheKey = pcall(function() return "spell_" .. spellID end)
+    if not ok or not cacheKey then return false end
+
+    local chargeInfo = C_Spell.GetSpellCharges(spellID)
+    if chargeInfo then
+        local setOk = pcall(function() chargesCache[cacheKey] = true end)
+        if setOk then
+            return true
+        end
+    end
+
+    local getOk, cached = pcall(function() return chargesCache[cacheKey] end)
+    return (getOk and cached) or false
+end
+
+local function CreateCooldownDuration(startTime, duration)
+    if not startTime or not duration then
+        return nil, 0
+    end
+
+    local durationObj = C_DurationUtil.CreateDuration()
+
+    local ok = pcall(durationObj.SetTimeFromStart, durationObj, startTime, duration, 1)
+    if not ok then
+        return nil, 0
+    end
+
+    local isOnCooldown = 0
+    if SetupCooldownCurves() then
+        local ok, val = pcall(durationObj.EvaluateRemainingPercent, durationObj, CooldownCurves.Binary)
+        if ok and type(val) == "number" then
+            local okCmp = pcall(function() return val > 0 end)
+            if okCmp then
+                isOnCooldown = val
+            end
+        end
+    end
+
+    return durationObj, isOnCooldown
+end
+
+local function EvaluateRemainingPercentSafe(durationObj)
+    if not durationObj or not SetupCooldownCurves() then return 0 end
+    local ok, val = pcall(durationObj.EvaluateRemainingPercent, durationObj, CooldownCurves.Binary)
+    if not ok or type(val) ~= "number" then return 0 end
+    local okCmp = pcall(function() return val > 0 end)
+    if not okCmp then return 0 end
+    return val
+end
+
+local function GetStacksAndRemainingBuffTime(auraData)
+    if auraData then
+        local stacks = auraData.applications or 0
+        local buffRemaining = nil
+        if auraData.auraInstanceID then
+            local auraDurationInfo = C_UnitAuras.GetAuraDuration("player", auraData.auraInstanceID)
+            buffRemaining = auraDurationInfo
+        end
+        return stacks, buffRemaining
+    end
+    return 0, nil
+end
+
+local function GetSpellInfo(spellID, chargesCache)
+    if not spellID then
+        return 0, nil, false, 0
+    end
+
+    local stacks = 0
+    local charges = nil
+    local hasCharges = false
+    local chargeDuration = nil
+    local buffRemaining = nil
+
+    local scanner = TavernUI.SpellScanner
+    if scanner and scanner.IsSpellActive then
+        local ok, active, exp, dur = pcall(scanner.IsSpellActive, spellID)
+        if ok and active and exp and dur and dur > 0 then
+            local startTime = exp - dur
+            local durationObj = CreateCooldownDuration(startTime, dur)
+            if durationObj then
+                if TavernUI.db and TavernUI.db.profile and TavernUI.db.profile.general and TavernUI.db.profile.general.debug then
+                    print("|cff88ff88[uCDM Helpers]|r GetSpellInfo(" .. tostring(spellID) .. ") using scanner: startTime=" .. tostring(startTime) .. " dur=" .. tostring(dur) .. " exp=" .. tostring(exp))
+                end
+                hasCharges = GetHasCharges(spellID, chargesCache)
+                local chargeInfo = C_Spell.GetSpellCharges(spellID)
+                if chargeInfo then
+                    charges = chargeInfo.currentCharges
+                    hasCharges = true
+                    chargeDuration = C_Spell.GetSpellChargeDuration(spellID)
+                end
+                return stacks, charges, hasCharges, chargeDuration, durationObj
+            end
+        end
+    end
+
+    local auraData = C_UnitAuras.GetUnitAuraBySpellID("player", spellID)
+    if auraData then
+        stacks, buffRemaining = GetStacksAndRemainingBuffTime(auraData)
+    end
+
+    hasCharges = GetHasCharges(spellID, chargesCache)
+    local chargeInfo = C_Spell.GetSpellCharges(spellID)
+    if chargeInfo then
+        charges = chargeInfo.currentCharges
+        hasCharges = true
+        chargeDuration = C_Spell.GetSpellChargeDuration(spellID)
+    end
+
+    return stacks, charges, hasCharges, chargeDuration, buffRemaining
+end
+
+local function GetWeaponEnchantBuff(spellID)
+    if not spellID then
+        return nil, nil
+    end
+
+    local mhHas, mhExp, _, mhEnchantID, ohHas, ohExp, _, ohEnchantID = GetWeaponEnchantInfo()
+
+    if mhHas and mhEnchantID == spellID then
+        if mhExp and mhExp > 0 then
+            local buffDurationObj = C_DurationUtil.CreateDuration()
+            local currentTime = GetTime()
+            buffDurationObj:SetTimeFromStart(currentTime, mhExp, 1)
+            return mhEnchantID, buffDurationObj
+        end
+        return mhEnchantID, nil
+    elseif ohHas and ohEnchantID == spellID then
+        if ohExp and ohExp > 0 then
+            local buffDurationObj = C_DurationUtil.CreateDuration()
+            local currentTime = GetTime()
+            buffDurationObj:SetTimeFromStart(currentTime, ohExp, 1)
+            return ohEnchantID, buffDurationObj
+        end
+        return ohEnchantID, nil
+    end
+
+    return nil, nil
+end
+
+local function GetItemBuffInfo(spellID, chargesCache)
+    if not spellID then
+        return 0, nil, nil
+    end
+
+    local enchantID, weaponEnchantBuff = GetWeaponEnchantBuff(spellID)
+    if enchantID then
+        return 0, weaponEnchantBuff, nil
+    end
+
+    local stacks, charges, _, _, buffDur = GetSpellInfo(spellID, chargesCache)
+    return stacks, buffDur, charges
+end
+
+local function GetItemCharges(itemID)
+    if not itemID then return nil end
+
+    local charges = GetItemCount(itemID, nil, true)
+    if charges and charges > 0 then
+        return charges
+    end
+    return nil
+end
+
+local function GetStackDisplay(itemCount, itemCharges, spellCharges, buffStacks, hasCharges, charges)
+    if itemCount then
+        local displayCharges = nil
+        if itemCharges == itemCount or not itemCharges then
+            displayCharges = spellCharges
+        else
+            displayCharges = itemCharges
+        end
+
+        if displayCharges ~= nil then
+            return displayCharges
+        end
+
+        if buffStacks and buffStacks > 0 then
+            return buffStacks
+        end
+
+        if itemCount > 1 then
+            return itemCount
+        end
+
+        return nil
+    else
+        if hasCharges and charges ~= nil then
+            return charges
+        elseif buffStacks and buffStacks > 0 then
+            return buffStacks
+        end
+        return nil
+    end
+end
+
+local function GetSpellUsability(spellID)
+    if not spellID then return true, false end
+
+    local ok, usable, noMana = pcall(C_Spell.IsSpellUsable, spellID)
+    if not ok or usable == nil then return true, false end
+    if not usable then
+        return false, noMana and true or false
+    end
+
+    local spellName = GetSpellInfo(spellID)
+    if spellName then
+        local target = "target"
+        if UnitExists(target) then
+            local inRange = C_Spell.IsSpellInRange(spellName, target)
+            if inRange == 0 then
+                return false, false
+            end
+        end
+    end
+
+    return true, noMana
+end
 
 local CooldownTracker = {}
-
 CooldownTracker._hasChargesCache = {}
 
 function CooldownTracker.UpdateTrinket(slotID)
@@ -20,11 +259,11 @@ function CooldownTracker.UpdateItem(itemID)
     local startTime, duration = C_Container.GetItemCooldown(itemID)
     local _, spellID = GetItemSpell(itemID)
     local itemCount = C_Item.GetItemCount(itemID, false, false) or 0
-    local itemCharges = Helpers.GetItemCharges(itemID)
+    local itemCharges = GetItemCharges(itemID)
 
-    local buffStacks, buffRemaining, spellCharges = Helpers.GetItemBuffInfo(spellID, CooldownTracker._hasChargesCache)
-    local stackDisplay = Helpers.GetStackDisplay(itemCount, itemCharges, spellCharges, buffStacks)
-    local durationObj, isOnCooldown = Helpers.CreateCooldownDuration(startTime, duration)
+    local buffStacks, buffRemaining, spellCharges = GetItemBuffInfo(spellID, CooldownTracker._hasChargesCache)
+    local stackDisplay = GetStackDisplay(itemCount, itemCharges, spellCharges, buffStacks)
+    local durationObj, isOnCooldown = CreateCooldownDuration(startTime, duration)
 
     return {
         stackDisplay = stackDisplay,
@@ -35,15 +274,15 @@ function CooldownTracker.UpdateItem(itemID)
 end
 
 function CooldownTracker.UpdateSpell(spellID)
-    if (not Helpers.SetupCooldownCurves()) then return end
+    if (not SetupCooldownCurves()) then return end
     local duration = C_Spell.GetSpellCooldownDuration(spellID)
-    local stacks, charges, hasCharges, chargeDuration, buffRemaining = Helpers.GetSpellInfo(spellID, CooldownTracker._hasChargesCache)
-    local stackDisplay = Helpers.GetStackDisplay(nil, nil, nil, stacks, hasCharges, charges)
-    local isUsable, noMana = Helpers.GetSpellUsability(spellID)
-    
+    local stacks, charges, hasCharges, chargeDuration, buffRemaining = GetSpellInfo(spellID, CooldownTracker._hasChargesCache)
+    local stackDisplay = GetStackDisplay(nil, nil, nil, stacks, hasCharges, charges)
+    local isUsable, noMana = GetSpellUsability(spellID)
+
     return {
         stackDisplay = stackDisplay,
-        isOnCooldown = Helpers.EvaluateRemainingPercentSafe(duration),
+        isOnCooldown = EvaluateRemainingPercentSafe(duration),
         duration = duration,
         buffRemaining = buffRemaining,
         chargeDuration = chargeDuration,
@@ -59,12 +298,30 @@ function CooldownTracker.UpdateActionSlot(slot)
         return CooldownTracker.UpdateSpell(id)
     elseif actionType == "item" and id then
         return CooldownTracker.UpdateItem(id)
+    elseif actionType == "macro" and id then
+        local spellName = GetMacroSpell(id)
+        if spellName then
+            local spellInfo = C_Spell.GetSpellInfo(spellName)
+            if spellInfo and spellInfo.spellID then
+                return CooldownTracker.UpdateSpell(spellInfo.spellID)
+            end
+        end
+        local itemName = GetMacroItem(id)
+        if itemName then
+            local itemLink = GetItemInfo(itemName)
+            if itemLink then
+                local itemID = tonumber(itemLink:match("item:(%d+)"))
+                if itemID then
+                    return CooldownTracker.UpdateItem(itemID)
+                end
+            end
+        end
     end
     local startTime, duration, enable = GetActionCooldown(slot)
     if not startTime or not duration or duration <= 0 then
         return { duration = nil, isOnCooldown = 0, stackDisplay = nil }
     end
-    local durationObj, isOnCooldown = Helpers.CreateCooldownDuration(startTime, duration)
+    local durationObj, isOnCooldown = CreateCooldownDuration(startTime, duration)
     return {
         duration = durationObj,
         isOnCooldown = isOnCooldown,
@@ -79,7 +336,7 @@ function CooldownTracker.UpdateOverride(entry)
         startTime, duration = module:GetSlotCooldownOverride(entry.viewerKey, entry.layoutIndex)
     end
     if not startTime or not duration then return nil end
-    local durationObj, isOnCooldown = Helpers.CreateCooldownDuration(startTime, duration)
+    local durationObj, isOnCooldown = CreateCooldownDuration(startTime, duration)
     local data = {
         duration = durationObj,
         isOnCooldown = isOnCooldown,
@@ -130,7 +387,7 @@ function CooldownTracker.UpdateEntry(entry)
 
     local frame = entry.frame
     local cooldown = frame.Cooldown or frame.cooldown
-    
+
     if cooldown then
         if data.buffRemaining then
             cooldown:SetCooldownFromDurationObject(data.buffRemaining, true)
@@ -178,12 +435,13 @@ function CooldownTracker.UpdateEntry(entry)
             countText:Hide()
         end
     end
-    
+
     return data
 end
 
 function CooldownTracker.Initialize()
-    Helpers.SetupCooldownCurves()
+    SetupCooldownCurves()
 end
 
+CooldownTracker.CreateCooldownDuration = CreateCooldownDuration
 module.CooldownTracker = CooldownTracker

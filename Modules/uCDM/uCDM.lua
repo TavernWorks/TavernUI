@@ -30,177 +30,133 @@ local CONSTANTS = {
 
 module.CONSTANTS = CONSTANTS
 
+local DEFAULT_ROW_TEMPLATE = {
+    name = "Default",
+    iconCount = 6,
+    orientation = "horizontal",
+    iconSize = 40,
+    spacing = 0,
+    yOffset = 0,
+    keepRowSizeWhenEmpty = true,
+    aspectRatioCrop = 1.0,
+    zoom = 0.02,
+    iconBorderSize = 1,
+    iconBorderColor = {r = 0, g = 0, b = 0, a = 1},
+    durationSize = 18,
+    durationPoint = "CENTER",
+    durationOffsetX = 0,
+    durationOffsetY = 0,
+    stackSize = 16,
+    stackPoint = "BOTTOMRIGHT",
+    stackOffsetX = 0,
+    stackOffsetY = 0,
+}
+module.DEFAULT_ROW_TEMPLATE = DEFAULT_ROW_TEMPLATE
+
+local FIRST_ROW_OVERRIDES = {
+    essential = { iconCount = 8, iconSize = 40 },
+    utility = { iconCount = 6, iconSize = 42 },
+    buff = { iconCount = 6, iconSize = 42 },
+    custom = { iconCount = 4, iconSize = 40 },
+}
+
+local function GetDefaultFirstRow(viewerKey)
+    local row = {}
+    for k, v in pairs(DEFAULT_ROW_TEMPLATE) do
+        row[k] = (type(v) == "table" and v ~= DEFAULT_ROW_TEMPLATE) and (function()
+            local t = {}
+            for k2, v2 in pairs(v) do t[k2] = v2 end
+            return t
+        end)() or v
+    end
+    local over = FIRST_ROW_OVERRIDES[viewerKey]
+    if over then
+        for k, v in pairs(over) do row[k] = v end
+    end
+    return row
+end
+module.GetDefaultFirstRow = GetDefaultFirstRow
+
+local function BuildViewerDefaults(viewerKey)
+    local base = {
+        enabled = true,
+        anchorConfig = nil,
+        rowGrowDirection = "down",
+        rowSpacing = 5,
+        showKeybinds = false,
+        keybindSize = 10,
+        keybindPoint = "TOPLEFT",
+        keybindOffsetX = 2,
+        keybindOffsetY = -2,
+        keybindColor = {r = 1, g = 1, b = 1, a = 1},
+        disableTooltips = false,
+        rows = { GetDefaultFirstRow(viewerKey) },
+    }
+    if viewerKey == "utility" then
+        base.anchorBelowEssential = true
+        base.anchorPoint = "TOP"
+        base.anchorRelativePoint = "BOTTOM"
+        base.anchorOffsetX = 0
+        base.anchorGap = 5
+    elseif viewerKey == "buff" then
+        base.showPreview = false
+        base.previewIconCount = 6
+    end
+    return base
+end
+
 local defaults = {
     enabled = true,
     general = {
         debug = false,
-        scaleFactor = 1,
         updateRates = {
             normal = 0.1,
             combat = 0.3,
             initial = 0.05,
         },
+        visibility = {
+            combat = { showInCombat = true, showOutOfCombat = true },
+            target = { showWhenTargetExists = false },
+            group = { showSolo = true, showParty = true, showRaid = true },
+            instance = { showInOpenWorld = true, showInParty = true, showInRaid = true, showInArena = true, showInPvp = true, showInScenario = true },
+            role = { showTank = true, showHealer = true, showDps = true },
+            hideWhenInVehicle = false,
+            hideWhenMounted = false,
+            hideWhenMountedWhen = "both",
+        },
     },
     viewers = {
-        essential = {
-            enabled = true,
-            anchorConfig = nil,
-            rowGrowDirection = "down",
-            rowSpacing = 5,
-            showKeybinds = false,
-            keybindSize = 10,
-            keybindPoint = "TOPLEFT",
-            keybindOffsetX = 2,
-            keybindOffsetY = -2,
-            keybindColor = {r = 1, g = 1, b = 1, a = 1},
-            disableTooltips = false,
-            rows = {
-                {
-                    name = "Default",
-                    iconCount = 8,
-                    iconSize = 40,
-                    padding = 0,
-                    yOffset = 0,
-                    aspectRatioCrop = 1.0,
-                    zoom = 0,
-                    iconBorderSize = 0,
-                    iconBorderColor = {r = 0, g = 0, b = 0, a = 1},
-                    rowBorderSize = 0,
-                    rowBorderColor = {r = 0, g = 0, b = 0, a = 1},
-                    durationSize = 18,
-                    durationPoint = "CENTER",
-                    durationOffsetX = 0,
-                    durationOffsetY = 0,
-                    stackSize = 16,
-                    stackPoint = "BOTTOMRIGHT",
-                    stackOffsetX = 0,
-                    stackOffsetY = 0,
-                },
-            },
-        },
-        utility = {
-            enabled = true,
-            anchorBelowEssential = true,
-            anchorPoint = "TOP",
-            anchorRelativePoint = "BOTTOM",
-            anchorOffsetX = 0,
-            anchorGap = 5,
-            anchorConfig = nil,
-            rowGrowDirection = "down",
-            rowSpacing = 5,
-            showKeybinds = false,
-            keybindSize = 10,
-            keybindPoint = "TOPLEFT",
-            keybindOffsetX = 2,
-            keybindOffsetY = -2,
-            keybindColor = {r = 1, g = 1, b = 1, a = 1},
-            disableTooltips = false,
-            rows = {
-                {
-                    name = "Default",
-                    iconCount = 6,
-                    iconSize = 42,
-                    padding = -8,
-                    yOffset = 0,
-                    aspectRatioCrop = 1.0,
-                    zoom = 0,
-                    iconBorderSize = 0,
-                    iconBorderColor = {r = 0, g = 0, b = 0, a = 1},
-                    rowBorderSize = 0,
-                    rowBorderColor = {r = 0, g = 0, b = 0, a = 1},
-                    durationSize = 18,
-                    durationPoint = "CENTER",
-                    durationOffsetX = 0,
-                    durationOffsetY = 0,
-                    stackSize = 16,
-                    stackPoint = "BOTTOMRIGHT",
-                    stackOffsetX = 0,
-                    stackOffsetY = 0,
-                },
-            },
-        },
-        buff = {
-            enabled = true,
-            anchorConfig = nil,
-            rowGrowDirection = "down",
-            rowSpacing = 5,
-            showKeybinds = false,
-            keybindSize = 10,
-            keybindPoint = "TOPLEFT",
-            keybindOffsetX = 2,
-            keybindOffsetY = -2,
-            keybindColor = {r = 1, g = 1, b = 1, a = 1},
-            disableTooltips = false,
-            rows = {
-                {
-                    name = "Default",
-                    iconCount = 6,
-                    iconSize = 42,
-                    padding = -8,
-                    yOffset = 0,
-                    aspectRatioCrop = 1.0,
-                    zoom = 0,
-                    iconBorderSize = 0,
-                    iconBorderColor = {r = 0, g = 0, b = 0, a = 1},
-                    rowBorderSize = 0,
-                    rowBorderColor = {r = 0, g = 0, b = 0, a = 1},
-                    durationSize = 18,
-                    durationPoint = "CENTER",
-                    durationOffsetX = 0,
-                    durationOffsetY = 0,
-                    stackSize = 16,
-                    stackPoint = "BOTTOMRIGHT",
-                    stackOffsetX = 0,
-                    stackOffsetY = 0,
-                },
-            },
-        },
-        custom = {
-            enabled = true,
-            anchorConfig = nil,
-            rowGrowDirection = "down",
-            rowSpacing = 5,
-            showKeybinds = false,
-            keybindSize = 10,
-            keybindPoint = "TOPLEFT",
-            keybindOffsetX = 2,
-            keybindOffsetY = -2,
-            keybindColor = {r = 1, g = 1, b = 1, a = 1},
-            disableTooltips = false,
-            rows = {
-                {
-                    name = "Default",
-                    iconCount = 4,
-                    iconSize = 40,
-                    padding = -8,
-                    yOffset = 0,
-                    aspectRatioCrop = 1.0,
-                    zoom = 0,
-                    iconBorderSize = 0,
-                    iconBorderColor = {r = 0, g = 0, b = 0, a = 1},
-                    rowBorderSize = 0,
-                    rowBorderColor = {r = 0, g = 0, b = 0, a = 1},
-                    durationSize = 18,
-                    durationPoint = "CENTER",
-                    durationOffsetX = 0,
-                    durationOffsetY = 0,
-                    stackSize = 16,
-                    stackPoint = "BOTTOMRIGHT",
-                    stackOffsetX = 0,
-                    stackOffsetY = 0,
-                },
-            },
-        },
+        essential = BuildViewerDefaults("essential"),
+        utility = BuildViewerDefaults("utility"),
+        buff = BuildViewerDefaults("buff"),
+        custom = BuildViewerDefaults("custom"),
     },
     customEntries = {},
+    customViewers = {},
     positions = {},
 }
 
 TavernUI:RegisterModuleDefaults("uCDM", defaults, true)
 
+local DEFAULT_CUSTOM_VIEWER_SETTINGS = {
+    enabled = true,
+    anchorConfig = nil,
+    rowGrowDirection = "down",
+    rowSpacing = 5,
+    showKeybinds = false,
+    keybindSize = 10,
+    keybindPoint = "TOPLEFT",
+    keybindOffsetX = 2,
+    keybindOffsetY = -2,
+    keybindColor = {r = 1, g = 1, b = 1, a = 1},
+    disableTooltips = false,
+    rows = { GetDefaultFirstRow("custom") },
+}
+
 function module:OnInitialize()
     pcall(function() SetCVar("cooldownViewerEnabled", 1) end)
     self:RegisterMessage("TavernUI_ProfileChanged", "OnProfileChanged")
+    self.CustomViewerFrames = {}
 
     -- Initialize subsystems in order
     if self.ItemRegistry then self.ItemRegistry.Initialize() end
@@ -213,6 +169,7 @@ function module:OnInitialize()
     self:RegisterEvent("PLAYER_EQUIPMENT_CHANGED", "OnEquipmentChanged")
     self:RegisterEvent("UPDATE_BINDINGS", "OnBindingsUpdate")
     self:RegisterEvent("PLAYER_ENTERING_WORLD", "OnPlayerEnteringWorld")
+    self:RegisterEvent("UI_SCALE_CHANGED", "OnUIScaleChanged")
 
     -- Watch for setting changes
     self:WatchSetting("enabled", function(newValue, oldValue)
@@ -242,9 +199,13 @@ end
 
 function module:OnDisable()
     self.__onEnableCalled = nil
+    if self._visibilityCallbackId and TavernUI.Visibility and TavernUI.Visibility.UnregisterCallback then
+        TavernUI.Visibility.UnregisterCallback(self._visibilityCallbackId)
+        self._visibilityCallbackId = nil
+    end
     self:UnregisterAllEvents()
     self:StopUpdateLoop()
-    
+
     if self.ItemRegistry then
         self.ItemRegistry.Reset()
     end
@@ -256,14 +217,14 @@ function module:GetUpdateInterval()
         combat = self:GetSetting("general.updateRates.combat", 0.3),
         normal = self:GetSetting("general.updateRates.normal", 0.1),
     }
-    
+
     if self.initialPhaseStartTime then
         local elapsed = GetTime() - self.initialPhaseStartTime
         if elapsed < CONSTANTS.INITIAL_PHASE_DURATION then
             return rates.initial
         end
     end
-    
+
     return InCombatLockdown() and rates.combat or rates.normal
 end
 
@@ -276,15 +237,15 @@ function module:StartUpdateLoop()
     self:StopUpdateLoop()
     self.updateLoopActive = true
     self.initialPhaseStartTime = GetTime()
-    
+
     local function UpdateLoop()
         if not self.updateLoopActive or not self:IsEnabled() then return end
-        
+
         self:Update()
-        
+
         C_Timer.After(self:GetUpdateInterval(), UpdateLoop)
     end
-    
+
     UpdateLoop()
 end
 
@@ -299,11 +260,18 @@ end
 
 function module:Update()
     if not self:IsEnabled() then return end
-    
-    -- Update ALL items (we now control all frames)
+
     if self.ItemRegistry then
         for _, viewerKey in ipairs(CONSTANTS.VIEWER_KEYS) do
-            local items = self.ItemRegistry.GetItemsForViewer(viewerKey)
+            if viewerKey ~= "custom" then
+                local items = self.ItemRegistry.GetItemsForViewer(viewerKey)
+                for _, item in ipairs(items) do
+                    item:update()
+                end
+            end
+        end
+        for _, id in ipairs(self:GetCustomViewerIds()) do
+            local items = self.ItemRegistry.GetItemsForViewer(id)
             for _, item in ipairs(items) do
                 item:update()
             end
@@ -311,44 +279,35 @@ function module:Update()
     end
 end
 
+function module:OnUIScaleChanged()
+    if not self:IsEnabled() then return end
+    self:RefreshAllViewers()
+end
+
 function module:OnPlayerEnteringWorld()
     if not self:IsEnabled() then return end
     self:StartUpdateLoop()
+    if TavernUI.Visibility and TavernUI.Visibility.RegisterCallback and not self._visibilityCallbackId then
+        self._visibilityCallbackId = TavernUI.Visibility.RegisterCallback(function()
+            if self:IsEnabled() then self:RefreshAllViewers() end
+        end)
+    end
 
-    local function Stage1()
+    C_Timer.After(0, function()
+        if not self:IsEnabled() then return end
+        for _, entry in ipairs(self:GetSetting("customViewers", {})) do
+            if entry and entry.id and not self.CustomViewerFrames[entry.id] then
+                self:CreateCustomViewerFrame(entry.id, entry.name)
+            end
+        end
         if self.ItemRegistry then
             self.ItemRegistry.HookBlizzardViewers()
-        end
-    end
-    
-    local function Stage2()
-        if self.ItemRegistry then
             self.ItemRegistry.LoadCustomEntries()
-        end
-    end
-    
-    local function Stage3()
-        for _, viewerKey in ipairs({"essential", "utility", "buff"}) do
-            if self.ItemRegistry then
+            for _, viewerKey in ipairs({"essential", "utility", "buff"}) do
                 self.ItemRegistry.CollectBlizzardItems(viewerKey)
             end
         end
-    end
-    
-    local function Stage4()
         self:RefreshAllViewers()
-    end
-    
-    -- Stagger initialization
-    C_Timer.After(0.1, Stage1)
-    C_Timer.After(0.3, Stage2)
-    C_Timer.After(0.5, Stage3)
-    C_Timer.After(0.7, Stage4)
-    
-    C_Timer.After(1.5, function()
-        if self:IsEnabled() then
-            self:RefreshAllViewers()
-        end
     end)
 end
 
@@ -364,7 +323,7 @@ function module:OnEquipmentChanged()
             end
         end
     end
-    
+
     if self.LayoutEngine then
         self.LayoutEngine.RefreshViewer("essential")
         self.LayoutEngine.RefreshViewer("utility")
@@ -387,7 +346,7 @@ function module:OnProfileChanged()
         self.ItemRegistry.Reset()
         self.ItemRegistry.Initialize()
     end
-    
+
     C_Timer.After(0.2, function()
         if self:IsEnabled() then
             self:RefreshAllViewers()
@@ -399,12 +358,27 @@ function module:HandleEnabledChange(newValue, oldValue)
     if newValue then
         if self:IsEnabled() then
             self:StartUpdateLoop()
+            if TavernUI.Visibility and TavernUI.Visibility.RegisterCallback and not self._visibilityCallbackId then
+                self._visibilityCallbackId = TavernUI.Visibility.RegisterCallback(function()
+                    if self:IsEnabled() then self:RefreshAllViewers() end
+                end)
+            end
             self:RefreshAllViewers()
         end
     else
+        if self._visibilityCallbackId and TavernUI.Visibility and TavernUI.Visibility.UnregisterCallback then
+            TavernUI.Visibility.UnregisterCallback(self._visibilityCallbackId)
+            self._visibilityCallbackId = nil
+        end
         self:StopUpdateLoop()
         for _, viewerKey in ipairs(CONSTANTS.VIEWER_KEYS) do
             local viewer = self:GetViewerFrame(viewerKey)
+            if viewer then
+                viewer:Hide()
+            end
+        end
+        for _, id in ipairs(self:GetCustomViewerIds()) do
+            local viewer = self:GetViewerFrame(id)
             if viewer then
                 viewer:Hide()
             end
@@ -418,65 +392,71 @@ local REFRESH_DEBOUNCE_SEC = 0.15
 
 function module:RefreshAllViewers()
     for _, viewerKey in ipairs(CONSTANTS.VIEWER_KEYS) do
-        self:RefreshViewer(viewerKey)
+        if viewerKey ~= "custom" then
+            self:RefreshViewer(viewerKey)
+        end
+    end
+    for _, id in ipairs(self:GetCustomViewerIds()) do
+        self:RefreshViewer(id)
     end
 end
 
 function module:RefreshViewer(viewerKey)
     if not viewerKey then return end
-    
+
     local timer = refreshTimers[viewerKey]
     if timer then
         timer:Cancel()
         refreshTimers[viewerKey] = nil
     end
-    
+
     local function DoRefresh()
         refreshTimers[viewerKey] = nil
         if not self:IsEnabled() then return end
 
-        if viewerKey ~= "custom" and self.ItemRegistry then
+        local skipBlizzard = (viewerKey == "custom") or self:IsCustomViewerId(viewerKey)
+        if not skipBlizzard and self.ItemRegistry then
             self.ItemRegistry.CollectBlizzardItems(viewerKey)
         end
-        
+
         if self.LayoutEngine then
             self.LayoutEngine.RefreshViewer(viewerKey)
         end
-        
+
         if self.Keybinds then
             self.Keybinds.RefreshViewer(viewerKey)
         end
-        
+
         if self.Anchoring then
             self.Anchoring.RefreshViewer(viewerKey)
         end
     end
-    
+
     refreshTimers[viewerKey] = C_Timer.NewTimer(REFRESH_DEBOUNCE_SEC, DoRefresh)
 end
 
 function module:RefreshViewerContent(viewerKey)
     if not viewerKey or viewerKey == "custom" then return end
-    
+
     local timer = contentRefreshTimers[viewerKey]
     if timer then
         timer:Cancel()
         contentRefreshTimers[viewerKey] = nil
     end
-    
+
     local function DoContentRefresh()
         contentRefreshTimers[viewerKey] = nil
         if not self:IsEnabled() then return end
-        
+
         if self.ItemRegistry then
             self.ItemRegistry.CollectBlizzardItems(viewerKey)
         end
-        
+
         if self.Keybinds then
             self.Keybinds.RefreshViewer(viewerKey)
         end
     end
-    
+
     contentRefreshTimers[viewerKey] = C_Timer.NewTimer(REFRESH_DEBOUNCE_SEC, DoContentRefresh)
 end
 
@@ -485,7 +465,66 @@ function module:GetViewerSettings(viewerKey)
 end
 
 function module:GetViewerFrame(viewerKey)
-    return _G[CONSTANTS.VIEWER_NAMES[viewerKey]]
+    if CONSTANTS.VIEWER_NAMES[viewerKey] then
+        return _G[CONSTANTS.VIEWER_NAMES[viewerKey]]
+    end
+    if self:IsCustomViewerId(viewerKey) and self.CustomViewerFrames then
+        return self.CustomViewerFrames[viewerKey]
+    end
+    return nil
+end
+
+local function CopyTableShallow(src)
+    if type(src) ~= "table" then return src end
+    local t = {}
+    for k, v in pairs(src) do
+        t[k] = (type(v) == "table" and v ~= src) and CopyTableShallow(v) or v
+    end
+    return t
+end
+
+function module:GetDefaultCustomViewerSettings()
+    return CopyTableShallow(DEFAULT_CUSTOM_VIEWER_SETTINGS)
+end
+
+function module:CreateCustomViewerFrame(id, name)
+    if self.CustomViewerManager and self.CustomViewerManager.CreateCustomViewerFrame then
+        return self.CustomViewerManager.CreateCustomViewerFrame(self, id, name)
+    end
+    return nil
+end
+
+function module:RemoveCustomViewer(id)
+    if self.CustomViewerManager and self.CustomViewerManager.RemoveCustomViewer then
+        self.CustomViewerManager.RemoveCustomViewer(self, id)
+    end
+end
+
+function module:SetCustomViewerName(id, name)
+    if self.CustomViewerManager and self.CustomViewerManager.SetCustomViewerName then
+        self.CustomViewerManager.SetCustomViewerName(self, id, name)
+    end
+end
+
+function module:GetCustomViewerIds()
+    if self.CustomViewerManager and self.CustomViewerManager.GetCustomViewerIds then
+        return self.CustomViewerManager.GetCustomViewerIds(self)
+    end
+    return {}
+end
+
+function module:IsCustomViewerId(viewerKey)
+    if self.CustomViewerManager and self.CustomViewerManager.IsCustomViewerId then
+        return self.CustomViewerManager.IsCustomViewerId(self, viewerKey)
+    end
+    return false
+end
+
+function module:GetCustomViewerDisplayName(viewerKey)
+    if self.CustomViewerManager and self.CustomViewerManager.GetCustomViewerDisplayName then
+        return self.CustomViewerManager.GetCustomViewerDisplayName(self, viewerKey)
+    end
+    return viewerKey
 end
 
 function module:IsEnabled()

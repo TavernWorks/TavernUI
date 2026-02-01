@@ -15,12 +15,6 @@ if not module then return end
 
 local ItemRegistry = {}
 
-local VIEWER_CATEGORIES = {
-    essential = Enum.CooldownViewerCategory.Essential,
-    utility = Enum.CooldownViewerCategory.Utility,
-    buff = Enum.CooldownViewerCategory.TrackedBuff,
-}
-
 -- Storage
 local itemsByViewer = {}      -- viewerKey -> {CooldownItem, ...}
 local itemsById = {}          -- id -> CooldownItem
@@ -34,6 +28,31 @@ local initialized = false
 -- Initialization
 --------------------------------------------------------------------------------
 
+function ItemRegistry._onActionBarSlotChanged(slot)
+    if not slot or not module:IsEnabled() then return end
+
+    local viewerKeys = {}
+    for _, item in pairs(itemsById) do
+        if item.actionSlotID == slot then
+            if item.refreshIcon then
+                item:refreshIcon()
+            end
+            if item.viewerKey then
+                viewerKeys[item.viewerKey] = true
+            end
+        end
+    end
+
+    if next(viewerKeys) then
+        C_Timer.After(0.1, function()
+            if not module:IsEnabled() then return end
+            for viewerKey in pairs(viewerKeys) do
+                module:RefreshViewer(viewerKey)
+            end
+        end)
+    end
+end
+
 function ItemRegistry.Initialize()
     itemsByViewer = {}
     itemsById = {}
@@ -42,6 +61,14 @@ function ItemRegistry.Initialize()
     for _, viewerKey in ipairs(module.CONSTANTS.VIEWER_KEYS) do
         itemsByViewer[viewerKey] = {}
     end
+
+    local actionBarFrame = CreateFrame("Frame")
+    actionBarFrame:RegisterEvent("ACTIONBAR_SLOT_CHANGED")
+    actionBarFrame:SetScript("OnEvent", function(self, event, slot)
+        if event == "ACTIONBAR_SLOT_CHANGED" and slot then
+            ItemRegistry._onActionBarSlotChanged(slot)
+        end
+    end)
 
     initialized = true
 end
@@ -66,229 +93,39 @@ function ItemRegistry.Reset()
 end
 
 --------------------------------------------------------------------------------
--- Blizzard Frame Hooking
+-- Blizzard Frame Hooking & Collection (delegated to BlizzardCollector)
 --------------------------------------------------------------------------------
 
 function ItemRegistry.HookBlizzardViewers()
-    local function HookViewer(viewerKey)
-        local viewerName = module.CONSTANTS.VIEWER_NAMES[viewerKey]
-        if not viewerName then return false end
-
-        local viewer = _G[viewerName]
-        if not viewer then return false end
-        if blizzardHooked[viewerKey] then return true end
-
-        blizzardHooked[viewerKey] = true
-
-        -- Hook OnShow to refresh items
-        viewer:HookScript("OnShow", function(self)
-            if not module:IsEnabled() then return end
-            C_Timer.After(0.05, function()
-                if module:IsEnabled() and self:IsShown() then
-                    module:RefreshViewer(viewerKey)
-                end
-            end)
-        end)
-
-        if not module.LayoutEngine.IsLayoutDrivenByBlizzardHook(viewerKey) then
-            viewer:HookScript("OnSizeChanged", function(self)
-                if not module:IsEnabled() then return end
-                if module.LayoutEngine.IsSettingViewerSize(viewerKey) then return end
-                module:RefreshViewer(viewerKey)
-            end)
-        end
-
-        -- Buff viewer needs extra event handling
-        if viewerKey == "buff" then
-            ItemRegistry._hookBuffViewerEvents(viewer, viewerKey)
-        else
-            ItemRegistry._hookCooldownEvents(viewer, viewerKey)
-        end
-        return true
+    local BlizzardCollector = module.BlizzardCollector
+    if not BlizzardCollector or not BlizzardCollector.HookBlizzardViewers then
+        return
     end
-
-    -- Try to hook all viewers
-    local allHooked = true
-    for viewerKey, viewerName in pairs(module.CONSTANTS.VIEWER_NAMES) do
-        if _G[viewerName] then
-            HookViewer(viewerKey)
-        else
-            allHooked = false
+    BlizzardCollector.HookBlizzardViewers(function()
+        for _, vk in ipairs({"essential", "utility", "buff"}) do
+            ItemRegistry.CollectBlizzardItems(vk)
         end
-    end
-
-    -- If not all hooked, wait for addon load
-    if not allHooked then
-        local waitFrame = CreateFrame("Frame")
-        waitFrame:RegisterEvent("ADDON_LOADED")
-        waitFrame:SetScript("OnEvent", function(self, event, addonName)
-            if addonName == "Blizzard_CooldownManager" then
-                C_Timer.After(0.2, function()
-                    for viewerKey in pairs(module.CONSTANTS.VIEWER_NAMES) do
-                        HookViewer(viewerKey)
-                    end
-                    -- Trigger initial collection
-                    for _, vk in ipairs({"essential", "utility", "buff"}) do
-                        ItemRegistry.CollectBlizzardItems(vk)
-                    end
-                    module:RefreshAllViewers()
-                end)
-                self:UnregisterAllEvents()
-            end
-        end)
-    end
-end
-
-function ItemRegistry._hookBuffViewerEvents(viewer, viewerKey)
-    local eventFrame = CreateFrame("Frame")
-    eventFrame:RegisterUnitEvent("UNIT_TARGET", "player")
-    eventFrame:RegisterUnitEvent("UNIT_AURA", "player")
-    eventFrame:SetScript("OnEvent", function(self, event, unit)
-        if not module:IsEnabled() then return end
-        if viewer:IsShown() then
-            C_Timer.After(0.1, function()
-                if module:IsEnabled() and viewer:IsShown() then
-                    module:RefreshViewer(viewerKey)
-                end
-            end)
-        end
-    end)
-end
-
-function ItemRegistry._hookCooldownEvents(viewer, viewerKey)
-    local eventFrame = CreateFrame("Frame")
-    eventFrame:RegisterEvent("SPELL_UPDATE_COOLDOWN")
-    eventFrame:RegisterEvent("BAG_UPDATE_COOLDOWN")
-    eventFrame:RegisterEvent("ACTIONBAR_SLOT_CHANGED")
-    eventFrame:SetScript("OnEvent", function(self, event)
-        if not module:IsEnabled() then return end
-        if InCombatLockdown() then return end
-        if viewer:IsShown() then
-            C_Timer.After(0.1, function()
-                if module:IsEnabled() and viewer:IsShown() then
-                    module:RefreshViewerContent(viewerKey)
-                end
-            end)
-        end
+        module:RefreshAllViewers()
     end)
 end
 
 --------------------------------------------------------------------------------
--- Blizzard Frame Collection
+-- Blizzard Frame Collection (merge BlizzardCollector result with custom items)
 --------------------------------------------------------------------------------
 
 function ItemRegistry.CollectBlizzardItems(viewerKey)
-    local viewerName = module.CONSTANTS.VIEWER_NAMES[viewerKey]
-    if not viewerName then return end
-
-    local viewer = _G[viewerName]
-    if not viewer then return end
-
-    local category = VIEWER_CATEGORIES[viewerKey]
-    if not category then return end
-
-    -- Get cooldown IDs from viewer or API
-    local cooldownIDs = nil
-    if viewer.GetCooldownIDs then
-        cooldownIDs = viewer:GetCooldownIDs()
-    end
-    if not cooldownIDs or #cooldownIDs == 0 then
-        cooldownIDs = C_CooldownViewer.GetCooldownViewerCategorySet(category, true)
-    end
-    if not cooldownIDs or #cooldownIDs == 0 then
+    local BlizzardCollector = module.BlizzardCollector
+    if not BlizzardCollector or not BlizzardCollector.Collect then
         return
     end
+    local newBlizzardItems, seenFrames = BlizzardCollector.Collect(viewerKey, itemsByFrame)
+    if not newBlizzardItems then return end
 
-    -- Build frame lookup by layout index and cooldown ID
-    local framesByIndex = {}
-    local numChildren = viewer:GetNumChildren()
-
-    for i = 1, numChildren do
-        local child = select(i, viewer:GetChildren())
-        if child and child ~= viewer.Selection and ItemRegistry._isIconFrame(child) then
-            -- Hook buff frame events if needed
-            if viewerKey == "buff" and not child.__ucdmEventHooked then
-                ItemRegistry._hookBuffFrameEvents(child, viewer)
-            end
-
-            -- Map by layout index
-            local layoutIndex = child.layoutIndex
-            if layoutIndex and layoutIndex > 0 and layoutIndex <= #cooldownIDs then
-                framesByIndex[layoutIndex] = child
-            end
-
-            -- Also try matching by cooldown ID
-            if child.GetCooldownID then
-                local frameCooldownID = child:GetCooldownID()
-                for idx, cooldownID in ipairs(cooldownIDs) do
-                    if cooldownID == frameCooldownID then
-                        framesByIndex[idx] = child
-                        break
-                    end
-                end
-            end
-        end
+    for _, item in ipairs(newBlizzardItems) do
+        itemsById[item.id] = item
+        itemsByFrame[item.frame] = item
     end
 
-    -- Create/update items for each cooldown
-    local newBlizzardItems = {}
-    local seenFrames = {}
-
-    for index, cooldownID in ipairs(cooldownIDs) do
-        local cooldownInfo = C_CooldownViewer.GetCooldownViewerCooldownInfo(cooldownID)
-        if cooldownInfo then
-            local frame = framesByIndex[index]
-            if frame then
-                seenFrames[frame] = true
-
-                -- Extract IDs from frame
-                local spellID = cooldownInfo.spellID
-                local itemID = frame.GetItemID and frame:GetItemID() or frame.itemID
-                local slotID = frame.GetSlotID and frame:GetSlotID() or frame.slotID
-
-                if frame.cooldownData then
-                    itemID = itemID or frame.cooldownData.itemID
-                    slotID = slotID or frame.cooldownData.slotID
-                end
-
-                -- Find or create item
-                local item = itemsByFrame[frame]
-                if not item then
-                    local id = "blizz_" .. viewerKey .. "_" .. cooldownID
-                    item = module.CooldownItem.new({
-                        id = id,
-                        source = "blizzard",
-                        viewerKey = viewerKey,
-                        frame = frame,
-                        spellID = spellID,
-                        itemID = itemID,
-                        slotID = slotID,
-                        cooldownID = cooldownID,
-                        index = index,
-                        layoutIndex = index,
-                    })
-                    itemsById[id] = item
-                    itemsByFrame[frame] = item
-                else
-                    -- Update existing item
-                    local oldSpellID = item.spellID
-                    local oldIndex = item.index
-                    local oldCooldownID = item.cooldownID
-                    item.spellID = spellID
-                    item.itemID = itemID
-                    item.slotID = slotID
-                    item.cooldownID = cooldownID
-                    item.index = index
-                    item.layoutIndex = index
-                    item.viewerKey = viewerKey
-                end
-
-                newBlizzardItems[#newBlizzardItems + 1] = item
-            end
-        end
-    end
-
-    -- Get existing custom items for this viewer
     local customItems = {}
     local currentItems = itemsByViewer[viewerKey] or {}
     for _, item in ipairs(currentItems) do
@@ -297,15 +134,13 @@ function ItemRegistry.CollectBlizzardItems(viewerKey)
         end
     end
 
-    -- Remove stale blizzard items
     for _, item in ipairs(currentItems) do
-        if item.source == "blizzard" and item.frame and not seenFrames[item.frame] then
+        if item.source == "blizzard" and item.frame and not (seenFrames and seenFrames[item.frame]) then
             itemsById[item.id] = nil
             itemsByFrame[item.frame] = nil
         end
     end
 
-    -- Combine: blizzard items first, then custom
     local allItems = {}
     for _, item in ipairs(newBlizzardItems) do
         allItems[#allItems + 1] = item
@@ -314,53 +149,15 @@ function ItemRegistry.CollectBlizzardItems(viewerKey)
         allItems[#allItems + 1] = item
     end
 
-    -- Sort by index
     table.sort(allItems, function(a, b)
         return (a.index or 9999) < (b.index or 9999)
     end)
 
-    -- Update layout indices
     for i, item in ipairs(allItems) do
         item.layoutIndex = i
     end
 
     itemsByViewer[viewerKey] = allItems
-end
-
-function ItemRegistry._isIconFrame(frame)
-    if not frame then return false end
-    return (frame.Icon or frame.icon) and (frame.Cooldown or frame.cooldown)
-end
-
-function ItemRegistry._hookBuffFrameEvents(frame, viewer)
-    frame.__ucdmEventHooked = true
-
-    local function TriggerLayout(delayed)
-        if module:IsEnabled() and viewer:IsShown() and module.LayoutEngine then
-            if delayed then
-                C_Timer.After(0.1, function()
-                    if module:IsEnabled() and viewer:IsShown() then
-                        module.LayoutEngine.RefreshViewer("buff")
-                    end
-                end)
-            else
-                module.LayoutEngine.RefreshViewer("buff")
-            end
-        end
-    end
-
-    if frame.OnActiveStateChanged then
-        hooksecurefunc(frame, "OnActiveStateChanged", function() TriggerLayout(true) end)
-    end
-    if frame.OnUnitAuraAddedEvent then
-        hooksecurefunc(frame, "OnUnitAuraAddedEvent", function() TriggerLayout(true) end)
-    end
-    if frame.OnUnitAuraRemovedEvent then
-        hooksecurefunc(frame, "OnUnitAuraRemovedEvent", function() TriggerLayout(true) end)
-    end
-
-    frame:HookScript("OnShow", function() TriggerLayout(false) end)
-    frame:HookScript("OnHide", function() TriggerLayout(false) end)
 end
 
 --------------------------------------------------------------------------------
@@ -568,13 +365,6 @@ function ItemRegistry._acquireCustomFrame(id, parent)
         icon:SetAllPoints(frame)
         frame.Icon = icon
 
-        local mask = frame:CreateMaskTexture()
-        mask:SetAtlas("UI-HUD-CoolDownManager-Mask")
-        mask:SetAllPoints(icon)
-        icon:AddMaskTexture(mask)
-        frame.IconMask = mask
-
-        -- Create cooldown WITHOUT template to avoid circular mask
         local cooldown = CreateFrame("Cooldown", nil, frame)
         cooldown:SetAllPoints(frame)
         cooldown:SetDrawEdge(false)
@@ -590,6 +380,14 @@ function ItemRegistry._acquireCustomFrame(id, parent)
         frame.Count = count
     end
 
+    if frame.Icon and frame.Icon.GetNumMaskTextures then
+        for i = frame.Icon:GetNumMaskTextures(), 1, -1 do
+            local m = frame.Icon:GetMaskTexture(i)
+            if m then frame.Icon:RemoveMaskTexture(m) end
+        end
+        frame.IconMask = nil
+    end
+
     frame._ucdmItemId = id
     frame:Show()
     return frame
@@ -601,6 +399,7 @@ function ItemRegistry._releaseCustomFrame(frame)
     frame:Hide()
     frame:ClearAllPoints()
     frame._ucdmItemId = nil
+    frame.__ucdmTooltipHooked = nil
 
     if #customFramePool < 50 then
         table.insert(customFramePool, frame)
@@ -720,6 +519,11 @@ function ItemRegistry.MoveItemToViewer(id, newViewerKey)
     module:SetSetting("customEntries", customEntries)
 
     return true
+end
+
+function ItemRegistry.ClearViewerItems(viewerKey)
+    if not viewerKey then return end
+    itemsByViewer[viewerKey] = {}
 end
 
 --------------------------------------------------------------------------------

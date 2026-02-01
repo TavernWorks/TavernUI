@@ -6,10 +6,11 @@ local AceDBOptions     = LibStub("AceDBOptions-3.0")
 local AceConfig        = LibStub("AceConfig-3.0")
 local AceConfigDialog  = LibStub("AceConfigDialog-3.0")
 local AceConfigRegistry = LibStub("AceConfigRegistry-3.0")
+local L                = LibStub("AceLocale-3.0"):GetLocale("TavernUI", true)
 
 local TavernUI = AceAddon:NewAddon("TavernUI",
-    "AceConsole-3.0",
-    "AceEvent-3.0"
+        "AceConsole-3.0",
+        "AceEvent-3.0"
 )
 
 _G.TavernUI = TavernUI
@@ -24,6 +25,7 @@ TavernUI.defaults = {
         modules = {}, -- Individual module states (true/false), no wildcard
         general = {
             debug = false,
+            optionsScale = 1,
             font = {
                 face = "",
                 size = 12,
@@ -111,19 +113,6 @@ end
 TavernUI:SetDefaultModulePrototype(TavernUI.modulePrototype)
 TavernUI:SetDefaultModuleState(false) -- Modules disabled by default, we control enabling
 
-function TavernUI:GetPixelSize(region, physicalPixels, direction)
-    if not region or not physicalPixels or physicalPixels <= 0 then
-        return physicalPixels or 0
-    end
-    if PixelUtil and PixelUtil.GetNearestPixelSize then
-        local scale = region.GetEffectiveScale and region:GetEffectiveScale()
-        if scale and scale > 0 then
-            return PixelUtil.GetNearestPixelSize(physicalPixels, scale, direction or 0)
-        end
-    end
-    return physicalPixels
-end
-
 function TavernUI:GetTexturePath(key, mediaType, default)
     if not key or key == "" then
         return default or "Interface\\Buttons\\WHITE8x8"
@@ -183,9 +172,7 @@ function TavernUI:GetFontSizeForRegion(region, requestedSize)
         return size
     end
     if not self.db.profile.general.font.pixelPerfect then return size end
-    local scale = (region.GetEffectiveScale and region:GetEffectiveScale()) or (UIParent and UIParent.GetEffectiveScale and UIParent:GetEffectiveScale()) or 1
-    if not scale or scale <= 0 then return size end
-    return math.floor(size / scale + 0.5) * scale
+    return size
 end
 
 function TavernUI:GetFontShadow()
@@ -196,22 +183,8 @@ function TavernUI:GetFontShadow()
 end
 
 local function SetupPixelPerfectText(fontString, region, size, path, flags)
-    local scale = (region and region.GetEffectiveScale and region:GetEffectiveScale()) or (UIParent and UIParent.GetEffectiveScale and UIParent:GetEffectiveScale()) or 1
-    if not scale or scale <= 0 then return end
-    local pixelSize = math.floor(size / scale + 0.5) * scale
-    fontString:SetFont(path, pixelSize, flags)
-    if PixelUtil and PixelUtil.GetNearestPixelSize and fontString.GetPoint and fontString.ClearAllPoints and fontString.SetPoint then
-        local point, relativeTo, relativePoint, x, y = fontString:GetPoint(1)
-        if point and x and y and relativeTo == region then
-            local ok, px, py = pcall(function()
-                return PixelUtil.GetNearestPixelSize(x, scale, 0), PixelUtil.GetNearestPixelSize(y, scale, 1)
-            end)
-            if ok and px and py then
-                fontString:ClearAllPoints()
-                fontString:SetPoint(point, relativeTo, relativePoint, px, py)
-            end
-        end
-    end
+    if not region then return end
+    fontString:SetFont(path, size, flags)
 end
 
 function TavernUI:ApplyFont(fontString, region, defaultSize)
@@ -284,33 +257,92 @@ end
 function TavernUI:RegisterModuleDefaults(moduleName, moduleDefaults, enabledByDefault)
     -- Add module's defaults to master defaults table
     self.defaults.profile[moduleName] = moduleDefaults
-    
+
     -- Set default enabled state
     if enabledByDefault == nil then
         enabledByDefault = true
     end
     self.defaults.profile.modules[moduleName] = enabledByDefault
-    
+
     self:Debug("Registered defaults for module:", moduleName)
+end
+
+function TavernUI:RegisterAnchor(id, frame, opts)
+    local Anchoring = self:GetModule("Anchoring", true)
+    if Anchoring and Anchoring.Register then
+        Anchoring:Register(id, frame, opts)
+    end
+end
+
+function TavernUI:UnregisterAnchor(id, anchorName)
+    local Anchoring = self:GetModule("Anchoring", true)
+    if Anchoring and Anchoring.Unregister then
+        Anchoring:Unregister(id, anchorName)
+    end
+end
+
+function TavernUI:ApplyAnchor(id)
+    local Anchoring = self:GetModule("Anchoring", true)
+    if Anchoring and Anchoring.ApplyAnchor then
+        Anchoring:ApplyAnchor(id)
+    end
+end
+
+function TavernUI:RefreshAnchor(id)
+    local Anchoring = self:GetModule("Anchoring", true)
+    if Anchoring and Anchoring.Refresh then
+        Anchoring:Refresh(id)
+    end
+end
+
+function TavernUI:ClearLayoutPosition(id)
+    local Anchoring = self:GetModule("Anchoring", true)
+    if Anchoring and Anchoring.ClearLayoutPosition then
+        Anchoring:ClearLayoutPosition(id)
+    end
+end
+
+function TavernUI:GetAnchor(anchorName)
+    local Anchoring = self:GetModule("Anchoring", true)
+    if Anchoring and Anchoring.Get then
+        return Anchoring:Get(anchorName)
+    end
+    return nil, nil
+end
+
+function TavernUI:GetAllAnchors()
+    local Anchoring = self:GetModule("Anchoring", true)
+    if Anchoring and Anchoring.GetAll then
+        return Anchoring:GetAll()
+    end
+    return {}
+end
+
+function TavernUI:IsEditModeActive()
+    local Anchoring = self:GetModule("Anchoring", true)
+    if Anchoring and Anchoring.IsEditModeActive then
+        return Anchoring:IsEditModeActive()
+    end
+    return false
 end
 
 function TavernUI:OnInitialize()
     -- Create DB with the complete defaults table (modules have already registered their defaults)
     self.db = AceDB:New("TavernUIConfig", self.defaults, true)
     -- Do NOT call RegisterDefaults again - it's already set via New()
-    
+
     self.db.RegisterCallback(self, "OnProfileChanged", "RefreshConfig")
     self.db.RegisterCallback(self, "OnProfileCopied", "RefreshConfig")
     self.db.RegisterCallback(self, "OnProfileReset", "RefreshConfig")
-    
+
     -- Initialize Config system
     if self.Config then
         self.Config:OnInitialize()
     end
-    
+
     self:InitializeOptions()
     self:RegisterChatCommand("tui", "SlashCommand")
-    
+
     self:Debug("Core initialized")
 end
 
@@ -335,14 +367,14 @@ function TavernUI:RefreshModuleStates()
     if not self.db or not self.db.profile then
         return
     end
-    
+
     for name, module in self:IterateModules() do
         local shouldEnable = self.db.profile.modules[name]
         -- Default to true if not explicitly set
         if shouldEnable == nil then
             shouldEnable = true
         end
-        
+
         if shouldEnable then
             if not module:IsEnabled() then
                 self:EnableModule(name)
@@ -362,9 +394,9 @@ function TavernUI:ToggleModule(moduleName, state)
         self:Print("Module not found:", moduleName)
         return false
     end
-    
+
     self.db.profile.modules[moduleName] = state
-    
+
     if state then
         self:EnableModule(moduleName)
         self:Print("Module enabled:", moduleName)
@@ -372,9 +404,9 @@ function TavernUI:ToggleModule(moduleName, state)
         self:DisableModule(moduleName)
         self:Print("Module disabled:", moduleName)
     end
-    
+
     self:SendMessage("TavernUI_ModuleToggled", moduleName, state)
-    
+
     return true
 end
 
@@ -393,6 +425,21 @@ function TavernUI:RefreshConfig()
     self:Debug("Profile refreshed")
 end
 
+TavernUI._profileOptionsBuilders = TavernUI._profileOptionsBuilders or {}
+TavernUI._importExportOptionsBuilders = TavernUI._importExportOptionsBuilders or {}
+
+function TavernUI:RegisterProfileOptionsBuilder(builder)
+    if type(builder) == "function" then
+        self._profileOptionsBuilders[#self._profileOptionsBuilders + 1] = builder
+    end
+end
+
+function TavernUI:RegisterImportExportOptionsBuilder(builder)
+    if type(builder) == "function" then
+        self._importExportOptionsBuilders[#self._importExportOptionsBuilders + 1] = builder
+    end
+end
+
 function TavernUI:GetOptions()
     if not self._optionsTable then
         self._optionsTable = {
@@ -403,14 +450,39 @@ function TavernUI:GetOptions()
                     type = "group",
                     name = "General",
                     order = 10,
+                    childGroups = "tab",
                     args = {
-                        debug = {
-                            type = "toggle",
-                            name = "Debug Mode",
-                            desc = "Enable debug messages",
-                            get = function() return self.db.profile.general.debug end,
-                            set = function(_, value) self.db.profile.general.debug = value end,
+                        general = {
+                            type = "group",
+                            name = "General",
                             order = 10,
+                            args = {
+                                debug = {
+                                    type = "toggle",
+                                    name = "Debug Mode",
+                                    desc = "Enable debug messages",
+                                    get = function() return self.db.profile.general.debug end,
+                                    set = function(_, value) self.db.profile.general.debug = value end,
+                                    order = 10,
+                                },
+                                scale = {
+                                    type = "range",
+                                    name = L["OPTIONS_SCALE"],
+                                    desc = L["OPTIONS_SCALE_DESC"],
+                                    min = 0.5,
+                                    max = 1.5,
+                                    step = 0.05,
+                                    bigStep = 0.1,
+                                    order = 15,
+                                    get = function()
+                                        local v = self.db.profile.general.optionsScale
+                                        return (type(v) == "number" and v >= 0.5 and v <= 1.5) and v or 1
+                                    end,
+                                    set = function(_, value)
+                                        self.db.profile.general.optionsScale = math.max(0.5, math.min(1.5, value))
+                                    end,
+                                },
+                            },
                         },
                         font = {
                             type = "group",
@@ -541,18 +613,37 @@ function TavernUI:GetOptions()
     return self._optionsTable
 end
 
+local BLIZ_OPTIONS_ANCESTOR_NAMES = {
+    ["InterfaceOptionsFramePanelContainer"] = true,
+    ["InterfaceOptionsFrame"] = true,
+    ["SettingsPanel"] = true,
+}
+
+local function IsFrameInBlizzardOptions(frame)
+    if not frame then return false end
+    local p = frame
+    while p do
+        local name = p.GetName and p:GetName()
+        if name and BLIZ_OPTIONS_ANCESTOR_NAMES[name] then
+            return true
+        end
+        p = p.GetParent and p:GetParent()
+    end
+    return false
+end
+
 local function FixScrollbarsInFrame(frame)
     if not frame then return end
-    
+
     local function FixScrollFrame(scrollFrame)
         if scrollFrame and scrollFrame.obj and scrollFrame.obj.FixScroll then
             scrollFrame.obj:FixScroll()
         end
     end
-    
+
     local function FindAndFixScrollFrames(parent)
         if not parent then return end
-        
+
         local children = {parent:GetChildren()}
         for _, child in ipairs(children) do
             if child.GetObjectType and child:GetObjectType() == "ScrollFrame" then
@@ -562,13 +653,25 @@ local function FixScrollbarsInFrame(frame)
                 FindAndFixScrollFrames(child)
             end
         end
-        
+
         if parent.content and parent.content.GetChildren then
             FindAndFixScrollFrames(parent.content)
         end
     end
-    
+
     FindAndFixScrollFrames(frame)
+end
+
+function TavernUI:ApplyOptionsScale()
+    local scale = self.db and self.db.profile and self.db.profile.general and self.db.profile.general.optionsScale
+    scale = (type(scale) == "number" and scale >= 0.5 and scale <= 1.5) and scale or 1
+    local openFrames = AceConfigDialog.OpenFrames
+    if not openFrames then return end
+    for appName, frame in pairs(openFrames) do
+        if appName and (appName == "TavernUI" or appName:match("^TavernUI%.")) and frame and frame.frame then
+            frame.frame:SetScale(scale)
+        end
+    end
 end
 
 function TavernUI:InitializeOptions()
@@ -577,59 +680,138 @@ function TavernUI:InitializeOptions()
         if not options.args.profiles then
             options.args.profiles = AceDBOptions:GetOptionsTable(self.db)
             options.args.profiles.order = 100
+            for _, builder in ipairs(self._profileOptionsBuilders) do
+                local args = builder()
+                if type(args) == "table" then
+                    for k, v in pairs(args) do
+                        options.args.profiles.args[k] = v
+                    end
+                end
+            end
+        end
+        if not options.args.importExport then
+            options.args.importExport = {
+                type = "group",
+                name = L["IMPORT_EXPORT"],
+                order = 95,
+                args = {},
+            }
+            for _, builder in ipairs(self._importExportOptionsBuilders) do
+                local args = builder()
+                if type(args) == "table" then
+                    for k, v in pairs(args) do
+                        options.args.importExport.args[k] = v
+                    end
+                end
+            end
         end
         return options
     end
-    
+
     AceConfig:RegisterOptionsTable("TavernUI", getOptions)
-    self.optionsFrame = AceConfigDialog:AddToBlizOptions("TavernUI", "TavernUI")
-    
+
+    AceConfig:RegisterOptionsTable("TavernUI.BlizzardRoot", function()
+        return {
+            type = "group",
+            name = "TavernUI",
+            args = {
+                desc = {
+                    type = "description",
+                    name = "Use the categories on the left to configure TavernUI.",
+                    order = 1,
+                },
+            },
+        }
+    end)
+    self.optionsFrame = AceConfigDialog:AddToBlizOptions("TavernUI.BlizzardRoot", "TavernUI")
+
+    AceConfig:RegisterOptionsTable("TavernUI.General", function()
+        return self:GetOptions().args.general
+    end)
+    AceConfigDialog:AddToBlizOptions("TavernUI.General", "General", "TavernUI")
+
+    AceConfig:RegisterOptionsTable("TavernUI.Font", function()
+        return self:GetOptions().args.general.args.font
+    end)
+    AceConfigDialog:AddToBlizOptions("TavernUI.Font", "Font", "TavernUI")
+
+    AceConfig:RegisterOptionsTable("TavernUI.Profiles", function()
+        local options = self:GetOptions()
+        if not options.args.profiles then
+            options.args.profiles = AceDBOptions:GetOptionsTable(self.db)
+            options.args.profiles.order = 100
+        end
+        return options.args.profiles
+    end)
+    AceConfigDialog:AddToBlizOptions("TavernUI.Profiles", "Profiles", "TavernUI")
+
+    AceConfig:RegisterOptionsTable("TavernUI.ImportExport", function()
+        local options = self:GetOptions()
+        if not options.args.importExport then
+            options.args.importExport = {
+                type = "group",
+                name = L["IMPORT_EXPORT"],
+                order = 95,
+                args = {},
+            }
+            for _, builder in ipairs(self._importExportOptionsBuilders) do
+                local args = builder()
+                if type(args) == "table" then
+                    for k, v in pairs(args) do
+                        options.args.importExport.args[k] = v
+                    end
+                end
+            end
+        end
+        return options.args.importExport
+    end)
+    AceConfigDialog:AddToBlizOptions("TavernUI.ImportExport", L["IMPORT_EXPORT"], "TavernUI")
+
     AceConfigDialog:SetDefaultSize("TavernUI", 800, 800)
-    
+
     local originalOpen = AceConfigDialog.Open
     AceConfigDialog.Open = function(self, appName, ...)
         local result = originalOpen(self, appName, ...)
-        
-        if appName == "TavernUI" then
+
+        if appName and (appName == "TavernUI" or appName:match("^TavernUI%.")) then
             C_Timer.After(0.1, function()
-                local frame = AceConfigDialog.OpenFrames["TavernUI"]
+                local frame = AceConfigDialog.OpenFrames[appName]
                 if frame and frame.frame then
                     local windowFrame = frame.frame
-                    
-                    frame.frame:SetResizeBounds(800, 800, 1600, 1200)
-                    
+                    TavernUI:ApplyOptionsScale()
+                    if appName == "TavernUI" then
+                        frame.frame:SetResizeBounds(800, 800, 1600, 1200)
+                    end
                     if not windowFrame._scrollbarFixed then
                         windowFrame._scrollbarFixed = true
-                        
                         local function UpdateScrollbars()
                             FixScrollbarsInFrame(windowFrame)
                         end
-
                         windowFrame:HookScript("OnShow", function()
-                            C_Timer.After(0.1, UpdateScrollbars)
+                            C_Timer.After(IsFrameInBlizzardOptions(windowFrame) and 0.2 or 0.1, UpdateScrollbars)
                         end)
-                        
                         if frame.content then
                             frame.content:HookScript("OnSizeChanged", function()
                                 C_Timer.After(0.05, UpdateScrollbars)
                             end)
                         end
-                        
                         UpdateScrollbars()
+                    else
+                        FixScrollbarsInFrame(windowFrame)
                     end
                 end
             end)
         end
-        
+
         return result
     end
 end
 
 function TavernUI:RegisterModuleOptions(moduleName, moduleOptions, displayName)
     displayName = displayName or moduleName
-    
+
     local options = self:GetOptions()
-    
+
     if not options.args.modules.args[moduleName] then
         options.args.modules.args[moduleName] = {
             type = "group",
@@ -648,7 +830,7 @@ function TavernUI:RegisterModuleOptions(moduleName, moduleOptions, displayName)
             },
         }
     end
-    
+
     if moduleOptions and moduleOptions.args then
         for key, value in pairs(moduleOptions.args) do
             if value.order then
@@ -669,15 +851,32 @@ function TavernUI:RegisterModuleOptions(moduleName, moduleOptions, displayName)
             options.args.modules.args[moduleName].args[key] = value
         end
     end
-    
+
+    local blizKey = "TavernUI.modules." .. moduleName
+    AceConfig:RegisterOptionsTable(blizKey, function()
+        local opts = self:GetOptions()
+        return opts.args.modules.args[moduleName]
+    end)
+    self.blizOptionsRegistered = self.blizOptionsRegistered or {}
+    if not self.blizOptionsRegistered[blizKey] then
+        AceConfigDialog:AddToBlizOptions(blizKey, displayName, "TavernUI")
+        self.blizOptionsRegistered[blizKey] = true
+    end
+
     AceConfigRegistry:NotifyChange("TavernUI")
-    
+
     C_Timer.After(0.2, function()
         local frame = AceConfigDialog.OpenFrames["TavernUI"]
         if frame and frame.frame then
             FixScrollbarsInFrame(frame.frame)
         end
     end)
+end
+
+function TavernUI:IsOptionsFrameInBlizzardPanel()
+    local frame = AceConfigDialog.OpenFrames["TavernUI"]
+    if not frame or not frame.frame then return false end
+    return IsFrameInBlizzardOptions(frame.frame)
 end
 
 function TavernUI:FindModuleByName(searchName)
@@ -693,10 +892,11 @@ end
 function TavernUI:OpenOptions(panel)
     panel = panel or "TavernUI"
     AceConfigDialog:Open(panel)
-    
+
     C_Timer.After(0.1, function()
         local frame = AceConfigDialog.OpenFrames[panel]
         if frame and frame.frame then
+            self:ApplyOptionsScale()
             frame.frame:SetResizeBounds(600, 400, 1600, 1200)
             FixScrollbarsInFrame(frame.frame)
         end
@@ -705,7 +905,7 @@ end
 
 function TavernUI:SlashCommand(input)
     input = input and input:gsub("^%s+", ""):gsub("%s+$", ""):lower() or ""
-    
+
     if input == "" then
         self:OpenOptions()
     elseif input == "debug" then

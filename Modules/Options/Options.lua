@@ -15,14 +15,22 @@ local function getOptions()
                 type = "group",
                 name = L["GENERAL"],
                 order = 10,
+                childGroups = "tab",
                 args = {
-                    debug = {
-                        type = "toggle",
-                        name = L["DEBUG_MODE"],
-                        desc = L["ENABLE_DEBUG_MESSAGES"],
-                        get = function() return TavernUI.db.profile.general.debug end,
-                        set = function(_, value) TavernUI.db.profile.general.debug = value end,
+                    general = {
+                        type = "group",
+                        name = L["GENERAL"],
                         order = 10,
+                        args = {
+                            debug = {
+                                type = "toggle",
+                                name = L["DEBUG_MODE"],
+                                desc = L["ENABLE_DEBUG_MESSAGES"],
+                                get = function() return TavernUI.db.profile.general.debug end,
+                                set = function(_, value) TavernUI.db.profile.general.debug = value end,
+                                order = 10,
+                            },
+                        },
                     },
                     font = {
                         type = "group",

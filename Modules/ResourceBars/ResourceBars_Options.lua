@@ -1,13 +1,10 @@
 local TavernUI = LibStub("AceAddon-3.0"):GetAddon("TavernUI")
-local AceConfig = LibStub("AceConfig-3.0")
-local AceConfigDialog = LibStub("AceConfigDialog-3.0")
 local AceConfigRegistry = LibStub("AceConfigRegistry-3.0")
 local L = LibStub("AceLocale-3.0"):GetLocale("TavernUI", true)
 local module = TavernUI:GetModule("ResourceBars")
 
 if not module then return end
 
-local Anchor = LibStub("LibAnchorRegistry-1.0", true)
 
 local Options = {}
 
@@ -126,8 +123,8 @@ local function GetAnchorNameToExclude(barId)
 end
 
 local function GetCategoryForAnchor(anchorName)
-    if not Anchor or not anchorName then return nil end
-    local frame, metadata = Anchor:Get(anchorName)
+    if not anchorName then return nil end
+    local frame, metadata = TavernUI:GetAnchor(anchorName)
     if metadata and metadata.category then
         return metadata.category
     end
@@ -198,8 +195,8 @@ local CATEGORY_ORDER = {
 local function GetAvailableCategories(barId)
     local categories = {}
     local exclude = GetAnchorNameToExclude(barId)
-    if Anchor then
-        local allAnchors = Anchor:GetAll()
+    local allAnchors = TavernUI:GetAllAnchors()
+    if allAnchors and next(allAnchors) then
         for anchorName, anchorData in pairs(allAnchors) do
             if anchorName ~= exclude and anchorData.metadata then
                 local cat = anchorData.metadata.category or "misc"
@@ -1096,6 +1093,9 @@ local function BuildBarOptions(barId)
             local values = {}
             local selectedCategory = GetAnchorCategory(barId)
             if Anchor and selectedCategory and selectedCategory ~= "None" then
+                if selectedCategory ~= "screen" then
+                    values[""] = L["NONE_NO_ANCHORING"]
+                end
                 local exclude = GetAnchorNameToExclude(barId)
                 local anchorsByCategory = Anchor:GetByCategory(selectedCategory)
                 for anchorName, anchorData in pairs(anchorsByCategory) do
@@ -1104,6 +1104,8 @@ local function BuildBarOptions(barId)
                         values[anchorName] = displayName
                     end
                 end
+            else
+                values[""] = L["NONE_NO_ANCHORING"]
             end
             return values
         end,
@@ -1112,12 +1114,12 @@ local function BuildBarOptions(barId)
             if anchorConfig.target and anchorConfig.target ~= "UIParent" then
                 return anchorConfig.target
             end
-            return nil
+            return ""
         end,
         set = function(_, value)
             local cur = GetAnchorConfig(barId)
             local anchorConfig = (cur and type(cur) == "table") and cur or {}
-            if not value then
+            if value == "" or not value then
                 SetAnchorConfig(barId, nil)
                 SetAnchorCategory(barId, "None")
             else
@@ -1419,6 +1421,59 @@ function Options:Initialize()
                         module:SetSetting("throttleInterval", value)
                     end,
                 },
+                globalHeader = {
+                    type = "header",
+                    name = L["GLOBAL"],
+                    order = 3,
+                },
+                globalBarSizeWarning = {
+                    type = "description",
+                    name = L["GLOBAL_BAR_SIZE_WARNING"],
+                    order = 4,
+                    fontSize = "small",
+                },
+                globalBarWidth = {
+                    type = "range",
+                    name = L["WIDTH"],
+                    desc = L["GLOBAL_BAR_WIDTH_DESC"],
+                    order = 5,
+                    min = 50,
+                    max = 500,
+                    step = 1,
+                    get = function()
+                        local allIds = module:GetAllBarIds()
+                        if #allIds == 0 then return 200 end
+                        local c = GetEffectiveConfig(allIds[1])
+                        return (type(c[CONSTANTS.KEY_WIDTH]) == "number") and c[CONSTANTS.KEY_WIDTH] or 200
+                    end,
+                    set = function(_, value)
+                        for _, barId in ipairs(module:GetAllBarIds()) do
+                            SetBarSetting(barId, CONSTANTS.KEY_WIDTH, value)
+                        end
+                        RefreshAllBars()
+                    end,
+                },
+                globalBarHeight = {
+                    type = "range",
+                    name = L["HEIGHT"],
+                    desc = L["GLOBAL_BAR_HEIGHT_DESC"],
+                    order = 6,
+                    min = 5,
+                    max = 100,
+                    step = 1,
+                    get = function()
+                        local allIds = module:GetAllBarIds()
+                        if #allIds == 0 then return 14 end
+                        local c = GetEffectiveConfig(allIds[1])
+                        return (type(c[CONSTANTS.KEY_HEIGHT]) == "number") and c[CONSTANTS.KEY_HEIGHT] or 14
+                    end,
+                    set = function(_, value)
+                        for _, barId in ipairs(module:GetAllBarIds()) do
+                            SetBarSetting(barId, CONSTANTS.KEY_HEIGHT, value)
+                        end
+                        RefreshAllBars()
+                    end,
+                },
             },
         },
         health = {
@@ -1484,14 +1539,6 @@ function Options:Initialize()
             args = BuildBarOptions(barId),
         }
     end
-    
-    AceConfig:RegisterOptionsTable("TavernUI.ResourceBars", {
-        name = L["RESOURCE_BARS"],
-        type = "group",
-        args = args,
-    })
-    
-    AceConfigDialog:AddToBlizOptions("TavernUI.ResourceBars", L["RESOURCE_BARS"], "TavernUI")
     
     TavernUI:RegisterModuleOptions("ResourceBars", {
         type = "group",

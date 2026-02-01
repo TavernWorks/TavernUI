@@ -26,6 +26,14 @@ local function GetActionBarButtonNames()
     for i = 1, 120 do
         names[#names + 1] = "BT4Button" .. i
     end
+    for i = 1, 120 do
+        names[#names + 1] = "DominosActionButton" .. i
+    end
+    for bar = 1, 10 do
+        for i = 1, 12 do
+            names[#names + 1] = "ElvUI_Bar" .. bar .. "Button" .. i
+        end
+    end
     return names
 end
 
@@ -49,45 +57,28 @@ local function EnsureActionSlotPickHooks()
     end
 end
 
+local function GetViewerSelectValues()
+    local values = {
+        essential = L["ESSENTIAL_VIEWER"],
+        utility = L["UTILITY_VIEWER"],
+    }
+    for _, entry in ipairs(module:GetSetting("customViewers", {})) do
+        if entry and entry.id and entry.name then
+            values[entry.id] = entry.name
+        end
+    end
+    return values
+end
+
+local function GetViewerDisplayName(_, viewerKey)
+    return (viewerKey == "essential" and L["ESSENTIAL"]) or (viewerKey == "utility" and L["UTILITY"]) or (viewerKey == "buff" and L["BUFF"]) or module:GetCustomViewerDisplayName(viewerKey) or tostring(viewerKey)
+end
+module.GetViewerDisplayName = GetViewerDisplayName
+
 local function RefreshViewerComponents(viewerKey, property)
     if not module:IsEnabled() then return end
-
-    local layoutProperties = {
-        iconCount = true,
-        padding = true,
-        rowSpacing = true,
-        yOffset = true,
-        iconSize = true,
-        aspectRatioCrop = true,
-        rowBorderSize = true,
-        rows = true,
-        keepRowHeightWhenEmpty = true,
-    }
-    
-    if layoutProperties[property] then
-        if module.RefreshViewer then
-            module:RefreshViewer(viewerKey)
-        elseif module.LayoutEngine then
-            module.LayoutEngine.RefreshViewer(viewerKey)
-            if module.LayoutEngine then
-                module.LayoutEngine.RefreshViewer(viewerKey)
-            end
-        end
-    elseif property == "anchorConfig" or property == "anchorCategory" or 
-           property:match("^anchorConfig%.") then
-        if module.Anchoring then
-            module.Anchoring.RefreshViewer(viewerKey)
-        end
-    elseif property == "showKeybinds" or property == "keybindSize" or 
-           property == "keybindColor" or property == "keybindPoint" or
-           property == "keybindOffsetX" or property == "keybindOffsetY" then
-        if module.Keybinds then
-            module.Keybinds.RefreshViewer(viewerKey)
-        end
-    else
-        if module.LayoutEngine then
-            module.LayoutEngine.RefreshViewer(viewerKey)
-        end
+    if module.RefreshViewer then
+        module:RefreshViewer(viewerKey)
     end
 end
 
@@ -103,6 +94,32 @@ local ANCHOR_POINTS = {
     BOTTOMLEFT = "BOTTOMLEFT",
     BOTTOM = "BOTTOM",
     BOTTOMRIGHT = "BOTTOMRIGHT",
+}
+
+local ROW_OPTION_SCHEMA = {
+    { key = "rowName", optionKey = "name", type = "input", nameKey = "ROW_NAME", descKey = "OPTIONAL_ROW_NAME_DESC", default = "" },
+    { key = "iconCount", optionKey = "iconCount", type = "range", nameKey = "ICON_COUNT", descKey = "NUMBER_OF_ICONS_DESC", min = 1, max = 12, step = 1, defaultFn = function(vk) return vk == "essential" and 4 or 6 end },
+    { key = "orientation", optionKey = "orientation", type = "select", nameKey = "ROW_ORIENTATION", descKey = "ROW_ORIENTATION_DESC", values = { horizontal = "HORIZONTAL", vertical = "VERTICAL" }, default = "horizontal" },
+    { key = "iconSize", optionKey = "iconSize", type = "range", nameKey = "ICON_SIZE", descKey = "SIZE_OF_ICONS_DESC", min = 20, max = 100, step = 1, defaultFn = function(vk) return vk == "essential" and 50 or 42 end },
+    { key = "spacing", optionKey = "spacing", type = "range", nameKey = "ICON_SPACING", descKey = "SPACING_BETWEEN_ICONS_DESC", min = -20, max = 20, step = 1, default = 0 },
+    { key = "yOffset", optionKey = "yOffset", type = "range", nameKey = "Y_OFFSET", descKey = "VERTICAL_OFFSET_ROW_DESC", min = -50, max = 50, step = 1, default = 0 },
+    { key = "keepRowSizeWhenEmpty", optionKey = "keepRowSizeWhenEmpty", type = "toggle", nameKey = "KEEP_ROW_SIZE_WHEN_EMPTY", descKey = "KEEP_ROW_SIZE_WHEN_EMPTY_DESC", default = true },
+    { key = "stylingHeader", type = "header", nameKey = "ICON_STYLING" },
+    { key = "aspectRatioCrop", optionKey = "aspectRatioCrop", type = "range", nameKey = "ASPECT_RATIO_CROP", descKey = "ASPECT_RATIO_CROP_DESC", min = 1.0, max = 2.0, step = 0.01, default = 1.0 },
+    { key = "zoom", optionKey = "zoom", type = "range", nameKey = "ZOOM", descKey = "ZOOM_DESC", min = 0, max = 0.2, step = 0.01, default = 0.02 },
+    { key = "iconBorderHeader", type = "header", nameKey = "ICON_BORDER" },
+    { key = "iconBorderSize", optionKey = "iconBorderSize", type = "range", nameKey = "ICON_BORDER_SIZE", descKey = "SIZE_OF_ICON_BORDER_DESC", min = 0, max = 5, step = 1, default = 1 },
+    { key = "iconBorderColor", optionKey = "iconBorderColor", type = "color", nameKey = "ICON_BORDER_COLOR", descKey = "COLOR_OF_ICON_BORDER_DESC", default = {r = 0, g = 0, b = 0, a = 1}, disabledFn = function(row) return (row and row.iconBorderSize or 0) == 0 end },
+    { key = "textHeader", type = "header", nameKey = "TEXT_SETTINGS" },
+    { key = "durationSize", optionKey = "durationSize", type = "range", nameKey = "DURATION_TEXT_SIZE", descKey = "DURATION_TEXT_SIZE_DESC", min = 0, max = 96, step = 1, default = 18 },
+    { key = "durationPoint", optionKey = "durationPoint", type = "select", nameKey = "DURATION_TEXT_POSITION", descKey = "ANCHOR_POINT_DURATION_DESC", values = ANCHOR_POINTS, default = "CENTER", disabledFn = function(row) return (row and row.durationSize or 18) == 0 end },
+    { key = "durationOffsetX", optionKey = "durationOffsetX", type = "range", nameKey = "DURATION_TEXT_OFFSET_X", descKey = "HORIZONTAL_OFFSET_DURATION_DESC", min = -50, max = 50, step = 1, default = 0, disabledFn = function(row) return (row and row.durationSize or 18) == 0 end },
+    { key = "durationOffsetY", optionKey = "durationOffsetY", type = "range", nameKey = "DURATION_TEXT_OFFSET_Y", descKey = "VERTICAL_OFFSET_DURATION_DESC", min = -50, max = 50, step = 1, default = 0, disabledFn = function(row) return (row and row.durationSize or 18) == 0 end },
+    { key = "stackSize", optionKey = "stackSize", type = "range", nameKey = "STACK_TEXT_SIZE", descKey = "STACK_TEXT_SIZE_DESC", min = 0, max = 96, step = 1, default = 16 },
+    { key = "stackPoint", optionKey = "stackPoint", type = "select", nameKey = "STACK_TEXT_POSITION", descKey = "ANCHOR_POINT_STACK_DESC", values = ANCHOR_POINTS, default = "BOTTOMRIGHT", disabledFn = function(row) return (row and row.stackSize or 16) == 0 end },
+    { key = "stackOffsetX", optionKey = "stackOffsetX", type = "range", nameKey = "STACK_TEXT_OFFSET_X", descKey = "HORIZONTAL_OFFSET_STACK_DESC", min = -50, max = 50, step = 1, default = 0, disabledFn = function(row) return (row and row.stackSize or 16) == 0 end },
+    { key = "stackOffsetY", optionKey = "stackOffsetY", type = "range", nameKey = "STACK_TEXT_OFFSET_Y", descKey = "VERTICAL_OFFSET_STACK_DESC", min = -50, max = 50, step = 1, default = 0, disabledFn = function(row) return (row and row.stackSize or 16) == 0 end },
+    { key = "actionsHeader", type = "header", nameKey = "ACTIONS" },
 }
 
 local function MakeRowOption(viewerKey, rowIndex, optionKey, optionType, config)
@@ -132,7 +149,6 @@ local function MakeRowOption(viewerKey, rowIndex, optionKey, optionType, config)
         option.values = config.values or ANCHOR_POINTS
     elseif optionType == "color" then
         option.hasAlpha = config.hasAlpha or false
-    elseif optionType == "input" then
     end
 
     option.get = function()
@@ -156,7 +172,6 @@ local function MakeRowOption(viewerKey, rowIndex, optionKey, optionType, config)
 
     option.set = function(_, value, g, b)
         local path = string.format("viewers.%s.rows[%d].%s", viewerKey, rowIndex, setPath)
-
         if optionType == "color" then
             local color = module:GetSetting(path, {r = 0, g = 0, b = 0, a = 1})
             if type(color) ~= "table" then
@@ -188,152 +203,41 @@ local function MakeRowOption(viewerKey, rowIndex, optionKey, optionType, config)
     return option
 end
 
+local function MakeRowOptionFromSchema(viewerKey, rowIndex, order, entry)
+    if entry.type == "header" then
+        return { type = "header", name = L[entry.nameKey], order = order }
+    end
+    local optionKey = entry.optionKey or entry.key
+    local defaultVal = entry.defaultFn and entry.defaultFn(viewerKey) or entry.default
+    local values = entry.values
+    if type(values) == "table" then
+        local resolved = {}
+        for k, v in pairs(values) do
+            resolved[k] = (type(v) == "string" and L[v]) or v
+        end
+        values = resolved
+    end
+    local config = {
+        order = order,
+        name = L[entry.nameKey],
+        desc = entry.descKey and L[entry.descKey] or nil,
+        min = entry.min,
+        max = entry.max,
+        step = entry.step,
+        default = defaultVal,
+        values = values,
+        disabled = entry.disabledFn,
+    }
+    return MakeRowOption(viewerKey, rowIndex, optionKey, entry.type, config)
+end
+
 local function BuildRowOptions(viewerKey, rowIndex, orderBase)
     local args = {}
     local order = orderBase or 1
-
-    args.rowName = MakeRowOption(viewerKey, rowIndex, "name", "input", {
-        order = order, name = L["ROW_NAME"], desc = L["OPTIONAL_ROW_NAME_DESC"],
-        default = ""
-    })
-    order = order + 1
-
-    args.iconCount = MakeRowOption(viewerKey, rowIndex, "iconCount", "range", {
-        order = order, name = L["ICON_COUNT"], desc = L["NUMBER_OF_ICONS_DESC"],
-        min = 1, max = 12, step = 1, default = viewerKey == "essential" and 4 or 6
-    })
-    order = order + 1
-
-    args.iconSize = MakeRowOption(viewerKey, rowIndex, "iconSize", "range", {
-        order = order, name = L["ICON_SIZE"], desc = L["SIZE_OF_ICONS_DESC"],
-        min = 20, max = 100, step = 1, default = viewerKey == "essential" and 50 or 42
-    })
-    order = order + 1
-
-    args.padding = MakeRowOption(viewerKey, rowIndex, "padding", "range", {
-        order = order, name = L["PADDING"], desc = L["SPACING_BETWEEN_ICONS_DESC"],
-        min = -20, max = 20, step = 1, default = -8
-    })
-    order = order + 1
-
-    args.yOffset = MakeRowOption(viewerKey, rowIndex, "yOffset", "range", {
-        order = order, name = L["Y_OFFSET"], desc = L["VERTICAL_OFFSET_ROW_DESC"],
-        min = -50, max = 50, step = 1, default = 0
-    })
-    order = order + 1
-
-    args.keepRowHeightWhenEmpty = MakeRowOption(viewerKey, rowIndex, "keepRowHeightWhenEmpty", "toggle", {
-        order = order, name = L["KEEP_ROW_HEIGHT_WHEN_EMPTY"], desc = L["KEEP_ROW_HEIGHT_WHEN_EMPTY_DESC"],
-        default = true
-    })
-    order = order + 1
-
-    args.stylingHeader = {type = "header", name = L["ICON_STYLING"], order = order}
-    order = order + 1
-
-    args.aspectRatioCrop = MakeRowOption(viewerKey, rowIndex, "aspectRatioCrop", "range", {
-        order = order, name = L["ASPECT_RATIO_CROP"], desc = L["ASPECT_RATIO_CROP_DESC"],
-        min = 1.0, max = 2.0, step = 0.01, default = 1.0
-    })
-    order = order + 1
-
-    args.zoom = MakeRowOption(viewerKey, rowIndex, "zoom", "range", {
-        order = order, name = L["ZOOM"], desc = L["ZOOM_DESC"],
-        min = 0, max = 0.2, step = 0.01, default = 0
-    })
-    order = order + 1
-
-    args.iconBorderHeader = {type = "header", name = L["ICON_BORDER"], order = order}
-    order = order + 1
-
-    args.iconBorderSize = MakeRowOption(viewerKey, rowIndex, "iconBorderSize", "range", {
-        order = order, name = L["ICON_BORDER_SIZE"], desc = L["SIZE_OF_ICON_BORDER_DESC"],
-        min = 0, max = 5, step = 1, default = 0
-    })
-    order = order + 1
-
-    args.iconBorderColor = MakeRowOption(viewerKey, rowIndex, "iconBorderColor", "color", {
-        order = order, name = L["ICON_BORDER_COLOR"], desc = L["COLOR_OF_ICON_BORDER_DESC"],
-        default = {r = 0, g = 0, b = 0, a = 1},
-        disabled = function(row) return (row and row.iconBorderSize or 0) == 0 end
-    })
-    order = order + 1
-
-    args.rowBorderHeader = {type = "header", name = L["ROW_BORDER"], order = order}
-    order = order + 1
-
-    args.rowBorderSize = MakeRowOption(viewerKey, rowIndex, "rowBorderSize", "range", {
-        order = order, name = L["ROW_BORDER_SIZE"], desc = L["SIZE_OF_ROW_BORDER_DESC"],
-        min = 0, max = 5, step = 1, default = 0
-    })
-    order = order + 1
-
-    args.rowBorderColor = MakeRowOption(viewerKey, rowIndex, "rowBorderColor", "color", {
-        order = order, name = L["ROW_BORDER_COLOR"], desc = L["COLOR_OF_ROW_BORDER_DESC"],
-        default = {r = 0, g = 0, b = 0, a = 1},
-        disabled = function(row) return (row and row.rowBorderSize or 0) == 0 end
-    })
-    order = order + 1
-
-    args.textHeader = {type = "header", name = L["TEXT_SETTINGS"], order = order}
-    order = order + 1
-
-    args.durationSize = MakeRowOption(viewerKey, rowIndex, "durationSize", "range", {
-        order = order, name = L["DURATION_TEXT_SIZE"], desc = L["DURATION_TEXT_SIZE_DESC"],
-        min = 0, max = 96, step = 1, default = 18
-    })
-    order = order + 1
-
-    args.durationPoint = MakeRowOption(viewerKey, rowIndex, "durationPoint", "select", {
-        order = order, name = L["DURATION_TEXT_POSITION"], desc = L["ANCHOR_POINT_DURATION_DESC"],
-        values = ANCHOR_POINTS, default = "CENTER",
-        disabled = function(row) return (row and row.durationSize or 18) == 0 end
-    })
-    order = order + 1
-
-    args.durationOffsetX = MakeRowOption(viewerKey, rowIndex, "durationOffsetX", "range", {
-        order = order, name = L["DURATION_TEXT_OFFSET_X"], desc = L["HORIZONTAL_OFFSET_DURATION_DESC"],
-        min = -50, max = 50, step = 1, default = 0,
-        disabled = function(row) return (row and row.durationSize or 18) == 0 end
-    })
-    order = order + 1
-
-    args.durationOffsetY = MakeRowOption(viewerKey, rowIndex, "durationOffsetY", "range", {
-        order = order, name = L["DURATION_TEXT_OFFSET_Y"], desc = L["VERTICAL_OFFSET_DURATION_DESC"],
-        min = -50, max = 50, step = 1, default = 0,
-        disabled = function(row) return (row and row.durationSize or 18) == 0 end
-    })
-    order = order + 1
-
-    args.stackSize = MakeRowOption(viewerKey, rowIndex, "stackSize", "range", {
-        order = order, name = L["STACK_TEXT_SIZE"], desc = L["STACK_TEXT_SIZE_DESC"],
-        min = 0, max = 96, step = 1, default = 16
-    })
-    order = order + 1
-
-    args.stackPoint = MakeRowOption(viewerKey, rowIndex, "stackPoint", "select", {
-        order = order, name = L["STACK_TEXT_POSITION"], desc = L["ANCHOR_POINT_STACK_DESC"],
-        values = ANCHOR_POINTS, default = "BOTTOMRIGHT",
-        disabled = function(row) return (row and row.stackSize or 16) == 0 end
-    })
-    order = order + 1
-
-    args.stackOffsetX = MakeRowOption(viewerKey, rowIndex, "stackOffsetX", "range", {
-        order = order, name = L["STACK_TEXT_OFFSET_X"], desc = L["HORIZONTAL_OFFSET_STACK_DESC"],
-        min = -50, max = 50, step = 1, default = 0,
-        disabled = function(row) return (row and row.stackSize or 16) == 0 end
-    })
-    order = order + 1
-
-    args.stackOffsetY = MakeRowOption(viewerKey, rowIndex, "stackOffsetY", "range", {
-        order = order, name = L["STACK_TEXT_OFFSET_Y"], desc = L["VERTICAL_OFFSET_STACK_DESC"],
-        min = -50, max = 50, step = 1, default = 0,
-        disabled = function(row) return (row and row.stackSize or 16) == 0 end
-    })
-    order = order + 1
-
-    args.actionsHeader = {type = "header", name = L["ACTIONS"], order = order}
-    order = order + 1
+    for _, entry in ipairs(ROW_OPTION_SCHEMA) do
+        args[entry.key] = MakeRowOptionFromSchema(viewerKey, rowIndex, order, entry)
+        order = order + 1
+    end
 
     args.moveUp = {
         type = "execute",
@@ -385,6 +289,12 @@ local function BuildRowOptions(viewerKey, rowIndex, orderBase)
         name = L["REMOVE_ROW"],
         desc = L["REMOVE_ROW_DESC"],
         order = order,
+        disabled = function()
+            local path = string.format("viewers.%s.rows", viewerKey)
+            local rows = module:GetSetting(path, {})
+            if type(rows) ~= "table" then return true end
+            return #rows <= 1
+        end,
         func = function()
             local path = string.format("viewers.%s.rows", viewerKey)
             local rows = module:GetSetting(path, {})
@@ -414,7 +324,7 @@ local function BuildAnchorOptions(viewerKey, orderBase)
         buff = "TavernUI.uCDM.buff",
         custom = "TavernUI.uCDM.custom",
     }
-    local excludeAnchor = anchorNames[viewerKey]
+    local excludeAnchor = anchorNames[viewerKey] or (viewerKey and ("TavernUI.uCDM." .. viewerKey))
 
     local function GetCategoryForAnchor(anchorName)
         if not Anchor or not anchorName then return nil end
@@ -578,14 +488,18 @@ local function BuildAnchorOptions(viewerKey, orderBase)
             local selectedCategory = module:GetSetting(viewerPath .. ".anchorCategory")
 
             if selectedCategory and selectedCategory ~= "None" then
+                if selectedCategory ~= "screen" then
+                    values[""] = L["NONE_NO_ANCHORING"]
+                end
                 local anchorsByCategory = Anchor:GetByCategory(selectedCategory)
-
                 for anchorName, anchorData in pairs(anchorsByCategory) do
                     if anchorName ~= excludeAnchor then
                         local displayName = anchorData.metadata and anchorData.metadata.displayName or anchorName
                         values[anchorName] = displayName
                     end
                 end
+            else
+                values[""] = L["NONE_NO_ANCHORING"]
             end
 
             return values
@@ -595,7 +509,7 @@ local function BuildAnchorOptions(viewerKey, orderBase)
             if anchorConfig.target and anchorConfig.target ~= "UIParent" then
                 return anchorConfig.target
             end
-            return nil
+            return ""
         end,
         set = function(_, value)
             local viewerPath = string.format("viewers.%s", viewerKey)
@@ -609,7 +523,7 @@ local function BuildAnchorOptions(viewerKey, orderBase)
                 offsetY = 0,
             })
 
-            if not value then
+            if value == "" or not value then
                 anchorConfig.target = nil
                 module:SetSetting(anchorConfigPath, anchorConfig)
             else
@@ -727,7 +641,18 @@ end
 
 local function BuildViewerOptions(viewerKey, viewerName, orderBase)
     local args = {}
-    local order = orderBase or 1
+    local order = 1
+
+    if viewerKey == "buff" then
+        args.note = {
+            type = "description",
+            name = L["BUFF_VIEWER_BLIZZARD_ONLY_DESC"],
+            order = 0,
+        }
+    end
+
+    args.generalHeader = { type = "header", name = L["GENERAL"], order = order }
+    order = order + 1
 
     args.enabled = {
         type = "toggle",
@@ -782,7 +707,50 @@ local function BuildViewerOptions(viewerKey, viewerName, orderBase)
     }
     order = order + 1
 
-    local anchorOrder = viewerKey == "essential" and 5 or 10
+    if viewerKey == "buff" then
+        args.previewHeader = { type = "header", name = L["PREVIEW"], order = order }
+        order = order + 1
+        args.showPreview = {
+            type = "toggle",
+            name = L["SHOW_PREVIEW"],
+            desc = L["SHOW_PREVIEW_DESC"],
+            order = order,
+            get = function()
+                return module:GetSetting("viewers.buff.showPreview", false) == true
+            end,
+            set = function(_, value)
+                module:SetSetting("viewers.buff.showPreview", value)
+                RefreshViewerComponents("buff", "showPreview")
+            end,
+        }
+        order = order + 1
+        args.previewIconCount = {
+            type = "range",
+            name = L["PREVIEW_ICON_COUNT"],
+            desc = L["PREVIEW_ICON_COUNT_DESC"],
+            order = order,
+            min = 1,
+            max = 12,
+            step = 1,
+            disabled = function()
+                return not module:GetSetting("viewers.buff.showPreview", false)
+            end,
+            get = function()
+                return module:GetSetting("viewers.buff.previewIconCount", 6)
+            end,
+            set = function(_, value)
+                module:SetSetting("viewers.buff.previewIconCount", value, {
+                    type = "number",
+                    min = 1,
+                    max = 12,
+                })
+                RefreshViewerComponents("buff", "previewIconCount")
+            end,
+        }
+        order = order + 1
+    end
+
+    local anchorOrder = 10
     local anchorOptions = BuildAnchorOptions(viewerKey, anchorOrder)
 
     for k, v in pairs(anchorOptions) do
@@ -792,7 +760,8 @@ local function BuildViewerOptions(viewerKey, viewerName, orderBase)
         end
     end
 
-    args.keybindHeader = {type = "header", name = L["KEYBIND_DISPLAY"], order = order}
+    order = 20
+    args.keybindHeader = { type = "header", name = L["KEYBIND_DISPLAY"], order = order }
     order = order + 1
 
     args.showKeybinds = {
@@ -930,7 +899,8 @@ local function BuildViewerOptions(viewerKey, viewerName, orderBase)
     }
     order = order + 1
 
-    args.rowsHeader = {type = "header", name = L["Rows"], order = order}
+    order = 100
+    args.rowsHeader = { type = "header", name = L["Rows"], order = order }
     order = order + 1
 
     args.addRow = {
@@ -944,33 +914,11 @@ local function BuildViewerOptions(viewerKey, viewerName, orderBase)
             if type(rows) ~= "table" then
                 rows = {}
             end
-
-            local defaultIconCount = viewerKey == "essential" and 4 or 6
-            local defaultIconSize = viewerKey == "essential" and 50 or 42
-
-            table.insert(rows, {
-                name = string.format(L["ROW_N"], #rows + 1),
-                iconCount = defaultIconCount,
-                iconSize = defaultIconSize,
-                padding = -8,
-                yOffset = 0,
-                keepRowHeightWhenEmpty = true,
-                aspectRatioCrop = 1.0,
-                zoom = 0,
-                iconBorderSize = 0,
-                iconBorderColor = {r = 0, g = 0, b = 0, a = 1},
-                rowBorderSize = 0,
-                rowBorderColor = {r = 0, g = 0, b = 0, a = 1},
-                durationSize = 18,
-                durationPoint = "CENTER",
-                durationOffsetX = 0,
-                durationOffsetY = 0,
-                stackSize = 16,
-                stackPoint = "BOTTOMRIGHT",
-                stackOffsetX = 0,
-                stackOffsetY = 0,
-            })
-
+            local newRow = (module.GetDefaultFirstRow and module.GetDefaultFirstRow(viewerKey)) or {}
+            if type(newRow) == "table" then
+                newRow.name = string.format(L["ROW_N"], #rows + 1)
+                table.insert(rows, newRow)
+            end
             module:SetSetting(path, rows)
             RefreshViewerComponents(viewerKey, "rows")
             RefreshOptions(true)
@@ -990,16 +938,15 @@ local function BuildViewerOptions(viewerKey, viewerName, orderBase)
         table.insert(rows, {
             name = L["DEFAULT"],
             iconCount = defaultIconCount,
+            orientation = "horizontal",
             iconSize = defaultIconSize,
-            padding = -8,
+            spacing = -8,
             yOffset = 0,
-            keepRowHeightWhenEmpty = true,
+            keepRowSizeWhenEmpty = true,
             aspectRatioCrop = 1.0,
-            zoom = 0,
-            iconBorderSize = 0,
+            zoom = 0.02,
+            iconBorderSize = 1,
             iconBorderColor = {r = 0, g = 0, b = 0, a = 1},
-            rowBorderSize = 0,
-            rowBorderColor = {r = 0, g = 0, b = 0, a = 1},
             durationSize = 18,
             durationPoint = "CENTER",
             durationOffsetX = 0,
@@ -1027,45 +974,16 @@ end
 
 local function BuildGeneralOptions()
     return {
-        scaleHeader = {
-            type = "header",
-            name = L["DISPLAY"],
-            order = 0,
-        },
-        scaleFactor = {
-            type = "range",
-            name = L["SCALE"],
-            desc = L["SCALE_FACTOR_DESC"],
-            order = 1,
-            min = 0.5,
-            max = 2.0,
-            step = 0.05,
-            get = function()
-                return module:GetSetting("general.scaleFactor", 1)
-            end,
-            set = function(_, value)
-                module:SetSetting("general.scaleFactor", value, {
-                    type = "number",
-                    min = 0.5,
-                    max = 2.0,
-                })
-                for _, viewerKey in ipairs(module.CONSTANTS.VIEWER_KEYS) do
-                    if viewerKey ~= "custom" and module.LayoutEngine then
-                        module.LayoutEngine.RefreshViewer(viewerKey)
-                    end
-                end
-            end,
-        },
         debugHeader = {
             type = "header",
             name = L["DEBUG"],
-            order = 2,
+            order = 1,
         },
         debug = {
             type = "toggle",
             name = L["DEBUG_MODE"],
             desc = L["ENABLE_DEBUG_MESSAGES"],
-            order = 3,
+            order = 4,
             get = function()
                 return module:GetSetting("general.debug", false) == true
             end,
@@ -1138,6 +1056,72 @@ local function BuildGeneralOptions()
     }
 end
 
+local VISIBILITY_OPTION_SCHEMA = {
+    { key = "visibilityDesc", type = "description", nameKey = "VISIBILITY_DESC", order = 1 },
+    { key = "visibilityCombatHeader", type = "header", nameKey = "VISIBILITY_COMBAT", order = 2 },
+    { key = "showInCombat", type = "toggle", path = "general.visibility.combat.showInCombat", nameKey = "SHOW_IN_COMBAT", order = 3 },
+    { key = "showOutOfCombat", type = "toggle", path = "general.visibility.combat.showOutOfCombat", nameKey = "SHOW_OUT_OF_COMBAT", order = 4 },
+    { key = "visibilityTargetHeader", type = "header", nameKey = "VISIBILITY_TARGET", order = 5 },
+    { key = "showWhenTargetExists", type = "toggle", path = "general.visibility.target.showWhenTargetExists", nameKey = "SHOW_WHEN_TARGET_EXISTS", order = 6 },
+    { key = "visibilityGroupHeader", type = "header", nameKey = "VISIBILITY_GROUP", order = 11 },
+    { key = "showSolo", type = "toggle", path = "general.visibility.group.showSolo", nameKey = "SHOW_WHEN_SOLO", order = 12 },
+    { key = "showParty", type = "toggle", path = "general.visibility.group.showParty", nameKey = "SHOW_WHEN_IN_PARTY", order = 13 },
+    { key = "showRaid", type = "toggle", path = "general.visibility.group.showRaid", nameKey = "SHOW_WHEN_IN_RAID", order = 14 },
+    { key = "visibilityInstanceHeader", type = "header", nameKey = "VISIBILITY_INSTANCE", order = 15 },
+    { key = "showInOpenWorld", type = "toggle", path = "general.visibility.instance.showInOpenWorld", nameKey = "SHOW_IN_OPEN_WORLD", order = 16 },
+    { key = "showInPartyInstance", type = "toggle", path = "general.visibility.instance.showInParty", nameKey = "SHOW_IN_PARTY_INSTANCE", order = 17 },
+    { key = "showInRaidInstance", type = "toggle", path = "general.visibility.instance.showInRaid", nameKey = "SHOW_IN_RAID_INSTANCE", order = 18 },
+    { key = "showInArena", type = "toggle", path = "general.visibility.instance.showInArena", nameKey = "SHOW_IN_ARENA", order = 19 },
+    { key = "showInPvp", type = "toggle", path = "general.visibility.instance.showInPvp", nameKey = "SHOW_IN_PVP", order = 20 },
+    { key = "showInScenario", type = "toggle", path = "general.visibility.instance.showInScenario", nameKey = "SHOW_IN_SCENARIO", order = 21 },
+    { key = "visibilityRoleHeader", type = "header", nameKey = "VISIBILITY_ROLE", order = 22 },
+    { key = "showTank", type = "toggle", path = "general.visibility.role.showTank", nameKey = "SHOW_WHEN_TANK", order = 23 },
+    { key = "showHealer", type = "toggle", path = "general.visibility.role.showHealer", nameKey = "SHOW_WHEN_HEALER", order = 24 },
+    { key = "showDps", type = "toggle", path = "general.visibility.role.showDps", nameKey = "SHOW_WHEN_DPS", order = 25 },
+    { key = "visibilityHideHeader", type = "header", nameKey = "VISIBILITY_HIDE_WHEN", order = 26 },
+    { key = "hideWhenInVehicle", type = "toggle", path = "general.visibility.hideWhenInVehicle", nameKey = "HIDE_WHEN_IN_VEHICLE", order = 27 },
+    { key = "hideWhenMounted", type = "toggle", path = "general.visibility.hideWhenMounted", nameKey = "HIDE_WHEN_MOUNTED", order = 28 },
+    { key = "hideWhenMountedWhen", type = "select", path = "general.visibility.hideWhenMountedWhen", nameKey = "HIDE_WHEN_MOUNTED_WHEN", descKey = "HIDE_WHEN_MOUNTED_WHEN_DESC", order = 29, default = "both", values = { both = "VISIBILITY_WHEN_BOTH", grounded = "VISIBILITY_WHEN_GROUNDED", flying = "VISIBILITY_WHEN_FLYING" } },
+}
+
+local function MakeVisibilityOption(entry)
+    if entry.type == "description" then
+        return { type = "description", name = L[entry.nameKey], order = entry.order, fontSize = "small" }
+    end
+    if entry.type == "header" then
+        return { type = "header", name = L[entry.nameKey], order = entry.order }
+    end
+    local path = entry.path
+    local defaultVal = entry.default
+    local opt = {
+        type = entry.type,
+        name = L[entry.nameKey],
+        order = entry.order,
+        get = function() return module:GetSetting(path, defaultVal) end,
+        set = function(_, value)
+            module:SetSetting(path, value)
+            if module:IsEnabled() then module:RefreshAllViewers() end
+        end,
+    }
+    if entry.descKey then opt.desc = L[entry.descKey] end
+    if entry.type == "select" and entry.values then
+        local resolved = {}
+        for k, v in pairs(entry.values) do
+            resolved[k] = type(v) == "string" and L[v] or v
+        end
+        opt.values = resolved
+    end
+    return opt
+end
+
+local function BuildVisibilityOptions()
+    local result = {}
+    for _, entry in ipairs(VISIBILITY_OPTION_SCHEMA) do
+        result[entry.key] = MakeVisibilityOption(entry)
+    end
+    return result
+end
+
 local function GetActionSlotSelectValues()
     local values = {}
     for slot = 1, 120 do
@@ -1151,6 +1135,12 @@ end
 local function BuildCustomTabOptions()
     local actionSlotValues = GetActionSlotSelectValues()
     return {
+        customEntriesDesc = {
+            type = "description",
+            name = L["CUSTOM_ENTRIES_DESC"],
+            order = 0,
+            fontSize = "small",
+        },
         addSpell = {
             type = "input",
             name = L["ADD_SPELL"],
@@ -1190,11 +1180,8 @@ local function BuildCustomTabOptions()
                         local entry = module.ItemRegistry.CreateCustomItem(config)
                         if entry then
                             local viewerKey = defaultViewer
-                            if module.LayoutEngine then
-                                module.LayoutEngine.RefreshViewer(viewerKey)
-                            end
-                            if module.LayoutEngine then
-                                module.LayoutEngine.RefreshViewer(viewerKey)
+                            if module.RefreshViewer then
+                                module:RefreshViewer(viewerKey)
                             end
                             RefreshOptions(true)
                         end
@@ -1243,11 +1230,8 @@ local function BuildCustomTabOptions()
                         local entry = module.ItemRegistry.CreateCustomItem(config)
                         if entry then
                             local viewerKey = defaultViewer
-                            if module.LayoutEngine then
-                                module.LayoutEngine.RefreshViewer(viewerKey)
-                            end
-                            if module.LayoutEngine then
-                                module.LayoutEngine.RefreshViewer(viewerKey)
+                            if module.RefreshViewer then
+                                module:RefreshViewer(viewerKey)
                             end
                             RefreshOptions(true)
                         end
@@ -1271,7 +1255,7 @@ local function BuildCustomTabOptions()
                 local slotID = value
                 local itemID = GetInventoryItemID("player", slotID)
                 if itemID then
-                    local defaultViewer = module:GetSetting("defaultCustomViewer", "custom")
+                    local defaultViewer = module:GetSetting("defaultCustomViewer", "essential")
                     if defaultViewer == "custom" then
                         defaultViewer = "essential"
                     end
@@ -1302,11 +1286,8 @@ local function BuildCustomTabOptions()
                     local entry = module.ItemRegistry.CreateCustomItem(config)
                     if entry then
                         local viewerKey = defaultViewer
-                        if module.LayoutEngine then
-                            module.LayoutEngine.RefreshViewer(viewerKey)
-                        end
-                        if module.LayoutEngine then
-                            module.LayoutEngine.RefreshViewer(viewerKey)
+                        if module.RefreshViewer then
+                            module:RefreshViewer(viewerKey)
                         end
                         RefreshOptions(true)
                     end
@@ -1351,8 +1332,8 @@ local function BuildCustomTabOptions()
                 module:SetSetting("customEntries", customEntries)
                 local entry = module.ItemRegistry.CreateCustomItem(config)
                 if entry then
-                    if module.LayoutEngine then
-                        module.LayoutEngine.RefreshViewer(defaultViewer)
+                    if module.RefreshViewer then
+                        module:RefreshViewer(defaultViewer)
                     end
                     RefreshOptions(true)
                 end
@@ -1391,8 +1372,8 @@ local function BuildCustomTabOptions()
                     module:SetSetting("customEntries", customEntries)
                     local entry = module.ItemRegistry.CreateCustomItem(config)
                     if entry then
-                        if module.LayoutEngine then
-                            module.LayoutEngine.RefreshViewer(defaultViewer)
+                        if module.RefreshViewer then
+                            module:RefreshViewer(defaultViewer)
                         end
                         if module and module.Print then
                             module:Print(string.format(L["ACTION_SLOT_ADDED"], slot))
@@ -1412,10 +1393,7 @@ local function BuildCustomTabOptions()
             name = L["DEFAULT_VIEWER"],
             desc = L["DEFAULT_VIEWER_DESC"],
             order = 5,
-            values = {
-                essential = L["ESSENTIAL_VIEWER"],
-                utility = L["UTILITY_VIEWER"],
-            },
+            values = GetViewerSelectValues,
             get = function()
                 return module:GetSetting("defaultCustomViewer", "essential")
             end,
@@ -1447,6 +1425,12 @@ function module:BuildOptions()
                 order = 0,
                 args = BuildGeneralOptions(),
             },
+            visibility = {
+                type = "group",
+                name = L["VISIBILITY"],
+                order = 0.5,
+                args = BuildVisibilityOptions(),
+            },
             essential = {
                 type = "group",
                 name = L["ESSENTIAL_COOLDOWNS"],
@@ -1463,13 +1447,7 @@ function module:BuildOptions()
                 type = "group",
                 name = L["BUFF_COOLDOWNS"],
                 order = 3,
-                args = {
-                    note = {
-                        type = "description",
-                        name = L["BUFF_VIEWER_BLIZZARD_ONLY_DESC"],
-                        order = 1,
-                    },
-                },
+                args = {},
             },
             custom = {
                 type = "group",
@@ -1477,248 +1455,175 @@ function module:BuildOptions()
                 order = 4,
                 args = {},
             },
+            myViewers = {
+                type = "group",
+                name = L["MY_VIEWERS"],
+                order = 5,
+                args = {},
+            },
         },
     }
-    
+
+    options.args.myViewers.args.desc = {
+        type = "description",
+        name = L["MY_VIEWERS_DESC"],
+        order = 0,
+        fontSize = "small",
+    }
+    options.args.myViewers.args.addViewer = {
+        type = "execute",
+        name = L["ADD_VIEWER"],
+        order = 1,
+        func = function()
+            local id = "custom_" .. tostring(GetTime()):gsub("%.", "")
+            module:CreateCustomViewerFrame(id, "New Viewer")
+            if module:IsEnabled() and module.RefreshViewer then
+                module:RefreshViewer(id)
+            end
+            if module.Anchoring and module.Anchoring.RegisterAnchors then
+                module.Anchoring.RegisterAnchors()
+            end
+            RefreshOptions(true)
+        end,
+    }
+
+    local customViewersList = module:GetSetting("customViewers", {})
+    for idx, entry in ipairs(customViewersList) do
+        if entry and entry.id then
+            local viewerKey = entry.id
+            local displayName = entry.name or viewerKey
+            local groupKey = "viewer_" .. viewerKey:gsub("[^%w]", "_")
+            options.args.myViewers.args[groupKey] = {
+                type = "group",
+                name = displayName,
+                order = 10 + idx,
+                args = {},
+            }
+            local viewerArgs = options.args.myViewers.args[groupKey].args
+            viewerArgs.name = {
+                type = "input",
+                name = L["VIEWER_NAME"],
+                order = 1,
+                get = function()
+                    return module:GetCustomViewerDisplayName(viewerKey) or ""
+                end,
+                set = function(_, value)
+                    if value and value:match("%S") then
+                        module:SetCustomViewerName(viewerKey, value:trim())
+                        RefreshOptions(true)
+                    end
+                end,
+            }
+            viewerArgs.remove = {
+                type = "execute",
+                name = L["REMOVE_VIEWER"],
+                order = 2,
+                confirm = true,
+                confirmText = L["REMOVE_VIEWER"],
+                func = function()
+                    module:RemoveCustomViewer(viewerKey)
+                    RefreshOptions(true)
+                end,
+            }
+            local layoutOpts = BuildViewerOptions(viewerKey, displayName, 10)
+            for k, v in pairs(layoutOpts) do
+                if k ~= "note" then
+                    viewerArgs[k] = v
+                end
+            end
+            local anchorOpts = BuildAnchorOptions(viewerKey, 50)
+            for k, v in pairs(anchorOpts) do
+                viewerArgs[k] = v
+            end
+        end
+    end
+
     local customTabOptions = BuildCustomTabOptions()
     for k, v in pairs(customTabOptions) do
         options.args.custom.args[k] = v
     end
     
     for _, viewerKey in ipairs({"essential", "utility", "buff"}) do
-                local viewerName = viewerKey == "essential" and L["ESSENTIAL"] or
-                          viewerKey == "utility" and L["UTILITY"] or
-                          viewerKey == "buff" and L["BUFF"]
-        
+        local viewerName = viewerKey == "essential" and L["ESSENTIAL"] or
+            viewerKey == "utility" and L["UTILITY"] or
+            viewerKey == "buff" and L["BUFF"]
         options.args[viewerKey].args = BuildViewerOptions(viewerKey, viewerName, 1)
-
-        local customEntries = module:GetSetting("customEntries", {})
-        for entryIndex, entryConfig in ipairs(customEntries) do
-            local entryViewer = entryConfig.viewer or "essential"
-            if entryViewer == "custom" then
-                entryViewer = "essential"
-                entryConfig.viewer = "essential"
-            end
-            if entryViewer == viewerKey then
-                local entryName = string.format(L["ENTRY_N"], entryIndex)
-                if entryConfig.spellID then
-                    local ok, spellInfo = pcall(C_Spell.GetSpellInfo, entryConfig.spellID)
-                    if ok and spellInfo then
-                        entryName = spellInfo.name
-                    end
-                elseif entryConfig.itemID then
-                    local ok, itemInfo = pcall(C_Item.GetItemInfoByID, entryConfig.itemID)
-                    if ok and itemInfo then
-                        entryName = itemInfo.itemName
-                    end
-                elseif entryConfig.slotID then
-                    entryName = entryConfig.slotID == 13 and L["TRINKET_1"] or L["TRINKET_2"]
-                elseif entryConfig.actionSlotID then
-                    entryName = string.format(L["ACTION_SLOT_N"], entryConfig.actionSlotID)
-                end
-
-                options.args[viewerKey].args["entry" .. entryIndex] = {
-                    type = "group",
-                    name = entryName,
-                    order = 200 + entryIndex,
-                    args = {
-                        enabled = {
-                            type = "toggle",
-                            name = L["ENABLED"],
-                            order = 1,
-                            get = function()
-                                return entryConfig.enabled ~= false
-                            end,
-                            set = function(_, value)
-                                entryConfig.enabled = value
-                                local entry = module.ItemRegistry.GetItem(entryConfig.id)
-                                if entry then
-                                    entry.enabled = value
-                                    if entry.frame then
-                                        if value then
-                                            entry.frame:Show()
-                                        else
-                                            entry.frame:Hide()
-                                        end
-                                    end
-                                end
-                                if module:IsEnabled() then
-                                    local assignedViewer = entryConfig.viewer or "essential"
-                                    if module.LayoutEngine then
-                                        module.LayoutEngine.RefreshViewer(assignedViewer)
-                                    end
-                                    if assignedViewer ~= viewerKey then
-                                        if module.LayoutEngine then
-                                            module.LayoutEngine.RefreshViewer(viewerKey)
-                                        end
-                                    end
-                                end
-                            end,
-                        },
-                        index = {
-                            type = "range",
-                            name = L["Index"],
-                            desc = L["DISPLAY_ORDER_DESC"],
-                            order = 2,
-                            min = 1,
-                            max = 13,
-                            step = 1,
-                            get = function()
-                                local assignedViewer = entryConfig.viewer or viewerKey
-                                local entries = module.ItemRegistry.GetItemsForViewer(assignedViewer)
-                                for i, e in ipairs(entries) do
-                                    if e.id == entryConfig.id then
-                                        return i
-                                    end
-                                end
-                                return entryConfig.index or 1
-                            end,
-                            set = function(_, value)
-                                if not module.ItemRegistry.ReorderItem then
-                                    return
-                                end
-                                
-                                local assignedViewer = entryConfig.viewer or viewerKey
-                                local allEntries = module.ItemRegistry.GetItemsForViewer(assignedViewer)
-                                local maxIndex = #allEntries
-                                
-                                if value < 1 then
-                                    value = 1
-                                elseif value > maxIndex then
-                                    value = maxIndex
-                                end
-                                
-                                local success = module.ItemRegistry.ReorderItem(entryConfig.id, value)
-                                
-                                if success then
-                                    local customEntries = module:GetSetting("customEntries", {})
-                                    if customEntries and #customEntries > 0 then
-                                        local updatedEntries = module.ItemRegistry.GetItemsForViewer(assignedViewer)
-                                        for _, entry in ipairs(updatedEntries) do
-                                            if entry.source == "custom" then
-                                                for _, cfg in ipairs(customEntries) do
-                                                    if cfg.id == entry.id then
-                                                        cfg.index = entry.index
-                                                        break
-                                                    end
-                                                end
-                                            end
-                                        end
-                                        module:SetSetting("customEntries", customEntries)
-                                    end
-                                    
-                                    if module:IsEnabled() and module.LayoutEngine then
-                                        module.LayoutEngine.RefreshViewer(assignedViewer)
-                                    end
-                                end
-                            end,
-                            },
-                            viewer = {
-                            type = "select",
-                            name = L["VIEWER"],
-                            desc = L["ASSIGN_ENTRY_TO_VIEWER_DESC"],
-                            order = 5,
-                            values = {
-                                essential = L["ESSENTIAL_VIEWER"],
-                                utility = L["UTILITY_VIEWER"],
-                            },
-                            get = function()
-                                local viewer = entryConfig.viewer or "essential"
-                                if viewer == "custom" then
-                                    viewer = "essential"
-                                    entryConfig.viewer = "essential"
-                                end
-                                return viewer
-                            end,
-                            set = function(_, value)
-                                if value == "buff" then
-                                    module:LogError("Cannot assign custom entries to buff viewer")
-                                    return
-                                end
-                                
-                                local entry = module.ItemRegistry.GetItem(entryConfig.id)
-                                if not entry then
-                                    module:LogError("Entry not found when changing viewer")
-                                    return
-                                end
-                                
-                                local oldViewer = entryConfig.viewer or module.ItemRegistry.GetItemSource(entry) or viewerKey
-                                if oldViewer == "custom" then
-                                    oldViewer = "essential"
-                                end
-                                
-                                local sources = { entry.viewerKey } or {entry.viewerKey}
-                                local wasInViewer = false
-                                for _, source in ipairs(sources) do
-                                    if source == value then
-                                        wasInViewer = true
-                                        break
-                                    end
-                                end
-                                
-                                if not wasInViewer then
-                                    if module.ItemRegistry.MoveItemToViewer then
-                                        module.ItemRegistry.MoveItemToViewer(entryConfig.id, value)
-                                    end
-                                end
-                                
-                                entryConfig.viewer = value
-                                
-                                if module.LayoutEngine then
-                                    if not wasInViewer then
-                                        module.LayoutEngine.RefreshViewer(oldViewer)
-                                    end
-                                    module.LayoutEngine.RefreshViewer(value)
-                                end
-                                
-                                RefreshOptions(true)
-                            end,
-                        },
-                        remove = {
-                            type = "execute",
-                            name = L["REMOVE"],
-                            order = 6,
-                            func = function()
-                                module.ItemRegistry.RemoveCustomItem(entryConfig.id)
-                                RefreshOptions(true)
-                            end,
-                        },
-                    },
-                }
-            end
-        end
     end
-    
-    local customEntries = module:GetSetting("customEntries", {})
-    for entryIndex, entryConfig in ipairs(customEntries) do
-        local entryName = string.format(L["ENTRY_N"], entryIndex)
-        if entryConfig.spellID then
-            local ok, spellInfo = pcall(C_Spell.GetSpellInfo, entryConfig.spellID)
-            if ok and spellInfo then
-                entryName = spellInfo.name
-            end
-        elseif entryConfig.itemID then
-            local ok, itemInfo = pcall(C_Item.GetItemInfoByID, entryConfig.itemID)
-            if ok and itemInfo then
-                entryName = itemInfo.itemName
-            end
-        elseif entryConfig.slotID then
-            entryName = "Trinket " .. (entryConfig.slotID == 13 and "1" or "2")
-        elseif entryConfig.actionSlotID then
-            entryName = string.format(L["ACTION_SLOT_N"], entryConfig.actionSlotID)
-        end
 
+    local customEntries = module:GetSetting("customEntries", {})
+    local entriesByViewer = {}
+    for entryIndex, entryConfig in ipairs(customEntries) do
         local entryViewer = entryConfig.viewer or "essential"
         if entryViewer == "custom" then
             entryViewer = "essential"
         end
+        if entryViewer ~= "buff" then
+            if not entriesByViewer[entryViewer] then
+                entriesByViewer[entryViewer] = {}
+            end
+            table.insert(entriesByViewer[entryViewer], { entryConfig = entryConfig, entryIndex = entryIndex })
+        end
+    end
 
-        options.args.custom.args["entry" .. entryIndex] = {
+    local viewerOrder = {}
+    for _, vk in ipairs(module.CONSTANTS.VIEWER_KEYS) do
+        if vk == "essential" or vk == "utility" then
+            table.insert(viewerOrder, vk)
+        elseif vk ~= "buff" and vk ~= "custom" and entriesByViewer[vk] then
+            table.insert(viewerOrder, vk)
+        end
+    end
+    for _, entry in ipairs(module:GetSetting("customViewers", {})) do
+        if entry and entry.id and entriesByViewer[entry.id] then
+            local found
+            for _, vk in ipairs(viewerOrder) do
+                if vk == entry.id then found = true break end
+            end
+            if not found then
+                table.insert(viewerOrder, entry.id)
+            end
+        end
+    end
+
+    local viewerGroupOrder = 100
+    for _, viewerKey in ipairs(viewerOrder) do
+        local entries = entriesByViewer[viewerKey] or {}
+        local viewerLabel = GetViewerDisplayName(viewerKey)
+        local groupKey = "viewerGroup_" .. viewerKey:gsub("[^%w]", "_")
+        options.args.custom.args[groupKey] = {
             type = "group",
-            name = entryName .. " (" .. (entryViewer == "essential" and L["ESSENTIAL"] or L["UTILITY"]) .. ")",
-            order = 200 + entryIndex,
-            args = {
-                enabled = {
+            name = viewerLabel,
+            order = viewerGroupOrder,
+            args = {},
+        }
+        viewerGroupOrder = viewerGroupOrder + 1
+
+        for _, rec in ipairs(entries) do
+            local entryConfig = rec.entryConfig
+            local entryIndex = rec.entryIndex
+            local entryName = string.format(L["ENTRY_N"], entryIndex)
+            if entryConfig.spellID then
+                local ok, spellInfo = pcall(C_Spell.GetSpellInfo, entryConfig.spellID)
+                if ok and spellInfo then
+                    entryName = spellInfo.name
+                end
+            elseif entryConfig.itemID then
+                local ok, itemInfo = pcall(C_Item.GetItemInfoByID, entryConfig.itemID)
+                if ok and itemInfo then
+                    entryName = itemInfo.itemName
+                end
+            elseif entryConfig.slotID then
+                entryName = entryConfig.slotID == 13 and L["TRINKET_1"] or L["TRINKET_2"]
+            elseif entryConfig.actionSlotID then
+                entryName = string.format(L["ACTION_SLOT_N"], entryConfig.actionSlotID)
+            end
+
+            options.args.custom.args[groupKey].args["entry_" .. entryConfig.id] = {
+                type = "group",
+                name = entryName,
+                order = 200 + entryIndex,
+                args = {
+                    enabled = {
                     type = "toggle",
                     name = L["ENABLED"],
                     order = 1,
@@ -1740,8 +1645,8 @@ function module:BuildOptions()
                         end
                         if module:IsEnabled() then
                             local assignedViewer = entryConfig.viewer or "essential"
-                            if module.LayoutEngine then
-                                module.LayoutEngine.RefreshViewer(assignedViewer)
+                            if module.RefreshViewer then
+                                module:RefreshViewer(assignedViewer)
                             end
                         end
                     end,
@@ -1798,21 +1703,18 @@ function module:BuildOptions()
                                 module:SetSetting("customEntries", customEntries)
                             end
                             
-                            if module:IsEnabled() and module.LayoutEngine then
-                                module.LayoutEngine.RefreshViewer(assignedViewer)
+                            if module:IsEnabled() and module.RefreshViewer then
+                                module:RefreshViewer(assignedViewer)
                             end
                         end
                     end,
                 },
                 viewer = {
                     type = "select",
-                    name = L["Viewer"],
+                    name = L["VIEWER"],
                     desc = L["ASSIGN_ENTRY_TO_VIEWER_DESC"],
                     order = 5,
-                    values = {
-                        essential = L["ESSENTIAL_VIEWER"],
-                        utility = L["UTILITY_VIEWER"],
-                    },
+                    values = GetViewerSelectValues,
                     get = function()
                         local viewer = entryConfig.viewer or "essential"
                         if viewer == "custom" then
@@ -1826,19 +1728,16 @@ function module:BuildOptions()
                             module:LogError("Cannot assign custom entries to buff viewer")
                             return
                         end
-                        
                         local entry = module.ItemRegistry.GetItem(entryConfig.id)
                         if not entry then
                             module:LogError("Entry not found when changing viewer")
                             return
                         end
-                        
                         local oldViewer = entryConfig.viewer or module.ItemRegistry.GetItemSource(entry) or "essential"
                         if oldViewer == "custom" then
                             oldViewer = "essential"
                         end
-                        
-                        local sources = { entry.viewerKey } or {entry.viewerKey}
+                        local sources = { entry.viewerKey } or { entry.viewerKey }
                         local wasInViewer = false
                         for _, source in ipairs(sources) do
                             if source == value then
@@ -1846,22 +1745,18 @@ function module:BuildOptions()
                                 break
                             end
                         end
-                        
                         if not wasInViewer then
                             if module.ItemRegistry.MoveItemToViewer then
                                 module.ItemRegistry.MoveItemToViewer(entryConfig.id, value)
                             end
                         end
-                        
                         entryConfig.viewer = value
-                        
-                        if module.LayoutEngine then
+                        if module.RefreshViewer then
                             if not wasInViewer then
-                                module.LayoutEngine.RefreshViewer(oldViewer)
+                                module:RefreshViewer(oldViewer)
                             end
-                            module.LayoutEngine.RefreshViewer(value)
+                            module:RefreshViewer(value)
                         end
-                        
                         RefreshOptions(true)
                     end,
                 },
@@ -1876,8 +1771,9 @@ function module:BuildOptions()
                 },
             },
         }
+        end
     end
-    
+
     TavernUI:RegisterModuleOptions("uCDM", options, L["UCDM"])
 end
 

@@ -15,6 +15,10 @@
 	<Include file="libs\AceConfig-3.0\AceConfig-3.0.xml"/>
 	<Include file="libs\AceLocale-3.0\AceLocale-3.0.xml"/>
 
+	<!-- Profile string import/export -->
+	<Include file="libs\LibSerialize\lib.xml"/>
+	<Include file="libs\LibDeflate\lib.xml"/>
+
 	<!-- oUF (unit frame library) - must use XML to load in correct order -->
 	<Include file="libs\oUF\oUF.xml"/>
 

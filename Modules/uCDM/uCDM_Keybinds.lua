@@ -456,13 +456,19 @@ function Keybinds.GetTrinketKeybind(slotID)
     return nil
 end
 
+function Keybinds.GetActionSlotKeybind(slot)
+    if not slot or slot < 1 or slot > 120 then return nil end
+    return GetKeybindFromActionSlot(slot)
+end
+
 --------------------------------------------------------------------------------
 -- Keybind Display
 --------------------------------------------------------------------------------
 
 function Keybinds.UpdateItem(item)
     if not item or not item.frame then return end
-    
+    if module.Preview and module.Preview.IsPreviewItem and module.Preview.IsPreviewItem(item) then return end
+
     local settings = module:GetViewerSettings(item.viewerKey)
     if not settings or not settings.showKeybinds then
         if item.frame._ucdmKeybindText then
@@ -473,13 +479,17 @@ function Keybinds.UpdateItem(item)
     
     local frame = item.frame
     
-    -- Get keybind based on what the item is tracking
     local keybind = nil
-    if item.spellID then
+    if item.actionSlotID then
+        keybind = Keybinds.GetActionSlotKeybind(item.actionSlotID)
+    end
+    if not keybind and item.spellID then
         keybind = Keybinds.GetSpellKeybind(item.spellID)
-    elseif item.itemID then
+    end
+    if not keybind and item.itemID then
         keybind = Keybinds.GetItemKeybind(item.itemID)
-    elseif item.slotID then
+    end
+    if not keybind and item.slotID then
         keybind = Keybinds.GetTrinketKeybind(item.slotID)
     end
     
@@ -520,13 +530,8 @@ function Keybinds.UpdateItem(item)
         keybindText:SetText(keybind)
         keybindText:SetTextColor(color.r, color.g, color.b, color.a)
         keybindText:ClearAllPoints()
-        keybindText:SetPoint(
-            settings.keybindPoint or "TOPLEFT",
-            bindPoint,
-            settings.keybindPoint or "TOPLEFT",
-            settings.keybindOffsetX or 2,
-            settings.keybindOffsetY or -2
-        )
+        local pt = settings.keybindPoint or "TOPLEFT"
+        keybindText:SetPoint(pt, bindPoint, pt, settings.keybindOffsetX or 2, settings.keybindOffsetY or -2)
         keybindText:Show()
     else
         keybindText:Hide()

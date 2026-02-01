@@ -22,33 +22,8 @@ local function GetBarTexturePath(config)
 end
 
 local function ApplyBarBorder(frame, config)
-    local border = config and config.barBorder
-    local target = frame.borderOverlay or frame
-    if not border or not border.enabled then
-        if frame.SetBackdrop then frame:SetBackdrop(nil) end
-        if target.SetBackdrop then target:SetBackdrop(nil) end
-        if frame.bar then
-            frame.bar:ClearAllPoints()
-            frame.bar:SetAllPoints(frame)
-        end
-        return
-    end
-    if not target.SetBackdrop then return end
-    local rawSize = (type(border.size) == "number" and border.size >= 0) and border.size or 1
-    local size = TavernUI:GetPixelSize(frame, rawSize, 0)
-    local c = border.color or {}
-    local r, g, b = (c.r or 0), (c.g or 0), (c.b or 0)
-    local a = (type(c.a) == "number") and c.a or 1
-    target:SetBackdrop({
-        edgeFile = "Interface\\Buttons\\WHITE8x8",
-        edgeSize = size,
-    })
-    target:SetBackdropBorderColor(r, g, b, a)
-    if frame.bar then
-        frame.bar:ClearAllPoints()
-        frame.bar:SetPoint("TOPLEFT", frame, "TOPLEFT", size, -size)
-        frame.bar:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", -size, size)
-    end
+    TavernUI:EnsureBorderOverlay(frame, frame.bar)
+    TavernUI:ApplyBorder(frame, config and config.barBorder, frame.bar and { contentRegion = frame.bar } or nil)
 end
 
 local function ApplySegmentBackground(segment, config)
@@ -140,32 +115,17 @@ local function ApplyPowerBarColor(frame)
 end
 
 local function ApplySegmentBorder(segment, config)
-    local border = config and config.segmentBorder
-    local target = segment.borderOverlay or segment
-    if not border or not border.enabled then
-        if segment.SetBackdrop then segment:SetBackdrop(nil) end
-        if target.SetBackdrop then target:SetBackdrop(nil) end
-        return
-    end
-    if not target.SetBackdrop then return end
-    local rawSize = (type(border.size) == "number" and border.size >= 0) and border.size or 1
-    local region = segment:GetParent() or segment
-    local size = TavernUI:GetPixelSize(region, rawSize, 0)
-    local c = border.color or {}
-    local r, g, b = (c.r or 0), (c.g or 0), (c.b or 0)
-    local a = (type(c.a) == "number") and c.a or 1
-    target:SetBackdrop({
-        edgeFile = "Interface\\Buttons\\WHITE8x8",
-        edgeSize = size,
-    })
-    target:SetBackdropBorderColor(r, g, b, a)
+    TavernUI:EnsureBorderOverlay(segment, segment.bar)
+    TavernUI:ApplyBorder(segment, config and config.segmentBorder)
 end
 
 local function CreatePowerBar(barId, config)
     local frame = CreateFrame("Frame", nil, UIParent)
-    frame:SetSize(TavernUI:GetPixelSize(frame, config.width or 200, 0), TavernUI:GetPixelSize(frame, config.height or 14, 1))
+    local w = config.width or 200
+    local h = config.height or 14
+    frame:SetSize(w, h)
     if not config.anchorConfig or not config.anchorConfig.target then
-        frame:SetPoint("CENTER", UIParent, "CENTER", 0, -TavernUI:GetPixelSize(frame, 180, 1))
+        frame:SetPoint("CENTER", UIParent, "CENTER", 0, -180)
     end
 
     ApplyBarBackground(frame, config)
@@ -179,10 +139,6 @@ local function CreatePowerBar(barId, config)
     bar:SetAllPoints(frame)
 
     frame.bar = bar
-    frame.borderOverlay = CreateFrame("Frame", nil, frame, "BackdropTemplate")
-    frame.borderOverlay:SetAllPoints(frame)
-    frame.borderOverlay:SetFrameLevel(frame.bar:GetFrameLevel() + 1)
-    ApplyBarBorder(frame, config)
     frame.barId = barId
     frame.config = config
     
@@ -193,8 +149,7 @@ local function CreatePowerBar(barId, config)
         end
 
         self:Show()
-        local w = TavernUI:GetPixelSize(self, self.config.width or 200, 0)
-        self:SetSize(w, TavernUI:GetPixelSize(self, self.config.height or 14, 1))
+        self:SetSize(self.config.width or 200, self.config.height or 14)
         ApplyBarBackground(self, self.config)
         ApplyBarBorder(self, self.config)
         self.bar:SetStatusBarTexture(GetBarTexturePath(self.config))
@@ -206,8 +161,7 @@ local function CreatePowerBar(barId, config)
 
     function frame:ApplyVisualConfig()
         self:Show()
-        local w = TavernUI:GetPixelSize(self, self.config.width or 200, 0)
-        self:SetSize(w, TavernUI:GetPixelSize(self, self.config.height or 14, 1))
+        self:SetSize(self.config.width or 200, self.config.height or 14)
         ApplyBarBackground(self, self.config)
         ApplyBarBorder(self, self.config)
         self.bar:SetStatusBarTexture(GetBarTexturePath(self.config))
@@ -237,9 +191,9 @@ local function CreateSegmentedBar(barId, config)
     frame:SetClipsChildren(false)
     frame:SetSize(1, 1)
     if not config.anchorConfig or not config.anchorConfig.target then
-        frame:SetPoint("CENTER", UIParent, "CENTER", 0, -TavernUI:GetPixelSize(frame, 180, 1))
+        frame:SetPoint("CENTER", UIParent, "CENTER", 0, -180)
     end
-    
+
     ApplyBarBackground(frame, config)
     
     frame.segments = {}
@@ -248,16 +202,13 @@ local function CreateSegmentedBar(barId, config)
     
     local function CreateSegment(parent, index, segConfig)
         local segment = CreateFrame("Frame", nil, parent)
+        segment:SetClipsChildren(false)
         segment.index = index
         segment.bar = CreateFrame("StatusBar", nil, segment)
         segment.bar:SetMinMaxValues(0, 1)
         segment.bar:SetValue(1)
-        segment.borderOverlay = CreateFrame("Frame", nil, segment, "BackdropTemplate")
-        segment.borderOverlay:SetAllPoints(segment)
-        segment.borderOverlay:SetFrameLevel(segment.bar:GetFrameLevel() + 1)
         local cfg = segConfig or parent.config
         ApplySegmentBackground(segment, cfg)
-        ApplySegmentBorder(segment, cfg)
         local texPath = GetSegmentTexturePath(cfg)
         segment.bar:SetStatusBarTexture(texPath)
         segment.bar:SetStatusBarColor(1, 1, 1, 1)
@@ -282,21 +233,19 @@ local function CreateSegmentedBar(barId, config)
             table.insert(self.segments, segment)
         end
         
-        local spacing = (type(config.segmentSpacing) == "number" and config.segmentSpacing >= -1) and config.segmentSpacing or 2
-        local gapPx = TavernUI:GetPixelSize(self, spacing, 0)
+        local contentW_px = (type(config.width) == "number" and config.width > 0) and config.width or 200
+        local contentH_px = (type(config.height) == "number" and config.height > 0) and config.height or 20
+        local gapPx = (type(config.segmentSpacing) == "number" and config.segmentSpacing >= -1) and config.segmentSpacing or 2
+        local contentW_ui = contentW_px
+        local contentH_ui = contentH_px
+        local gapUI = gapPx
+        local totalGap = (max - 1) * gapPx
+        local availableW = contentW_px - totalGap
+        local segmentWidthUI = math.max(1, math.floor(availableW / max))
+        local segmentHeightUI = math.max(1, math.floor(contentH_px))
         local texPath = GetSegmentTexturePath(config)
-        local border = config.segmentBorder
-        local borderInset = (border and border.enabled and type(border.size) == "number" and border.size >= 0) and TavernUI:GetPixelSize(self, border.size, 0) or 0
-        local borderPadding = 2 * borderInset
-        local inset = borderPadding
-        local parentWidthPx = TavernUI:GetPixelSize(self, (type(config.width) == "number" and config.width > 0) and config.width or 200, 0)
-        local parentHeightPx = TavernUI:GetPixelSize(self, (type(config.height) == "number" and config.height > 0) and config.height or 20, 1)
-        local contentW = parentWidthPx - 2 * inset
-        local contentH = parentHeightPx - 2 * inset
-        local segmentWidthPx = (max > 0) and math.max(1, (contentW - (max - 1) * gapPx) / max) or 1
-        local segmentHeightPx = math.max(1, contentH)
 
-        self:SetSize(parentWidthPx, parentHeightPx)
+        self:SetSize(contentW_ui, contentH_ui)
 
         for i = 1, max do
             local segment = self.segments[i]
@@ -307,17 +256,16 @@ local function CreateSegmentedBar(barId, config)
             
             ApplySegmentBackground(segment, config)
             ApplySegmentBorder(segment, config)
-            segment:SetSize(segmentWidthPx, segmentHeightPx)
+            segment:SetSize(segmentWidthUI, segmentHeightUI)
             segment:ClearAllPoints()
             if i == 1 then
-                segment:SetPoint("TOPLEFT", self, "TOPLEFT", inset, -inset)
+                segment:SetPoint("TOPLEFT", self, "TOPLEFT", 0, 0)
             else
-                segment:SetPoint("TOPLEFT", self.segments[i - 1], "TOPRIGHT", gapPx, 0)
+                segment:SetPoint("TOPLEFT", self.segments[i - 1], "TOPRIGHT", gapUI, 0)
             end
             
             segment.bar:ClearAllPoints()
-            segment.bar:SetPoint("TOPLEFT", segment, "TOPLEFT", borderInset, -borderInset)
-            segment.bar:SetPoint("BOTTOMRIGHT", segment, "BOTTOMRIGHT", -borderInset, borderInset)
+            segment.bar:SetAllPoints(segment)
             segment.bar:SetStatusBarTexture(texPath)
             
             local fillPercent = 0.0
