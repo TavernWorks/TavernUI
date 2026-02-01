@@ -1027,45 +1027,16 @@ end
 
 local function BuildGeneralOptions()
     return {
-        scaleHeader = {
-            type = "header",
-            name = L["DISPLAY"],
-            order = 0,
-        },
-        scaleFactor = {
-            type = "range",
-            name = L["SCALE"],
-            desc = L["SCALE_FACTOR_DESC"],
-            order = 1,
-            min = 0.5,
-            max = 2.0,
-            step = 0.05,
-            get = function()
-                return module:GetSetting("general.scaleFactor", 1)
-            end,
-            set = function(_, value)
-                module:SetSetting("general.scaleFactor", value, {
-                    type = "number",
-                    min = 0.5,
-                    max = 2.0,
-                })
-                for _, viewerKey in ipairs(module.CONSTANTS.VIEWER_KEYS) do
-                    if viewerKey ~= "custom" and module.LayoutEngine then
-                        module.LayoutEngine.RefreshViewer(viewerKey)
-                    end
-                end
-            end,
-        },
         debugHeader = {
             type = "header",
             name = L["DEBUG"],
-            order = 2,
+            order = 0,
         },
         debug = {
             type = "toggle",
             name = L["DEBUG_MODE"],
             desc = L["ENABLE_DEBUG_MESSAGES"],
-            order = 3,
+            order = 1,
             get = function()
                 return module:GetSetting("general.debug", false) == true
             end,

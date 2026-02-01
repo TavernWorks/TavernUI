@@ -72,15 +72,6 @@ function LayoutEngine.Initialize()
         end)
     end
 
-    module:WatchSetting("general.scaleFactor", function()
-        if module:IsEnabled() then
-            for _, key in ipairs(module.CONSTANTS.VIEWER_KEYS) do
-                if key ~= "custom" then
-                    LayoutEngine.RefreshViewer(key)
-                end
-            end
-        end
-    end)
 end
 
 --------------------------------------------------------------------------------
@@ -312,7 +303,6 @@ local function ApplyLayout(viewer, rowAssignments, rows, viewerKey)
                         item:applyStyle(rowConfig)
 
                         if item.source == "custom" then
-                            frame:SetScale(viewer.iconScale or 1)
                             local cellW = pxIcon + 2 * pxPad
                             local cellH = pxIconH + 2 * pxPad
                             frame:SetSize(cellW, cellH)
@@ -388,7 +378,6 @@ function LayoutEngine.RefreshViewer(viewerKey)
     end
     
     viewer:Show()
-    viewer:SetScale(module:GetSetting("general.scaleFactor", 1))
 
     local rows = GetActiveRows(settings)
     if #rows == 0 then
