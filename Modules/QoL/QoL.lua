@@ -126,6 +126,7 @@ function module:ApplyScaleForResolution(width, height)
     local scale = GetScaleForHeight(height)
     self:SetSetting("uiScaleMode", "manual")
     self:SetSetting("uiScale", scale)
+    self:SetSetting("uiScaleManagedByQoL", true)
     self:ApplyUIScale()
 end
 
@@ -139,6 +140,7 @@ local defaults = {
     fpsBackup = nil,
     uiScaleMode = "manual",
     uiScale = 1.0,
+    uiScaleManagedByQoL = false,
     hidePlayerFrame = false,
 }
 TavernUI:RegisterModuleDefaults("QoL", defaults, true)
@@ -160,7 +162,9 @@ function module:OnEnable()
     self:SetupBoPConfirm()
     self:ApplyLootSettings()
     self:ApplyFrameHider()
-    self:ApplyUIScale()
+    if self:GetSetting("uiScaleManagedByQoL", false) then
+        self:ApplyUIScale()
+    end
 end
 
 function module:OnDisable()
@@ -180,6 +184,9 @@ function module:OnProfileChanged()
     if self:IsEnabled() then
         self:ApplyLootSettings()
         self:ApplyFrameHider()
+        if self:GetSetting("uiScaleManagedByQoL", false) then
+            self:ApplyUIScale()
+        end
     end
 end
 
@@ -729,6 +736,7 @@ function module:RegisterOptions()
                         get = function() return self:GetSetting("uiScaleMode", "manual") end,
                         set = function(_, v)
                             self:SetSetting("uiScaleMode", v)
+                            self:SetSetting("uiScaleManagedByQoL", true)
                             self:ApplyUIScale()
                         end,
                     },
@@ -744,6 +752,7 @@ function module:RegisterOptions()
                         get = function() return self:GetSetting("uiScale", 1.0) end,
                         set = function(_, v)
                             self:SetSetting("uiScale", v)
+                            self:SetSetting("uiScaleManagedByQoL", true)
                             self:ApplyUIScale()
                         end,
                         disabled = function() return self:GetSetting("uiScaleMode", "manual") ~= "manual" end,
