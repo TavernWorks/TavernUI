@@ -176,7 +176,7 @@ function module:OnDisable()
         self.bopFrame:SetScript("OnEvent", nil)
     end
     if PlayerFrame then
-        PlayerFrame:Show()
+        PlayerFrame:SetShown(true)
     end
 end
 
@@ -192,11 +192,7 @@ end
 
 function module:ApplyFrameHider()
     if not PlayerFrame then return end
-    if self:GetSetting("hidePlayerFrame", false) then
-        PlayerFrame:Hide()
-    else
-        PlayerFrame:Show()
-    end
+    PlayerFrame:SetShown(not self:GetSetting("hidePlayerFrame", false))
 end
 
 function module:OnMerchantShow()
