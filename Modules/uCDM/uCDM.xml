@@ -1,24 +1,26 @@
 <Ui xmlns="http://www.blizzard.com/wow/ui/" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.blizzard.com/wow/ui/ ..\FrameXML\UI.xsd">
-    <!-- Core module -->
+    <!-- Core module definition -->
     <Script file="uCDM.lua"/>
-    
-    <!-- CooldownItem class - must load before ItemRegistry -->
-    <Script file="uCDM_CooldownItem.lua"/>
+
+    <!-- Cooldown tracking (helpers first, then tracker) -->
     <Script file="uCDM_CooldownTrackerHelpers.lua"/>
     <Script file="uCDM_CooldownTracker.lua"/>
-    
-    <!-- Item management -->
+
+    <!-- CooldownItem class (can now reference CooldownTracker) -->
+    <Script file="uCDM_CooldownItem.lua"/>
+
+    <!-- Item management (uses CooldownItem) -->
     <Script file="uCDM_ItemRegistry.lua"/>
-    
-    <!-- Layout and positioning -->
+
+    <!-- Layout and positioning (uses ItemRegistry) -->
     <Script file="uCDM_LayoutEngine.lua"/>
-    
-    <!-- Keybind display -->
+
+    <!-- Keybind display (uses ItemRegistry) -->
     <Script file="uCDM_Keybinds.lua"/>
-    
+
     <!-- Viewer anchoring -->
     <Script file="uCDM_Anchoring.lua"/>
-    
-    <!-- Options panel -->
+
+    <!-- Options panel (uses everything) -->
     <Script file="uCDM_Options.lua"/>
 </Ui>

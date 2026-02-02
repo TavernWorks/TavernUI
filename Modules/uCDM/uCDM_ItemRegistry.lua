@@ -187,7 +187,6 @@ function ItemRegistry.CollectBlizzardItems(viewerKey)
     local category = VIEWER_CATEGORIES[viewerKey]
     if not category then return end
 
-    -- Get cooldown IDs from viewer or API
     local cooldownIDs = nil
     if viewer.GetCooldownIDs then
         cooldownIDs = viewer:GetCooldownIDs()
@@ -199,7 +198,6 @@ function ItemRegistry.CollectBlizzardItems(viewerKey)
         return
     end
 
-    -- Build frame lookup by layout index and cooldown ID
     local framesByIndex = {}
     local numChildren = viewer:GetNumChildren()
 
@@ -211,13 +209,11 @@ function ItemRegistry.CollectBlizzardItems(viewerKey)
                 ItemRegistry._hookBuffFrameEvents(child, viewer)
             end
 
-            -- Map by layout index
             local layoutIndex = child.layoutIndex
             if layoutIndex and layoutIndex > 0 and layoutIndex <= #cooldownIDs then
                 framesByIndex[layoutIndex] = child
             end
 
-            -- Also try matching by cooldown ID
             if child.GetCooldownID then
                 local frameCooldownID = child:GetCooldownID()
                 for idx, cooldownID in ipairs(cooldownIDs) do
@@ -230,7 +226,6 @@ function ItemRegistry.CollectBlizzardItems(viewerKey)
         end
     end
 
-    -- Create/update items for each cooldown
     local newBlizzardItems = {}
     local seenFrames = {}
 
@@ -241,7 +236,6 @@ function ItemRegistry.CollectBlizzardItems(viewerKey)
             if frame then
                 seenFrames[frame] = true
 
-                -- Extract IDs from frame
                 local spellID = cooldownInfo.spellID
                 local itemID = frame.GetItemID and frame:GetItemID() or frame.itemID
                 local slotID = frame.GetSlotID and frame:GetSlotID() or frame.slotID
@@ -271,9 +265,6 @@ function ItemRegistry.CollectBlizzardItems(viewerKey)
                     itemsByFrame[frame] = item
                 else
                     -- Update existing item
-                    local oldSpellID = item.spellID
-                    local oldIndex = item.index
-                    local oldCooldownID = item.cooldownID
                     item.spellID = spellID
                     item.itemID = itemID
                     item.slotID = slotID
@@ -288,24 +279,17 @@ function ItemRegistry.CollectBlizzardItems(viewerKey)
         end
     end
 
-    -- Get existing custom items for this viewer
     local customItems = {}
     local currentItems = itemsByViewer[viewerKey] or {}
     for _, item in ipairs(currentItems) do
         if item.source == "custom" then
             customItems[#customItems + 1] = item
-        end
-    end
-
-    -- Remove stale blizzard items
-    for _, item in ipairs(currentItems) do
-        if item.source == "blizzard" and item.frame and not seenFrames[item.frame] then
+        elseif item.source == "blizzard" and item.frame and not seenFrames[item.frame] then
             itemsById[item.id] = nil
             itemsByFrame[item.frame] = nil
         end
     end
 
-    -- Combine: blizzard items first, then custom
     local allItems = {}
     for _, item in ipairs(newBlizzardItems) do
         allItems[#allItems + 1] = item
@@ -314,12 +298,10 @@ function ItemRegistry.CollectBlizzardItems(viewerKey)
         allItems[#allItems + 1] = item
     end
 
-    -- Sort by index
     table.sort(allItems, function(a, b)
         return (a.index or 9999) < (b.index or 9999)
     end)
 
-    -- Update layout indices
     for i, item in ipairs(allItems) do
         item.layoutIndex = i
     end
@@ -558,6 +540,10 @@ function ItemRegistry._acquireCustomFrame(id, parent)
         frame = CreateFrame("Button", "uCDMCustomFrame_" .. id, parent or UIParent)
         frame:SetSize(40, 40)
 
+        -- Apply pixel-perfect settings to frame
+        if frame.SetSnapToPixelGrid then frame:SetSnapToPixelGrid(true) end
+        if frame.SetTexelSnappingBias then frame:SetTexelSnappingBias(0) end
+
         local icon = frame:CreateTexture(nil, "ARTWORK")
         icon:SetAllPoints(frame)
         frame.Icon = icon
@@ -565,6 +551,7 @@ function ItemRegistry._acquireCustomFrame(id, parent)
         local mask = frame:CreateMaskTexture()
         mask:SetAtlas("UI-HUD-CoolDownManager-Mask")
         mask:SetAllPoints(icon)
+        if mask.SetSnapToPixelGrid then mask:SetSnapToPixelGrid(true) end
         icon:AddMaskTexture(mask)
         frame.IconMask = mask
 
@@ -577,6 +564,8 @@ function ItemRegistry._acquireCustomFrame(id, parent)
         cooldown:SetSwipeTexture("Interface\\Buttons\\WHITE8X8")
         cooldown:SetSwipeColor(0, 0, 0, 0.8)
         cooldown:SetHideCountdownNumbers(false)
+        if cooldown.SetSnapToPixelGrid then cooldown:SetSnapToPixelGrid(true) end
+        if cooldown.SetTexelSnappingBias then cooldown:SetTexelSnappingBias(0) end
         frame.Cooldown = cooldown
 
         local count = TavernUI:CreateFontString(frame, 16)
@@ -596,6 +585,7 @@ function ItemRegistry._releaseCustomFrame(frame)
     frame:ClearAllPoints()
     frame._ucdmItemId = nil
 
+    -- Cap pool size to avoid unbounded memory growth
     if #customFramePool < 50 then
         table.insert(customFramePool, frame)
     end

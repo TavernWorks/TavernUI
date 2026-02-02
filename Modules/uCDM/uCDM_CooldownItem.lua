@@ -8,9 +8,22 @@ CooldownItem.__index = CooldownItem
 
 local CONSTANTS = {
     MAX_MASK_TEXTURES = 10,
-    TEXTURE_BASE_CROP_PIXELS = 4,
-    TEXTURE_SOURCE_SIZE = 64,
+    TEXTURE_BASE_CROP_PIXELS = 4,  -- Blizzard icons have ~4px border artifacts
+    TEXTURE_SOURCE_SIZE = 64,      -- Standard WoW icon texture size
 }
+
+-- Normalize frame element access (Blizzard uses inconsistent casing)
+local function GetIcon(frame)
+    return frame and (frame.Icon or frame.icon)
+end
+
+local function GetCooldown(frame)
+    return frame and (frame.Cooldown or frame.cooldown)
+end
+
+local function GetCount(frame)
+    return frame and (frame.Count or frame.count)
+end
 
 function CooldownItem.new(config)
     local self = setmetatable({}, CooldownItem)
@@ -34,7 +47,7 @@ function CooldownItem.new(config)
     return self
 end
 
-function CooldownItem:isVisible(context)
+function CooldownItem:isVisible()
     if not self.enabled then return false end
     if not self.frame then return false end
 
@@ -42,10 +55,6 @@ function CooldownItem:isVisible(context)
         return self:_checkBuffVisibility()
     end
 
-    if self.source == "custom" and self.config and self.config.conditionalDisplay then
-        return self:_checkConditions(context)
-    end
-    
     return true
 end
 
@@ -82,42 +91,10 @@ function CooldownItem:setLayoutPosition(parent, relativeTo, x, y)
     self:setParent(parent)
     self.frame:ClearAllPoints()
     local anchorTo = relativeTo or parent
-
-    -- Snap position offsets to pixel boundaries
-    local pxX, pxY = x, y
-    if PixelUtil and PixelUtil.GetNearestPixelSize then
-        local scale = self.frame:GetEffectiveScale()
-        if scale and scale > 0 then
-            pxX = PixelUtil.GetNearestPixelSize(x, scale)
-            pxY = PixelUtil.GetNearestPixelSize(y, scale)
-        end
-    end
-
+    local scale = self.frame:GetEffectiveScale()
+    local pxX = (PixelUtil and scale and scale > 0 and PixelUtil.GetNearestPixelSize(x, scale)) or x
+    local pxY = (PixelUtil and scale and scale > 0 and PixelUtil.GetNearestPixelSize(y, scale)) or y
     self.frame:SetPoint("CENTER", anchorTo, "CENTER", pxX, pxY)
-end
-
-function CooldownItem:_checkConditions(context)
-    local conditions = self.config.conditionalDisplay
-    if not conditions or not conditions.enabled then return true end
-    
-    local inCombat = UnitAffectingCombat("player")
-    if inCombat and not conditions.showInCombat then return false end
-    if not inCombat and not conditions.showOutOfCombat then return false end
-    
-    local inGroup = IsInGroup() or IsInRaid()
-    if inGroup and not conditions.showInGroup then return false end
-    if not inGroup and not conditions.showSolo then return false end
-    
-    local inInstance = IsInInstance()
-    if inInstance and not conditions.showInInstance then return false end
-    if not inInstance and not conditions.showInOpenWorld then return false end
-    
-    if conditions.healthThreshold and conditions.healthThreshold > 0 then
-        local healthPercent = (UnitHealth("player") / UnitHealthMax("player")) * 100
-        if healthPercent >= conditions.healthThreshold then return false end
-    end
-    
-    return true
 end
 
 function CooldownItem:applyStyle(rowConfig)
@@ -141,14 +118,8 @@ function CooldownItem:applyStyle(rowConfig)
         pxH = math.floor(pxH * scale + 0.5) / scale
     end
     frame:SetSize(pxW, pxH)
-
-    -- Enable pixel snapping for the frame to ensure borders align on pixel boundaries
-    if frame.SetSnapToPixelGrid then
-        frame:SetSnapToPixelGrid(true)
-    end
-    if frame.SetTexelSnappingBias then
-        frame:SetTexelSnappingBias(0)
-    end
+    if frame.SetSnapToPixelGrid then frame:SetSnapToPixelGrid(true) end
+    if frame.SetTexelSnappingBias then frame:SetTexelSnappingBias(0) end
 
     frame._ucdmZoom = rowConfig.zoom or 0
     frame._ucdmAspectRatio = aspectRatio
@@ -186,75 +157,77 @@ function CooldownItem:_setupFrame()
         self:_stripBlizzardCruft()
     end
 
-    local iconTex = frame.Icon or frame.icon
-    if iconTex then
-        if not frame.IconMaskBlizzard then
-            local maskBlizz = frame:CreateMaskTexture()
-            maskBlizz:SetAtlas("UI-HUD-CoolDownManager-Mask")
-            maskBlizz:SetAllPoints(iconTex)
-            frame.IconMaskBlizzard = maskBlizz
-        end
-
-        if not frame.IconMaskSquare then
-            local maskSquare = frame:CreateMaskTexture()
-            maskSquare:SetTexture("Interface\\AddOns\\TavernUI\\assets\\masks\\square.tga")
-            maskSquare:SetAllPoints(iconTex)
-            frame.IconMaskSquare = maskSquare
-        end
+    self:_setupIconMasks(frame)
+    self:_setupCooldownStyle(frame)
+    if isCustomFrame then
+        self:_setupCustomFrameTooltips(frame)
     end
+end
 
-    local cooldown = frame.Cooldown or frame.cooldown
-    if cooldown then
-        if cooldown.SetDrawEdge then cooldown:SetDrawEdge(false) end
-        if cooldown.SetDrawBling then cooldown:SetDrawBling(false) end
-        if cooldown.SetSwipeTexture then cooldown:SetSwipeTexture("Interface\\Buttons\\WHITE8X8") end
-        if cooldown.SetSwipeColor then cooldown:SetSwipeColor(0, 0, 0, 0.8) end
-        if not cooldown.__ucdmSwipeHooked and module.CooldownTracker and module.CooldownTracker.ApplySwipeStyle then
-            cooldown.__ucdmSwipeHooked = true
-            if cooldown.SetCooldown then
-                hooksecurefunc(cooldown, "SetCooldown", function(self) module.CooldownTracker.ApplySwipeStyle(self) end)
-            end
-            if cooldown.SetCooldownFromDurationObject then
-                hooksecurefunc(cooldown, "SetCooldownFromDurationObject", function(self) module.CooldownTracker.ApplySwipeStyle(self) end)
-            end
-        end
+function CooldownItem:_setupIconMasks(frame)
+    local iconTex = GetIcon(frame)
+    if not iconTex then return end
+    if not frame.IconMaskBlizzard then
+        local maskBlizz = frame:CreateMaskTexture()
+        maskBlizz:SetAtlas("UI-HUD-CoolDownManager-Mask")
+        maskBlizz:SetAllPoints(iconTex)
+        if maskBlizz.SetSnapToPixelGrid then maskBlizz:SetSnapToPixelGrid(true) end
+        frame.IconMaskBlizzard = maskBlizz
     end
+    if not frame.IconMaskSquare then
+        local maskSquare = frame:CreateMaskTexture()
+        maskSquare:SetTexture("Interface\\AddOns\\TavernUI\\assets\\masks\\square.tga")
+        maskSquare:SetAllPoints(iconTex)
+        if maskSquare.SetSnapToPixelGrid then maskSquare:SetSnapToPixelGrid(true) end
+        frame.IconMaskSquare = maskSquare
+    end
+end
 
-    local borderElements = {
-        frame.DebuffBorder,
-        frame.BuffBorder,
-        frame.TempEnchantBorder,
-    }
-    for _, border in ipairs(borderElements) do
-        if border then
-            self:_preventAtlasBorder(border)
+function CooldownItem:_setupCooldownStyle(frame)
+    local cooldown = GetCooldown(frame)
+    if not cooldown then return end
+    if cooldown.SetDrawEdge then cooldown:SetDrawEdge(false) end
+    if cooldown.SetDrawBling then cooldown:SetDrawBling(false) end
+    if cooldown.SetSwipeTexture then cooldown:SetSwipeTexture("Interface\\Buttons\\WHITE8X8") end
+    if cooldown.SetSwipeColor then cooldown:SetSwipeColor(0, 0, 0, 0.8) end
+    if not cooldown.__ucdmSwipeHooked and module.CooldownTracker then
+        cooldown.__ucdmSwipeHooked = true
+        if cooldown.SetCooldown then
+            hooksecurefunc(cooldown, "SetCooldown", function(self) module.CooldownTracker.ApplySwipeStyle(self) end)
+        end
+        if cooldown.SetCooldownFromDurationObject then
+            hooksecurefunc(cooldown, "SetCooldownFromDurationObject", function(self) module.CooldownTracker.ApplySwipeStyle(self) end)
         end
     end
+end
 
-    if frame.NormalTexture then
-        frame.NormalTexture:SetAlpha(0)
-    end
-    if frame.GetNormalTexture then
-        local normalTex = frame:GetNormalTexture()
-        if normalTex then normalTex:SetAlpha(0) end
-    end
-
-    if frame.CooldownFlash then
-        frame.CooldownFlash:SetAlpha(0)
-        if not frame.CooldownFlash.__ucdmHooked then
-            frame.CooldownFlash.__ucdmHooked = true
-            hooksecurefunc(frame.CooldownFlash, "Show", function(self)
-                self:SetAlpha(0)
-            end)
+function CooldownItem:_setupCustomFrameTooltips(frame)
+    local item = self
+    frame:SetScript("OnEnter", function()
+        if module:GetSetting("viewers." .. (item.viewerKey or "custom") .. ".disableTooltips") then return end
+        GameTooltip:SetOwner(frame, "ANCHOR_RIGHT")
+        if item.spellID then
+            GameTooltip:SetSpellByID(item.spellID)
+        elseif item.itemID then
+            GameTooltip:SetItemByID(item.itemID)
+        elseif item.slotID then
+            GameTooltip:SetInventoryItem("player", item.slotID)
+        elseif item.actionSlotID then
+            GameTooltip:SetAction(item.actionSlotID)
+        else
+            GameTooltip:SetText(item.config and item.config.name or "Custom")
         end
-    end
+        GameTooltip:Show()
+    end)
+    frame:SetScript("OnLeave", function()
+        GameTooltip:Hide()
+    end)
 end
 
 function CooldownItem:_stripBlizzardCruft()
     local frame = self.frame
     if not frame then return end
-
-    local iconTex = frame.Icon or frame.icon
+    local iconTex = GetIcon(frame)
     if iconTex and iconTex.GetMaskTexture and iconTex.RemoveMaskTexture then
         for i = 1, CONSTANTS.MAX_MASK_TEXTURES do
             local mask = iconTex:GetMaskTexture(i)
@@ -263,42 +236,7 @@ function CooldownItem:_stripBlizzardCruft()
             end
         end
     end
-
-    if frame.GetRegions then
-        for _, region in ipairs({frame:GetRegions()}) do
-            if region:IsObjectType("Texture") and region ~= iconTex and region:IsShown() then
-                region:SetTexture(nil)
-                region:Hide()
-                if not region.__ucdmShowHooked then
-                    region.__ucdmShowHooked = true
-                    region.Show = function() end
-                end
-            end
-        end
-    end
-
-    if frame.OutOfRange then
-        frame.OutOfRange:Hide()
-        if not frame.OutOfRange.__ucdmShowHooked then
-            frame.OutOfRange.__ucdmShowHooked = true
-            frame.OutOfRange.Show = function() end
-        end
-    end
-end
-
-function CooldownItem:_preventAtlasBorder(texture)
-    if not texture or texture.__ucdmAtlasBlocked then return end
-    texture.__ucdmAtlasBlocked = true
-    
-    if texture.SetAtlas then
-        hooksecurefunc(texture, "SetAtlas", function(self)
-            if self.SetTexture then self:SetTexture(nil) end
-            if self.SetAlpha then self:SetAlpha(0) end
-        end)
-    end
-    
-    if texture.SetTexture then texture:SetTexture(nil) end
-    if texture.SetAlpha then texture:SetAlpha(0) end
+    if frame.OutOfRange then frame.OutOfRange:Hide() end
 end
 
 function CooldownItem:_applyTexCoord(rowConfig)
@@ -326,7 +264,7 @@ function CooldownItem:_applyTexCoord(rowConfig)
         bottom = bottom - offset
     end
     
-    local tex = frame.Icon or frame.icon
+    local tex = GetIcon(frame)
     if tex and tex.SetTexCoord then
         tex:SetTexCoord(left, right, top, bottom)
     end
@@ -336,7 +274,7 @@ function CooldownItem:_applyIconStyle(rowConfig)
     local frame = self.frame
     if not frame then return end
 
-    local iconTex = frame.Icon or frame.icon
+    local iconTex = GetIcon(frame)
     if not iconTex then return end
 
     local style = rowConfig.iconStyle or "blizzard"
@@ -365,7 +303,7 @@ end
 function CooldownItem:_applyBorder(borderSize, borderColor)
     local frame = self.frame
     if not frame then return end
-    
+
     borderSize = borderSize or 0
 
     local iconBorderSize = borderSize
@@ -378,13 +316,18 @@ function CooldownItem:_applyBorder(borderSize, borderColor)
         return
     end
 
-    -- Anchor borders to frame (not icon texture) for pixel-perfect positioning
     local borderAnchor = frame
+    local cooldown = GetCooldown(frame)
+    local cooldownLevel = (cooldown and cooldown.GetFrameLevel) and cooldown:GetFrameLevel() or 0
 
     frame._ucdmBorders = frame._ucdmBorders or {}
     if #frame._ucdmBorders == 0 then
+        local overlay = CreateFrame("Frame", nil, frame)
+        overlay:SetAllPoints(frame)
+        frame._ucdmBorderOverlay = overlay
+
         local function CreateBorderLine()
-            local border = frame:CreateTexture(nil, "OVERLAY")
+            local border = overlay:CreateTexture(nil, "OVERLAY")
             if border.SetSnapToPixelGrid then
                 border:SetSnapToPixelGrid(true)
             end
@@ -415,6 +358,10 @@ function CooldownItem:_applyBorder(borderSize, borderColor)
         frame._ucdmBorders = { topBorder, bottomBorder, leftBorder, rightBorder }
     end
 
+    if frame._ucdmBorderOverlay then
+        frame._ucdmBorderOverlay:SetFrameLevel(cooldownLevel + 1)
+    end
+
     local top, bottom, left, right = unpack(frame._ucdmBorders)
     if not (top and bottom and left and right) then return end
 
@@ -432,7 +379,7 @@ function CooldownItem:_applyBorder(borderSize, borderColor)
     left:SetWidth(pixelSize)
     right:SetWidth(pixelSize)
 
-    local bc = borderColor or { r = 0, g = 1, b = 0, a = 1 }
+    local bc = borderColor or { r = 0, g = 0, b = 0, a = 1 }
     local shouldShow = iconBorderSize > 0
     for _, border in ipairs(frame._ucdmBorders) do
         border:SetColorTexture(bc.r, bc.g, bc.b, bc.a)
@@ -460,26 +407,23 @@ function CooldownItem:_applyTextStyle(rowConfig)
     local pxStackY = TavernUI:GetPixelSize(scaleRef, stackOffsetY, 1)
 
     if durationSize > 0 then
-        local cooldown = frame.Cooldown or frame.cooldown
+        local cooldown = GetCooldown(frame)
         if cooldown then
             if cooldown.text then
                 TavernUI:ApplyFont(cooldown.text, scaleRef, durationSize)
                 cooldown.text:ClearAllPoints()
                 cooldown.text:SetPoint(durationPoint, frame, durationPoint, pxDurX, pxDurY)
             end
-            local ok, regions = pcall(function() return {cooldown:GetRegions()} end)
-            if ok and regions then
-                for _, region in ipairs(regions) do
-                    if region and region.GetObjectType and region:GetObjectType() == "FontString" then
-                        TavernUI:ApplyFont(region, scaleRef, durationSize)
-                        region:ClearAllPoints()
-                        region:SetPoint(durationPoint, frame, durationPoint, pxDurX, pxDurY)
-                    end
+            for _, region in ipairs({cooldown:GetRegions()}) do
+                if region and region.GetObjectType and region:GetObjectType() == "FontString" then
+                    TavernUI:ApplyFont(region, scaleRef, durationSize)
+                    region:ClearAllPoints()
+                    region:SetPoint(durationPoint, frame, durationPoint, pxDurX, pxDurY)
                 end
             end
         end
     end
-    
+
     if stackSize > 0 then
         local chargeFrame = frame.ChargeCount
         if chargeFrame then
@@ -490,8 +434,8 @@ function CooldownItem:_applyTextStyle(rowConfig)
                 fs:SetPoint(stackPoint, frame, stackPoint, pxStackX, pxStackY)
             end
         end
-        
-        local countText = frame.Count or frame.count
+
+        local countText = GetCount(frame)
         if countText then
             TavernUI:ApplyFont(countText, scaleRef, stackSize)
             countText:ClearAllPoints()
@@ -502,41 +446,43 @@ end
 
 function CooldownItem:_normalizeIconTexture()
     local frame = self.frame
-    local textures = {frame.Icon, frame.icon}
-    
-    for _, tex in ipairs(textures) do
-        if tex then
-            tex:ClearAllPoints()
-            tex:SetAllPoints(frame)
-            if tex.SetSnapToPixelGrid then tex:SetSnapToPixelGrid(false) end
-            if tex.SetBlendMode then tex:SetBlendMode("BLEND") end
-        end
+    local iconTex = GetIcon(frame)
+    if not iconTex then return end
+
+    iconTex:ClearAllPoints()
+    iconTex:SetAllPoints(frame)
+    if iconTex.SetSnapToPixelGrid then iconTex:SetSnapToPixelGrid(false) end
+    if iconTex.SetBlendMode then iconTex:SetBlendMode("BLEND") end
+
+    -- Helper to normalize a mask texture with pixel-perfect settings
+    local function normalizeMask(mask)
+        if not mask then return end
+        mask:ClearAllPoints()
+        mask:SetAllPoints(iconTex)
+        if mask.SetSnapToPixelGrid then mask:SetSnapToPixelGrid(true) end
     end
-    local iconTex = frame.Icon or frame.icon
-    if iconTex then
-        if frame.IconMaskBlizzard then
-            frame.IconMaskBlizzard:ClearAllPoints()
-            frame.IconMaskBlizzard:SetAllPoints(iconTex)
-        end
-        if frame.IconMaskSquare then
-            frame.IconMaskSquare:ClearAllPoints()
-            frame.IconMaskSquare:SetAllPoints(iconTex)
-        end
-    end
+
+    -- Normalize all mask textures (including IconMask from custom frames)
+    normalizeMask(frame.IconMask)
+    normalizeMask(frame.IconMaskBlizzard)
+    normalizeMask(frame.IconMaskSquare)
 end
 
 function CooldownItem:_normalizeCooldown()
-    local frame = self.frame
-    local cooldown = frame.Cooldown or frame.cooldown
+    local cooldown = GetCooldown(self.frame)
+    if not cooldown then return end
 
-    if cooldown then
-        cooldown:ClearAllPoints()
-        cooldown:SetAllPoints(frame)
-        cooldown:SetSwipeTexture("Interface\\Buttons\\WHITE8X8")
-        cooldown:SetSwipeColor(0, 0, 0, 0.8)
-    end
+    cooldown:ClearAllPoints()
+    cooldown:SetAllPoints(self.frame)
+    cooldown:SetSwipeTexture("Interface\\Buttons\\WHITE8X8")
+    cooldown:SetSwipeColor(0, 0, 0, 0.8)
+
+    -- Apply pixel-perfect settings to cooldown frame
+    if cooldown.SetSnapToPixelGrid then cooldown:SetSnapToPixelGrid(true) end
+    if cooldown.SetTexelSnappingBias then cooldown:SetTexelSnappingBias(0) end
 end
 
+-- High frame level ensures keybind text renders above cooldown swipe
 local KEYBIND_OVERLAY_LEVEL = 500
 local DEFAULT_KEYBIND_SIZE = 10
 
@@ -568,20 +514,15 @@ function CooldownItem:setKeybind(keybind, settings)
         frame._ucdmKeybindText = TavernUI:CreateFontString(overlay, settings.keybindSize or DEFAULT_KEYBIND_SIZE)
     end
     local keybindText = frame._ucdmKeybindText
-    if keybindText:GetParent() ~= overlay then
-        keybindText:SetParent(overlay)
-    end
     local keybindSize = settings.keybindSize or DEFAULT_KEYBIND_SIZE
     TavernUI:ApplyFont(keybindText, frame, keybindSize, true)
-    if keybindText.SetJustifyH then
-        keybindText:SetJustifyH("RIGHT")
-    end
+    if keybindText.SetJustifyH then keybindText:SetJustifyH("RIGHT") end
 
     local point = settings.keybindPoint or "TOPRIGHT"
     local offsetX = settings.keybindOffsetX or -2
     local offsetY = settings.keybindOffsetY or -2
-    local pxX = TavernUI.GetPixelSize and TavernUI:GetPixelSize(frame, offsetX, 0) or offsetX
-    local pxY = TavernUI.GetPixelSize and TavernUI:GetPixelSize(frame, offsetY, 1) or offsetY
+    local pxX = (TavernUI.GetPixelSize and TavernUI:GetPixelSize(frame, offsetX, 0)) or offsetX
+    local pxY = (TavernUI.GetPixelSize and TavernUI:GetPixelSize(frame, offsetY, 1)) or offsetY
 
     if keybind then
         local color = settings.keybindColor or {r = 1, g = 1, b = 1, a = 1}
@@ -628,17 +569,9 @@ function CooldownItem:update()
 end
 
 function CooldownItem:setIcon(iconFileID)
-    local frame = self.frame
-    if not frame then return end
-    
-    local tex = frame.Icon or frame.icon
-    if tex then
-        if iconFileID then
-            tex:SetTexture(iconFileID)
-        else
-            tex:SetTexture("Interface\\Icons\\INV_Misc_QuestionMark")
-        end
-    end
+    local tex = GetIcon(self.frame)
+    if not tex then return end
+    tex:SetTexture(iconFileID or "Interface\\Icons\\INV_Misc_QuestionMark")
 end
 
 function CooldownItem:refreshIcon()

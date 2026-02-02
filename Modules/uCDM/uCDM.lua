@@ -225,7 +225,6 @@ function module:OnInitialize()
 
     -- Initialize subsystems in order
     if self.ItemRegistry then self.ItemRegistry.Initialize() end
-    if self.CooldownTracker and self.CooldownTracker.Initialize then self.CooldownTracker.Initialize() end
     if self.LayoutEngine then self.LayoutEngine.Initialize() end
     if self.Keybinds then self.Keybinds.Initialize() end
     if self.Anchoring then self.Anchoring.Initialize() end
@@ -345,41 +344,15 @@ function module:OnPlayerEnteringWorld()
     if not self:IsEnabled() then return end
     self:StartUpdateLoop()
 
-    local function Stage1()
-        if self.ItemRegistry then
-            self.ItemRegistry.HookBlizzardViewers()
-        end
-    end
-    
-    local function Stage2()
-        if self.ItemRegistry then
-            self.ItemRegistry.LoadCustomEntries()
-        end
-    end
-    
-    local function Stage3()
+    local reg = self.ItemRegistry
+    if reg then
+        reg.HookBlizzardViewers()
+        reg.LoadCustomEntries()
         for _, viewerKey in ipairs({"essential", "utility", "buff"}) do
-            if self.ItemRegistry then
-                self.ItemRegistry.CollectBlizzardItems(viewerKey)
-            end
+            reg.CollectBlizzardItems(viewerKey)
         end
     end
-    
-    local function Stage4()
-        self:RefreshAllViewers()
-    end
-    
-    -- Stagger initialization
-    C_Timer.After(0.1, Stage1)
-    C_Timer.After(0.3, Stage2)
-    C_Timer.After(0.5, Stage3)
-    C_Timer.After(0.7, Stage4)
-    
-    C_Timer.After(1.5, function()
-        if self:IsEnabled() then
-            self:RefreshAllViewers()
-        end
-    end)
+    self:RefreshAllViewers()    
 end
 
 function module:OnEquipmentChanged()
@@ -523,9 +496,8 @@ function module:IsEnabled()
 end
 
 function module:LogError(msg, ...)
-    if self:GetSetting("general.debug", false) then
-        print("|cFFFF0000uCDM Error:|r " .. tostring(msg), ...)
-    end
+    -- Errors always print regardless of debug setting
+    print("|cFFFF0000uCDM Error:|r " .. tostring(msg), ...)
 end
 
 function module:LogInfo(msg, ...)

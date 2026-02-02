@@ -7,6 +7,19 @@ local Helpers = module.CooldownTrackerHelpers
 
 local CooldownTracker = {}
 
+-- Normalize frame element access (Blizzard uses inconsistent casing)
+local function GetIcon(frame)
+    return frame and (frame.Icon or frame.icon)
+end
+
+local function GetCooldown(frame)
+    return frame and (frame.Cooldown or frame.cooldown)
+end
+
+local function GetCount(frame)
+    return frame and (frame.Count or frame.count)
+end
+
 CooldownTracker._hasChargesCache = {}
 
 local function ApplySwipeStyle(cooldown)
@@ -34,26 +47,23 @@ function CooldownTracker.UpdateItem(itemID)
 
     local buffStacks, buffRemaining, spellCharges = Helpers.GetItemBuffInfo(spellID, CooldownTracker._hasChargesCache)
     local stackDisplay = Helpers.GetStackDisplay(itemCount, itemCharges, spellCharges, buffStacks)
-    local durationObj, isOnCooldown = Helpers.CreateCooldownDuration(startTime, duration)
+    local durationObj = Helpers.CreateCooldownDuration(startTime, duration)
 
     return {
         stackDisplay = stackDisplay,
-        isOnCooldown = isOnCooldown,
         duration = durationObj,
         buffRemaining = buffRemaining,
     }
 end
 
 function CooldownTracker.UpdateSpell(spellID)
-    if (not Helpers.SetupCooldownCurves()) then return end
     local duration = C_Spell.GetSpellCooldownDuration(spellID)
-    local stacks, charges, hasCharges, chargeDuration, buffRemaining = Helpers.GetSpellInfo(spellID, CooldownTracker._hasChargesCache)
+    local stacks, charges, hasCharges, chargeDuration, buffRemaining = Helpers.GetSpellStackAndChargeInfo(spellID, CooldownTracker._hasChargesCache)
     local stackDisplay = Helpers.GetStackDisplay(nil, nil, nil, stacks, hasCharges, charges)
     local isUsable, noMana = Helpers.GetSpellUsability(spellID)
-    
+
     return {
         stackDisplay = stackDisplay,
-        isOnCooldown = Helpers.EvaluateRemainingPercentSafe(duration),
         duration = duration,
         buffRemaining = buffRemaining,
         chargeDuration = chargeDuration,
@@ -72,12 +82,11 @@ function CooldownTracker.UpdateActionSlot(slot)
     end
     local startTime, duration, enable = GetActionCooldown(slot)
     if type(startTime) ~= "number" or type(duration) ~= "number" or duration <= 0 then
-        return { duration = nil, isOnCooldown = 0, stackDisplay = nil }
+        return { duration = nil, stackDisplay = nil }
     end
-    local durationObj, isOnCooldown = Helpers.CreateCooldownDuration(startTime, duration)
+    local durationObj = Helpers.CreateCooldownDuration(startTime, duration)
     return {
         duration = durationObj,
-        isOnCooldown = isOnCooldown,
         stackDisplay = nil,
     }
 end
@@ -89,76 +98,74 @@ function CooldownTracker.UpdateOverride(entry)
         startTime, duration = module:GetSlotCooldownOverride(entry.viewerKey, entry.layoutIndex)
     end
     if not startTime or not duration then return nil end
-    local durationObj, isOnCooldown = Helpers.CreateCooldownDuration(startTime, duration)
+    local durationObj = Helpers.CreateCooldownDuration(startTime, duration)
     local data = {
         duration = durationObj,
-        isOnCooldown = isOnCooldown,
         stackDisplay = nil,
     }
     local frame = entry.frame
-    local cooldown = frame.Cooldown or frame.cooldown
+    local cooldown = GetCooldown(frame)
     if cooldown and data.duration then
         cooldown:SetCooldownFromDurationObject(data.duration, true)
         cooldown:Show()
     end
-    local icon = frame.Icon or frame.icon
+    local icon = GetIcon(frame)
     if icon then
-        if data.isOnCooldown and data.isOnCooldown > 0 then
-            icon:SetDesaturation(data.isOnCooldown)
-            icon:SetVertexColor(1.0, 1.0, 1.0)
-        else
-            icon:SetDesaturation(0)
-            icon:SetVertexColor(1.0, 1.0, 1.0)
-        end
+        icon:SetDesaturation(data.duration and 1 or 0)
+        icon:SetVertexColor(1.0, 1.0, 1.0)
     end
-    local countText = frame.Count or frame.count
+    local countText = GetCount(frame)
     if countText then countText:Hide() end
     return data
 end
 
-function CooldownTracker.GetEntryData(entry)
-    local hasSpellOrSlotOrItem = (entry.spellID or entry.actionSlotID or entry.itemID)
-    if hasSpellOrSlotOrItem then
-        local scanner = TavernUI.SpellScanner or TavernUI:GetModule("SpellScanner", true)
-        if scanner and (scanner.GetSpellActiveCooldown or scanner.GetItemActiveCooldown) then
-            local startTime, duration
-            if entry.spellID and scanner.GetSpellActiveCooldown then
-                local ok, s, d = pcall(function() return scanner:GetSpellActiveCooldown(entry.spellID) end)
-                if ok and s and d then startTime, duration = s, d end
-            end
-            if (not startTime or not duration) and entry.actionSlotID then
-                local slot = tonumber(entry.actionSlotID)
-                if slot and slot >= 1 and slot <= 120 then
-                    local atype, id = GetActionInfo(slot)
-                    if id then
-                        if (atype == "spell" or atype == "macro") and scanner.GetSpellActiveCooldown then
-                            local ok, s, d = pcall(function() return scanner:GetSpellActiveCooldown(id) end)
-                            if ok and s and d then startTime, duration = s, d end
-                        elseif atype == "item" and scanner.GetItemActiveCooldown then
-                            local ok, s, d = pcall(function() return scanner:GetItemActiveCooldown(id) end)
-                            if ok and s and d then startTime, duration = s, d end
-                        end
-                    end
-                end
-            end
-            if (not startTime or not duration) and entry.itemID and scanner.GetItemActiveCooldown then
-                local ok, s, d = pcall(function() return scanner:GetItemActiveCooldown(entry.itemID) end)
-                if ok and s and d then startTime, duration = s, d end
-            end
-            if startTime and duration then
-                local durationObj, isOnCooldown
-                local ok = pcall(function()
-                    durationObj, isOnCooldown = Helpers.CreateCooldownDuration(startTime, duration)
-                end)
-                if ok and durationObj then
-                    return {
-                        buffRemaining = durationObj,
-                        isOnCooldown = isOnCooldown or 1,
-                        stackDisplay = nil,
-                    }
+-- Try to get cooldown from SpellScanner if available (provides more accurate tracking)
+local function TryGetScannerCooldown(entry)
+    local scanner = TavernUI.SpellScanner or TavernUI:GetModule("SpellScanner", true)
+    if not scanner then return nil end
+
+    local startTime, duration
+
+    -- Try direct spell lookup
+    if entry.spellID and scanner.GetSpellActiveCooldown then
+        startTime, duration = scanner:GetSpellActiveCooldown(entry.spellID)
+    end
+
+    -- Try action slot lookup
+    if not startTime and entry.actionSlotID then
+        local slot = tonumber(entry.actionSlotID)
+        if slot and slot >= 1 and slot <= 120 then
+            local atype, id = GetActionInfo(slot)
+            if id then
+                if (atype == "spell" or atype == "macro") and scanner.GetSpellActiveCooldown then
+                    startTime, duration = scanner:GetSpellActiveCooldown(id)
+                elseif atype == "item" and scanner.GetItemActiveCooldown then
+                    startTime, duration = scanner:GetItemActiveCooldown(id)
                 end
             end
         end
+    end
+
+    -- Try item lookup
+    if not startTime and entry.itemID and scanner.GetItemActiveCooldown then
+        startTime, duration = scanner:GetItemActiveCooldown(entry.itemID)
+    end
+
+    if startTime and duration then
+        local durationObj = Helpers.CreateCooldownDuration(startTime, duration)
+        if durationObj then
+            return { buffRemaining = durationObj, stackDisplay = nil }
+        end
+    end
+
+    return nil
+end
+
+function CooldownTracker.GetEntryData(entry)
+    -- Try SpellScanner first for more accurate cooldown tracking
+    if entry.spellID or entry.actionSlotID or entry.itemID then
+        local scannerData = TryGetScannerCooldown(entry)
+        if scannerData then return scannerData end
     end
 
     if entry.spellID then
@@ -183,44 +190,35 @@ function CooldownTracker.UpdateEntry(entry)
     if not data then return nil end
 
     local frame = entry.frame
-    local cooldown = frame.Cooldown or frame.cooldown
+    local cooldown = GetCooldown(frame)
 
     if cooldown then
-        if data.buffRemaining then
-            cooldown:SetCooldownFromDurationObject(data.buffRemaining, true)
-            cooldown:Show()
-        elseif data.chargeDuration then
-            cooldown:SetCooldownFromDurationObject(data.chargeDuration, false)
-            cooldown:Show()
-        elseif data.duration then
-            cooldown:SetCooldownFromDurationObject(data.duration, true)
+        local durationObj = data.buffRemaining or data.chargeDuration or data.duration
+        if durationObj then
+            local useReverse = data.buffRemaining ~= nil or data.duration ~= nil
+            cooldown:SetCooldownFromDurationObject(durationObj, useReverse)
             cooldown:Show()
         else
             cooldown:Clear()
         end
     end
 
-    local icon = frame.Icon or frame.icon
+    local icon = GetIcon(frame)
     if icon then
-        if data.isOnCooldown and data.isOnCooldown > 0 then
-            icon:SetDesaturation(data.isOnCooldown)
+        local hasCooldown = data.duration or data.buffRemaining or data.chargeDuration
+        if hasCooldown then
+            icon:SetDesaturation(1)
             icon:SetVertexColor(1.0, 1.0, 1.0)
-        elseif data.isUsable ~= nil then
+        elseif data.isUsable == false then
             icon:SetDesaturation(0)
-            if data.isUsable then
-                icon:SetVertexColor(1.0, 1.0, 1.0)
-            elseif data.noMana then
-                icon:SetVertexColor(0.5, 0.5, 1.0)
-            else
-                icon:SetVertexColor(0.4, 0.4, 0.4)
-            end
+            icon:SetVertexColor(data.noMana and 0.5 or 0.4, data.noMana and 0.5 or 0.4, data.noMana and 1.0 or 0.4)
         else
             icon:SetDesaturation(0)
             icon:SetVertexColor(1.0, 1.0, 1.0)
         end
     end
 
-    local countText = frame.Count or frame.count
+    local countText = GetCount(frame)
     if countText then
         if data.stackDisplay then
             countText:SetText(data.stackDisplay)
@@ -229,12 +227,8 @@ function CooldownTracker.UpdateEntry(entry)
             countText:Hide()
         end
     end
-    
-    return data
-end
 
-function CooldownTracker.Initialize()
-    Helpers.SetupCooldownCurves()
+    return data
 end
 
 module.CooldownTracker = CooldownTracker

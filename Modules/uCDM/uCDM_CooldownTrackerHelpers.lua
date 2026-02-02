@@ -3,77 +3,13 @@ local module = TavernUI:GetModule("uCDM", true)
 
 if not module then return end
 
-local CooldownCurves = {
-    initialized = false,
-    Binary = nil,
-}
-
-local function SetupCooldownCurves()
-    if CooldownCurves.initialized then return true end
-    if not C_CurveUtil or not C_CurveUtil.CreateCurve then
-        return false
-    end
-
-    CooldownCurves.Binary = C_CurveUtil.CreateCurve()
-    CooldownCurves.Binary:AddPoint(0.0, 0)
-    CooldownCurves.Binary:AddPoint(0.001, 1)
-    CooldownCurves.Binary:AddPoint(1.0, 1)
-
-    CooldownCurves.initialized = true
-    return true
-end
-
-local function GetHasCharges(spellID, chargesCache)
-    if not spellID or type(spellID) ~= "number" then return false end
-
-    local ok, cacheKey = pcall(function() return "spell_" .. spellID end)
-    if not ok or not cacheKey then return false end
-
-    local chargeInfo = C_Spell.GetSpellCharges(spellID)
-    if chargeInfo then
-        local setOk = pcall(function() chargesCache[cacheKey] = true end)
-        if setOk then
-            return true
-        end
-    end
-
-    local getOk, cached = pcall(function() return chargesCache[cacheKey] end)
-    return (getOk and cached) or false
-end
-
 local function CreateCooldownDuration(startTime, duration)
-    if not startTime or not duration then
-        return nil, 0
+    if not startTime or not duration or duration <= 0 then
+        return nil
     end
-
     local durationObj = C_DurationUtil.CreateDuration()
-
-    local ok = pcall(durationObj.SetTimeFromStart, durationObj, startTime, duration, 1)
-    if not ok then
-        return nil, 0
-    end
-
-    local isOnCooldown = 0
-    if SetupCooldownCurves() then
-        local ok, val = pcall(durationObj.EvaluateRemainingPercent, durationObj, CooldownCurves.Binary)
-        if ok and type(val) == "number" then
-            local okCmp = pcall(function() return val > 0 end)
-            if okCmp then
-                isOnCooldown = val
-            end
-        end
-    end
-
-    return durationObj, isOnCooldown
-end
-
-local function EvaluateRemainingPercentSafe(durationObj)
-    if not durationObj or not SetupCooldownCurves() then return 0 end
-    local ok, val = pcall(durationObj.EvaluateRemainingPercent, durationObj, CooldownCurves.Binary)
-    if not ok or type(val) ~= "number" then return 0 end
-    local okCmp = pcall(function() return val > 0 end)
-    if not okCmp then return 0 end
-    return val
+    durationObj:SetTimeFromStart(startTime, duration, 1)
+    return durationObj
 end
 
 local function GetStacksAndRemainingBuffTime(auraData)
@@ -89,7 +25,7 @@ local function GetStacksAndRemainingBuffTime(auraData)
     return 0, nil
 end
 
-local function GetSpellInfo(spellID, chargesCache)
+local function GetSpellStackAndChargeInfo(spellID, chargesCache)
     if not spellID then
         return 0, nil, false, 0
     end
@@ -105,12 +41,14 @@ local function GetSpellInfo(spellID, chargesCache)
         stacks, buffRemaining = GetStacksAndRemainingBuffTime(auraData)
     end
     
-    hasCharges = GetHasCharges(spellID, chargesCache)
     local chargeInfo = C_Spell.GetSpellCharges(spellID)
     if chargeInfo then
         charges = chargeInfo.currentCharges
         hasCharges = true
-        chargeDuration = C_Spell.GetSpellChargeDuration(spellID)        
+        chargesCache[spellID] = true
+        chargeDuration = C_Spell.GetSpellChargeDuration(spellID)
+    else
+        hasCharges = chargesCache[spellID] or false
     end
 
     return stacks, charges, hasCharges, chargeDuration, buffRemaining
@@ -121,24 +59,19 @@ local function GetWeaponEnchantBuff(spellID)
         return nil, nil
     end
 
+    local function CreateEnchantDuration(expTime)
+        if not expTime or expTime <= 0 then return nil end
+        local durationObj = C_DurationUtil.CreateDuration()
+        durationObj:SetTimeFromStart(GetTime(), expTime, 1)
+        return durationObj
+    end
+
     local mhHas, mhExp, _, mhEnchantID, ohHas, ohExp, _, ohEnchantID = GetWeaponEnchantInfo()
-    
+
     if mhHas and mhEnchantID == spellID then
-        if mhExp and mhExp > 0 then
-            local buffDurationObj = C_DurationUtil.CreateDuration()
-            local currentTime = GetTime()
-            buffDurationObj:SetTimeFromStart(currentTime, mhExp, 1)
-            return mhEnchantID, buffDurationObj
-        end
-        return mhEnchantID, nil
+        return mhEnchantID, CreateEnchantDuration(mhExp)
     elseif ohHas and ohEnchantID == spellID then
-        if ohExp and ohExp > 0 then
-            local buffDurationObj = C_DurationUtil.CreateDuration()
-            local currentTime = GetTime()
-            buffDurationObj:SetTimeFromStart(currentTime, ohExp, 1)
-            return ohEnchantID, buffDurationObj
-        end
-        return ohEnchantID, nil
+        return ohEnchantID, CreateEnchantDuration(ohExp)
     end
 
     return nil, nil
@@ -154,7 +87,7 @@ local function GetItemBuffInfo(spellID, chargesCache)
         return 0, weaponEnchantBuff, nil
     end
 
-    local stacks, charges, _, _, buffDur = GetSpellInfo(spellID, chargesCache)
+    local stacks, charges, _, _, buffDur = GetSpellStackAndChargeInfo(spellID, chargesCache)
     return stacks, buffDur, charges
 end
 
@@ -169,54 +102,35 @@ local function GetItemCharges(itemID)
 end
 
 local function GetStackDisplay(itemCount, itemCharges, spellCharges, buffStacks, hasCharges, charges)
+    -- Item context
     if itemCount then
-        local displayCharges = nil
-        if itemCharges == itemCount or not itemCharges then
-            displayCharges = spellCharges
-        else
-            displayCharges = itemCharges
-        end
-
-        if displayCharges ~= nil then
-            return displayCharges
-        end
-
-        if buffStacks and buffStacks > 0 then
-            return buffStacks
-        end
-
-        if itemCount > 1 then
-            return itemCount
-        end
-
-        return nil
-    else
-        if hasCharges and charges ~= nil then
-            return charges
-        elseif buffStacks and buffStacks > 0 then
-            return buffStacks
-        end
+        -- Prefer spell charges over item charges when they match or item charges is nil
+        local displayCharges = (itemCharges == itemCount or not itemCharges) and spellCharges or itemCharges
+        if displayCharges then return displayCharges end
+        if buffStacks and buffStacks > 0 then return buffStacks end
+        if itemCount > 1 then return itemCount end
         return nil
     end
+
+    -- Spell context
+    if hasCharges and charges then return charges end
+    if buffStacks and buffStacks > 0 then return buffStacks end
+    return nil
 end
 
 local function GetSpellUsability(spellID)
     if not spellID then return true, false end
 
-    local ok, usable, noMana = pcall(C_Spell.IsSpellUsable, spellID)
-    if not ok or usable == nil then return true, false end
+    local usable, noMana = C_Spell.IsSpellUsable(spellID)
+    if usable == nil then return true, false end
     if not usable then
-        return false, noMana and true or false
+        return false, noMana or false
     end
 
-    local spellName = GetSpellInfo(spellID)
-    if spellName then
-        local target = "target"
-        if UnitExists(target) then
-            local inRange = C_Spell.IsSpellInRange(spellName, target)
-            if inRange == 0 then
-                return false, false
-            end
+    if UnitExists("target") then
+        local inRange = C_Spell.IsSpellInRange(spellID, "target")
+        if inRange == false then
+            return false, false
         end
     end
 
@@ -224,18 +138,14 @@ local function GetSpellUsability(spellID)
 end
 
 local Helpers = {
-    SetupCooldownCurves = SetupCooldownCurves,
-    GetHasCharges = GetHasCharges,
     CreateCooldownDuration = CreateCooldownDuration,
-    EvaluateRemainingPercentSafe = EvaluateRemainingPercentSafe,
     GetStacksAndRemainingBuffTime = GetStacksAndRemainingBuffTime,
-    GetSpellInfo = GetSpellInfo,
+    GetSpellStackAndChargeInfo = GetSpellStackAndChargeInfo,
     GetWeaponEnchantBuff = GetWeaponEnchantBuff,
     GetItemBuffInfo = GetItemBuffInfo,
     GetItemCharges = GetItemCharges,
     GetStackDisplay = GetStackDisplay,
     GetSpellUsability = GetSpellUsability,
-    CooldownCurves = CooldownCurves,
 }
 
 module.CooldownTrackerHelpers = Helpers

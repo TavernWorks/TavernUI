@@ -1894,7 +1894,7 @@ function module:RegisterOptions()
     end
 end
 
-RefreshOptions = function(rebuild)
+local function RefreshOptions(rebuild)
     if rebuild then
         module.optionsBuilt = false
         module:BuildOptions()

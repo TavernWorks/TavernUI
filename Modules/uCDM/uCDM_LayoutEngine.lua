@@ -146,33 +146,20 @@ end
 local function AssignItemsToRows(items, rows, viewerKey)
     local rowAssignments = {}
     local capacity = GetTotalCapacity(rows)
-    
-    -- Create visibility context
-    local context = {
-        viewerKey = viewerKey,
-        inCombat = InCombatLockdown(),
-    }
-    
-    -- Filter visible items and assign layout indices
+    local context = { viewerKey = viewerKey, inCombat = InCombatLockdown() }
+
     local visibleItems = {}
     for _, item in ipairs(items) do
         if item.enabled ~= false and item.frame and item:isVisible(context) then
             local layoutIdx = item.layoutIndex or item.index or (#visibleItems + 1)
             if layoutIdx <= capacity then
-                visibleItems[#visibleItems + 1] = {
-                    item = item,
-                    layoutIndex = layoutIdx,
-                }
+                visibleItems[#visibleItems + 1] = { item = item, layoutIndex = layoutIdx }
             end
         end
     end
-    
-    -- Sort by layout index
-    table.sort(visibleItems, function(a, b)
-        return a.layoutIndex < b.layoutIndex
-    end)
-    
-    -- Assign to rows based on breakpoints
+
+    table.sort(visibleItems, function(a, b) return a.layoutIndex < b.layoutIndex end)
+
     local slotStart = 1
     for rowNum, rowConfig in ipairs(rows) do
         local slotEnd = slotStart + rowConfig.iconCount - 1
@@ -343,40 +330,7 @@ local function ApplyLayout(viewer, parentFrame, rowAssignments, rows, viewerKey)
     end
 end
 
-local function SuppressFrame(frame)
-    if not frame then return end
-    if frame.SetAlpha then frame:SetAlpha(0) end
-    frame:Hide()
-    if not frame.__ucdmSuppressHooked then
-        frame.__ucdmSuppressHooked = true
-        hooksecurefunc(frame, "Show", function(self)
-            if self.SetAlpha then self:SetAlpha(0) end
-        end)
-    end
-end
-
-local function IsOurViewerChild(frame)
-    if not frame or not frame.GetParent then return false end
-    local parent = frame:GetParent()
-    if not parent then return false end
-    for _, viewerName in pairs(module.CONSTANTS.VIEWER_NAMES) do
-        if _G[viewerName] == parent then return true end
-    end
-    return false
-end
-
-local function HookProcGlowOnce()
-    if not ActionButtonSpellAlertManager or not ActionButtonSpellAlertManager.ShowAlert or ActionButtonSpellAlertManager.__ucdmProcGlowHooked then return end
-    ActionButtonSpellAlertManager.__ucdmProcGlowHooked = true
-    hooksecurefunc(ActionButtonSpellAlertManager, "ShowAlert", function(_, frame)
-        if IsOurViewerChild(frame) and frame.SpellActivationAlert then
-            SuppressFrame(frame.SpellActivationAlert)
-        end
-    end)
-end
-
 local function StyleViewerCooldowns(viewerKey)
-    HookProcGlowOnce()
     local viewerName = module.CONSTANTS.VIEWER_NAMES[viewerKey]
     if not viewerName then return end
     local blizzViewer = _G[viewerName]
@@ -386,24 +340,6 @@ local function StyleViewerCooldowns(viewerKey)
         local cooldown = child.Cooldown or child.cooldown
         if cooldown and applySwipe then
             applySwipe(cooldown)
-        end
-        SuppressFrame(child.CooldownFlash)
-        SuppressFrame(child.SpellActivationAlert)
-        if child.PandemicIcon then
-            SuppressFrame(child.PandemicIcon)
-        end
-        if not child.__ucdmPandemicHooked and child.ShowPandemicStateFrame then
-            child.__ucdmPandemicHooked = true
-            hooksecurefunc(child, "ShowPandemicStateFrame", function(self)
-                if self.PandemicIcon then SuppressFrame(self.PandemicIcon) end
-            end)
-        end
-        for _, key in ipairs({ "DebuffBorder", "BuffBorder", "TempEnchantBorder" }) do
-            local border = child[key]
-            if border then
-                if border.SetTexture then border:SetTexture(nil) end
-                SuppressFrame(border)
-            end
         end
     end
 end
