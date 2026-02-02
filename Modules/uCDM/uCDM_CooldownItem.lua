@@ -3,20 +3,6 @@ local module = TavernUI:GetModule("uCDM", true)
 
 if not module then return end
 
---[[
-    CooldownItem - Unified representation of any cooldown-tracked element
-    
-    This is the core abstraction. Whether it's a Blizzard spell frame, a trinket,
-    a custom spell, or a buff - they all become CooldownItem instances that:
-    
-    1. Know how to check their own visibility
-    2. Know how to style their own frame (uniformly!)
-    3. Know how to update their own cooldown state
-    4. Know how to get their keybind
-    
-    This eliminates the need for separate CooldownTracker, Conditions modules.
-]]
-
 local CooldownItem = {}
 CooldownItem.__index = CooldownItem
 
@@ -26,56 +12,36 @@ local CONSTANTS = {
     TEXTURE_SOURCE_SIZE = 64,
 }
 
---------------------------------------------------------------------------------
--- Constructor
---------------------------------------------------------------------------------
-
 function CooldownItem.new(config)
     local self = setmetatable({}, CooldownItem)
-    
-    -- Identity
+
     self.id = config.id
-    self.source = config.source -- "blizzard" | "custom"
+    self.source = config.source
     self.viewerKey = config.viewerKey
-    
-    -- Frame reference
     self.frame = config.frame
-    
     self.spellID = config.spellID
     self.itemID = config.itemID
     self.slotID = config.slotID
     self.actionSlotID = config.actionSlotID
     self.cooldownID = config.cooldownID
-    
-    -- Ordering
     self.index = config.index or 1
     self.layoutIndex = config.layoutIndex
-    
-    -- Custom entry config (for conditional display, etc.)
     self.config = config.config
     self.enabled = config.enabled ~= false
-    
-    -- State tracking
     self._styled = false
     self._lastRowConfig = nil
 
     return self
 end
 
---------------------------------------------------------------------------------
--- Visibility
---------------------------------------------------------------------------------
-
 function CooldownItem:isVisible(context)
     if not self.enabled then return false end
     if not self.frame then return false end
-    
-    -- Blizzard buff frames have special aura-based visibility
+
     if self.source == "blizzard" and self.viewerKey == "buff" then
         return self:_checkBuffVisibility()
     end
-    
-    -- Custom entries can have conditional display rules
+
     if self.source == "custom" and self.config and self.config.conditionalDisplay then
         return self:_checkConditions(context)
     end
@@ -86,17 +52,37 @@ end
 function CooldownItem:_checkBuffVisibility()
     local frame = self.frame
     if not frame then return false end
-    
-    -- Check if frame has a cooldown ID
+
     local cooldownID = frame.GetCooldownID and frame:GetCooldownID()
     if not cooldownID then return false end
-    
-    -- Check Blizzard's hide-when-inactive logic
+
     if not frame.allowHideWhenInactive then return true end
     if not frame.hideWhenInactive then return true end
-    
-    -- Only show if there's an active aura
+
     return frame.auraInstanceID ~= nil
+end
+
+function CooldownItem:setInLayout(inLayout)
+    if not self.frame then return end
+    if inLayout then
+        self.frame:Show()
+    else
+        self.frame:Hide()
+        self.frame:ClearAllPoints()
+    end
+end
+
+function CooldownItem:setParent(parent)
+    if not self.frame then return end
+    self.frame:SetParent(parent or UIParent)
+end
+
+function CooldownItem:setLayoutPosition(parent, relativeTo, x, y)
+    if not self.frame then return end
+    self:setParent(parent)
+    self.frame:ClearAllPoints()
+    local anchorTo = relativeTo or parent
+    self.frame:SetPoint("CENTER", anchorTo, "CENTER", x, y)
 end
 
 function CooldownItem:_checkConditions(context)
@@ -123,48 +109,43 @@ function CooldownItem:_checkConditions(context)
     return true
 end
 
---------------------------------------------------------------------------------
--- Styling - Applied uniformly to ALL item types
---------------------------------------------------------------------------------
-
 function CooldownItem:applyStyle(rowConfig)
     local frame = self.frame
     if not frame then return end
-    
-    -- One-time setup (remove masks, strip overlays, etc.)
+
     if not self._styled then
         self:_setupFrame()
         self._styled = true
     end
-    
-    -- Apply row-specific styling
+
     local iconSize = rowConfig.iconSize or rowConfig.size or 40
     local aspectRatio = rowConfig.aspectRatioCrop or 1.0
     local iconHeight = iconSize / aspectRatio
-    
-    local pxW = TavernUI:GetPixelSize(frame, iconSize, 0)
-    local pxH = TavernUI:GetPixelSize(frame, iconHeight, 1)
+    local scaleRef = module:GetViewerFrame(self.viewerKey) or frame
+    local pxW = TavernUI:GetPixelSize(scaleRef, iconSize, 0)
+    local pxH = TavernUI:GetPixelSize(scaleRef, iconHeight, 1)
     frame:SetSize(pxW, pxH)
-    
-    -- Store for tex coord calculation
+
     frame._ucdmZoom = rowConfig.zoom or 0
     frame._ucdmAspectRatio = aspectRatio
     frame._ucdmIconSize = iconSize
-    
-    -- Texture coordinates (zoom + aspect ratio cropping)
+
     self:_applyTexCoord(rowConfig)
-    
-    -- Border
     self:_applyBorder(rowConfig.iconBorderSize, rowConfig.iconBorderColor)
-    
-    -- Text styling (duration, stacks)
     self:_applyTextStyle(rowConfig)
-    
-    -- Ensure icon fills frame
     self:_normalizeIconTexture()
-    
-    -- Ensure cooldown fills frame
     self:_normalizeCooldown()
+
+    if self.source == "custom" then
+        local viewerFrame = module:GetViewerFrame(self.viewerKey)
+        if viewerFrame and viewerFrame.GetEffectiveScale and frame.GetEffectiveScale and frame.SetScale then
+            local targetScale = viewerFrame:GetEffectiveScale()
+            local currentScale = frame:GetEffectiveScale()
+            if targetScale and currentScale and currentScale > 0 and math.abs(currentScale - targetScale) > 0.0001 then
+                frame:SetScale((frame:GetScale() or 1) * targetScale / currentScale)
+            end
+        end
+    end
     
     self._lastRowConfig = rowConfig
 end
@@ -178,6 +159,15 @@ function CooldownItem:_setupFrame()
 
     if not isCustomFrame then
         self:_stripBlizzardCruft()
+    end
+
+    local iconTex = frame.Icon or frame.icon
+    if iconTex and not frame.IconMask then
+        local mask = frame:CreateMaskTexture()
+        mask:SetAtlas("UI-HUD-CoolDownManager-Mask")
+        mask:SetAllPoints(iconTex)
+        iconTex:AddMaskTexture(mask)
+        frame.IconMask = mask
     end
 
     local cooldown = frame.Cooldown or frame.cooldown
@@ -293,8 +283,7 @@ function CooldownItem:_applyTexCoord(rowConfig)
     local right = 1 - baseCrop - zoom
     local top = baseCrop + zoom
     local bottom = 1 - baseCrop - zoom
-    
-    -- Apply aspect ratio cropping (crops top/bottom for wide icons)
+
     if aspectRatio > 1.0 then
         local cropAmount = 1.0 - (1.0 / aspectRatio)
         local availableHeight = bottom - top
@@ -322,8 +311,9 @@ function CooldownItem:_applyBorder(borderSize, borderColor)
         frame:SetHitRectInsets(0, 0, 0, 0)
         return
     end
-    
-    local pxBorder = TavernUI:GetPixelSize(frame, borderSize, 0)
+
+    local scaleRef = module:GetViewerFrame(self.viewerKey) or frame
+    local pxBorder = TavernUI:GetPixelSize(scaleRef, borderSize, 0)
     if not frame._ucdmBorder then
         frame._ucdmBorder = frame:CreateTexture(nil, "BACKGROUND", nil, -8)
     end
@@ -341,7 +331,8 @@ end
 function CooldownItem:_applyTextStyle(rowConfig)
     local frame = self.frame
     if not frame then return end
-    
+
+    local scaleRef = module:GetViewerFrame(self.viewerKey) or frame
     local durationSize = rowConfig.durationSize or 0
     local stackSize = rowConfig.stackSize or 0
     local durationPoint = rowConfig.durationPoint or "CENTER"
@@ -350,26 +341,25 @@ function CooldownItem:_applyTextStyle(rowConfig)
     local stackPoint = rowConfig.stackPoint or "BOTTOMRIGHT"
     local stackOffsetX = rowConfig.stackOffsetX or 0
     local stackOffsetY = rowConfig.stackOffsetY or 0
-    
-    local pxDurX = TavernUI:GetPixelSize(frame, durationOffsetX, 0)
-    local pxDurY = TavernUI:GetPixelSize(frame, durationOffsetY, 1)
-    local pxStackX = TavernUI:GetPixelSize(frame, stackOffsetX, 0)
-    local pxStackY = TavernUI:GetPixelSize(frame, stackOffsetY, 1)
-    
+
+    local pxDurX = TavernUI:GetPixelSize(scaleRef, durationOffsetX, 0)
+    local pxDurY = TavernUI:GetPixelSize(scaleRef, durationOffsetY, 1)
+    local pxStackX = TavernUI:GetPixelSize(scaleRef, stackOffsetX, 0)
+    local pxStackY = TavernUI:GetPixelSize(scaleRef, stackOffsetY, 1)
+
     if durationSize > 0 then
         local cooldown = frame.Cooldown or frame.cooldown
         if cooldown then
             if cooldown.text then
-                TavernUI:ApplyFont(cooldown.text, frame, durationSize)
+                TavernUI:ApplyFont(cooldown.text, scaleRef, durationSize)
                 cooldown.text:ClearAllPoints()
                 cooldown.text:SetPoint(durationPoint, frame, durationPoint, pxDurX, pxDurY)
             end
-            
             local ok, regions = pcall(function() return {cooldown:GetRegions()} end)
             if ok and regions then
                 for _, region in ipairs(regions) do
                     if region and region.GetObjectType and region:GetObjectType() == "FontString" then
-                        TavernUI:ApplyFont(region, frame, durationSize)
+                        TavernUI:ApplyFont(region, scaleRef, durationSize)
                         region:ClearAllPoints()
                         region:SetPoint(durationPoint, frame, durationPoint, pxDurX, pxDurY)
                     end
@@ -383,7 +373,7 @@ function CooldownItem:_applyTextStyle(rowConfig)
         if chargeFrame then
             local fs = chargeFrame.Current or chargeFrame.Count or chargeFrame.count
             if fs then
-                TavernUI:ApplyFont(fs, frame, stackSize)
+                TavernUI:ApplyFont(fs, scaleRef, stackSize)
                 fs:ClearAllPoints()
                 fs:SetPoint(stackPoint, frame, stackPoint, pxStackX, pxStackY)
             end
@@ -391,7 +381,7 @@ function CooldownItem:_applyTextStyle(rowConfig)
         
         local countText = frame.Count or frame.count
         if countText then
-            TavernUI:ApplyFont(countText, frame, stackSize)
+            TavernUI:ApplyFont(countText, scaleRef, stackSize)
             countText:ClearAllPoints()
             countText:SetPoint(stackPoint, frame, stackPoint, pxStackX, pxStackY)
         end
@@ -410,12 +400,16 @@ function CooldownItem:_normalizeIconTexture()
             if tex.SetBlendMode then tex:SetBlendMode("BLEND") end
         end
     end
+    if frame.IconMask then
+        frame.IconMask:ClearAllPoints()
+        frame.IconMask:SetAllPoints(frame.Icon or frame.icon)
+    end
 end
 
 function CooldownItem:_normalizeCooldown()
     local frame = self.frame
     local cooldown = frame.Cooldown or frame.cooldown
-    
+
     if cooldown then
         cooldown:ClearAllPoints()
         cooldown:SetAllPoints(frame)
@@ -424,9 +418,65 @@ function CooldownItem:_normalizeCooldown()
     end
 end
 
---------------------------------------------------------------------------------
--- Cooldown State Updates (delegate to CooldownTracker)
---------------------------------------------------------------------------------
+local KEYBIND_OVERLAY_LEVEL = 500
+local DEFAULT_KEYBIND_SIZE = 10
+
+function CooldownItem:setKeybind(keybind, settings)
+    local frame = self.frame
+    if not frame then return end
+
+    if not settings or not settings.showKeybinds then
+        if frame._ucdmKeybindOverlay then
+            frame._ucdmKeybindOverlay:Hide()
+            frame._ucdmKeybindOverlay = nil
+        end
+        if frame._ucdmKeybindText then
+            frame._ucdmKeybindText:Hide()
+            frame._ucdmKeybindText = nil
+        end
+        return
+    end
+
+    if not frame._ucdmKeybindOverlay then
+        frame._ucdmKeybindOverlay = CreateFrame("Frame", nil, frame)
+        frame._ucdmKeybindOverlay:SetFrameLevel(KEYBIND_OVERLAY_LEVEL)
+        frame._ucdmKeybindOverlay:SetAllPoints(frame)
+    end
+    local overlay = frame._ucdmKeybindOverlay
+    overlay:SetFrameLevel(KEYBIND_OVERLAY_LEVEL)
+
+    if not frame._ucdmKeybindText then
+        frame._ucdmKeybindText = TavernUI:CreateFontString(overlay, settings.keybindSize or DEFAULT_KEYBIND_SIZE)
+    end
+    local keybindText = frame._ucdmKeybindText
+    if keybindText:GetParent() ~= overlay then
+        keybindText:SetParent(overlay)
+    end
+    local keybindSize = settings.keybindSize or DEFAULT_KEYBIND_SIZE
+    TavernUI:ApplyFont(keybindText, frame, keybindSize, true)
+    if keybindText.SetJustifyH then
+        keybindText:SetJustifyH("RIGHT")
+    end
+
+    local point = settings.keybindPoint or "TOPRIGHT"
+    local offsetX = settings.keybindOffsetX or -2
+    local offsetY = settings.keybindOffsetY or -2
+    local pxX = TavernUI.GetPixelSize and TavernUI:GetPixelSize(frame, offsetX, 0) or offsetX
+    local pxY = TavernUI.GetPixelSize and TavernUI:GetPixelSize(frame, offsetY, 1) or offsetY
+
+    if keybind then
+        local color = settings.keybindColor or {r = 1, g = 1, b = 1, a = 1}
+        keybindText:SetText(keybind)
+        keybindText:SetTextColor(color.r, color.g, color.b, color.a)
+        keybindText:ClearAllPoints()
+        keybindText:SetPoint(point, overlay, point, pxX, pxY)
+        keybindText:Show()
+        overlay:Show()
+    else
+        keybindText:Hide()
+        overlay:Hide()
+    end
+end
 
 function CooldownItem:update()
     if not self.frame then return end
@@ -457,10 +507,6 @@ function CooldownItem:update()
         module.CooldownTracker.UpdateEntry(entry)
     end
 end
-
---------------------------------------------------------------------------------
--- Icon Management (for custom entries)
---------------------------------------------------------------------------------
 
 function CooldownItem:setIcon(iconFileID)
     local frame = self.frame
@@ -512,9 +558,5 @@ function CooldownItem:refreshIcon()
 
     self:setIcon(iconFileID)
 end
-
---------------------------------------------------------------------------------
--- Export
---------------------------------------------------------------------------------
 
 module.CooldownItem = CooldownItem

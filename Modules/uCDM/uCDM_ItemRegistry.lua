@@ -450,14 +450,8 @@ function ItemRegistry.CreateCustomItem(config, skipDBSave)
         enabled = config.enabled ~= false,
     })
 
-    -- Set icon
     item:refreshIcon()
-
-    if viewer then
-        frame:SetParent(viewer)
-    else
-        frame:SetParent(UIParent)
-    end
+    item:setParent(ItemRegistry.GetParentFrameForViewer(viewerKey))
 
     -- Register
     itemsById[id] = item
@@ -615,6 +609,19 @@ function ItemRegistry.GetItemsForViewer(viewerKey)
     return itemsByViewer[viewerKey] or {}
 end
 
+function ItemRegistry.GetParentFrameForViewer(viewerKey)
+    local items = itemsByViewer[viewerKey]
+    if items then
+        for _, item in ipairs(items) do
+            if item.source == "blizzard" and item.frame then
+                local parent = item.frame:GetParent()
+                if parent then return parent end
+            end
+        end
+    end
+    return module:GetViewerFrame(viewerKey)
+end
+
 function ItemRegistry.GetItem(id)
     return itemsById[id]
 end
@@ -702,11 +709,7 @@ function ItemRegistry.MoveItemToViewer(id, newViewerKey)
     item.layoutIndex = item.index
     table.insert(itemsByViewer[newViewerKey], item)
 
-    -- Update parent
-    local viewer = module:GetViewerFrame(newViewerKey)
-    if viewer and item.frame then
-        item.frame:SetParent(viewer)
-    end
+    item:setParent(ItemRegistry.GetParentFrameForViewer(newViewerKey))
 
     -- Update DB
     local customEntries = module:GetSetting("customEntries", {})

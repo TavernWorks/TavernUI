@@ -252,7 +252,7 @@ local function ApplyRowBorder(viewer, rowNum, rowConfig, rowWidth, rowHeight, ro
     border:Show()
 end
 
-local function ApplyLayout(viewer, rowAssignments, rows, viewerKey)
+local function ApplyLayout(viewer, parentFrame, rowAssignments, rows, viewerKey)
     local settings = module:GetViewerSettings(viewerKey)
     local growDirection = (settings and settings.rowGrowDirection) or "down"
     
@@ -293,36 +293,10 @@ local function ApplyLayout(viewer, rowAssignments, rows, viewerKey)
                 local actualBlockWidth = actualIcons * pxIcon + (actualIcons - 1) * pxPad
                 local startX = -actualBlockWidth / 2 + pxIcon / 2
                 for col, item in ipairs(rowItems) do
-                    local frame = item.frame
-                    if frame then
+                    if item.frame then
                         local offsetX = startX + (col - 1) * (pxIcon + pxPad)
-                        frame:SetParent(viewer)
-                        frame:ClearAllPoints()
-                        frame:SetPoint("CENTER", viewer, "CENTER", offsetX, rowCenterY)
-
+                        item:setLayoutPosition(parentFrame, viewer, offsetX, rowCenterY)
                         item:applyStyle(rowConfig)
-
-                        if item.source == "custom" then
-                            local cellW = pxIcon + 2 * pxPad
-                            local cellH = pxIconH + 2 * pxPad
-                            frame:SetSize(cellW, cellH)
-                            if frame.Icon then
-                                frame.Icon:ClearAllPoints()
-                                frame.Icon:SetSize(pxIcon, pxIconH)
-                                frame.Icon:SetPoint("CENTER", frame, "CENTER", 0, 0)
-                                if frame.IconMask then
-                                    frame.IconMask:ClearAllPoints()
-                                    frame.IconMask:SetAllPoints(frame.Icon)
-                                end
-                            end
-                            if frame.Cooldown then
-                                frame.Cooldown:ClearAllPoints()
-                                frame.Cooldown:SetSize(pxIcon, pxIconH)
-                                frame.Cooldown:SetPoint("CENTER", frame, "CENTER", 0, 0)
-                            end
-                        end
-                        
-                        frame:Show()
                     end
                 end
             end
@@ -400,18 +374,12 @@ function LayoutEngine.RefreshViewer(viewerKey)
         assignedItems[entry.item] = true
     end
     
-    -- Hide items that weren't assigned BEFORE layout to prevent artifacts
-    local hiddenCount = 0
     for _, item in ipairs(items) do
-        if item.frame and not assignedItems[item] then
-            item.frame:Hide()
-            item.frame:ClearAllPoints()
-            hiddenCount = hiddenCount + 1
-        end
+        item:setInLayout(assignedItems[item] == true)
     end
 
-    -- Apply layout
-    ApplyLayout(viewer, rowAssignments, rows, viewerKey)
+    local parentFrame = module.ItemRegistry.GetParentFrameForViewer(viewerKey)
+    ApplyLayout(viewer, parentFrame, rowAssignments, rows, viewerKey)
     layoutRunning[viewerKey] = false
 end
 
