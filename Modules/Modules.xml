@@ -6,5 +6,4 @@
 	<Include file="ResourceBars\ResourceBars.xml"/>
 	<Include file="Skins\Skins.xml"/>
 	<Script file="QoL\QoL.lua"/>
-	<Include file="Minimap\Minimap.xml"/>
 </Ui>
