@@ -21,6 +21,20 @@ local function GetBarTexturePath(config)
     return TavernUI:GetTexturePath(key, "statusbar", DEFAULT_SEGMENT_TEXTURE)
 end
 
+-- Get bar width, using anchor target width if autoWidth is enabled
+local function GetBarWidth(frame, config)
+    if config and config.autoWidth and frame._anchorHandle then
+        local targetFrame = frame._anchorHandle:GetTarget()
+        if targetFrame and targetFrame.GetWidth then
+            local targetWidth = targetFrame:GetWidth()
+            if targetWidth and targetWidth > 0 then
+                return targetWidth
+            end
+        end
+    end
+    return config and config.width or 200
+end
+
 local function ApplyBarBorder(frame, config)
     local border = config and config.barBorder
     local target = frame.borderOverlay or frame
@@ -196,7 +210,8 @@ local function CreatePowerBar(barId, config)
         end
 
         self:Show()
-        local w = TavernUI:GetPixelSize(self, self.config.width or 200, 0)
+        local barWidth = GetBarWidth(self, self.config)
+        local w = TavernUI:GetPixelSize(self, barWidth, 0)
         self:SetSize(w, TavernUI:GetPixelSize(self, self.config.height or 14, 1))
         ApplyBarBackground(self, self.config)
         ApplyBarBorder(self, self.config)
@@ -209,7 +224,8 @@ local function CreatePowerBar(barId, config)
 
     function frame:ApplyVisualConfig()
         self:Show()
-        local w = TavernUI:GetPixelSize(self, self.config.width or 200, 0)
+        local barWidth = GetBarWidth(self, self.config)
+        local w = TavernUI:GetPixelSize(self, barWidth, 0)
         self:SetSize(w, TavernUI:GetPixelSize(self, self.config.height or 14, 1))
         ApplyBarBackground(self, self.config)
         ApplyBarBorder(self, self.config)
@@ -295,7 +311,8 @@ local function CreateSegmentedBar(barId, config)
         local borderInset = (border and border.enabled and type(border.size) == "number" and border.size >= 0) and TavernUI:GetPixelSize(self, border.size, 0) or 0
         local borderPadding = 2 * borderInset
         local inset = borderPadding
-        local parentWidthPx = TavernUI:GetPixelSize(self, (type(config.width) == "number" and config.width > 0) and config.width or 200, 0)
+        local barWidth = GetBarWidth(self, config)
+        local parentWidthPx = TavernUI:GetPixelSize(self, (type(barWidth) == "number" and barWidth > 0) and barWidth or 200, 0)
         local parentHeightPx = TavernUI:GetPixelSize(self, (type(config.height) == "number" and config.height > 0) and config.height or 20, 1)
         local contentW = parentWidthPx - 2 * inset
         local contentH = parentHeightPx - 2 * inset

@@ -16,12 +16,20 @@ local useLibEditMode = LibEditMode and LibEditMode.AddFrame
 local Anchoring = {}
 local anchorHandles = {}
 local libEditModeRegisteredBars = {}
-local combatApplyQueue = {}
-local combatEventRegistered = false
 
 local POSITION_CHANGE_THRESHOLD = 1
 local EDIT_OVERLAY_BORDER_R, EDIT_OVERLAY_BORDER_G, EDIT_OVERLAY_BORDER_B = 0.2, 0.8, 1
 local EDIT_OVERLAY_FILL_R, EDIT_OVERLAY_FILL_G, EDIT_OVERLAY_FILL_B, EDIT_OVERLAY_FILL_A = 0.2, 0.8, 1, 0.25
+
+-- Snap position offset to pixel boundaries
+local function SnapToPixel(frame, value)
+    if not PixelUtil or not PixelUtil.GetNearestPixelSize then return value end
+    local scale = frame and frame.GetEffectiveScale and frame:GetEffectiveScale() or 1
+    if scale and scale > 0 then
+        return PixelUtil.GetNearestPixelSize(value, scale)
+    end
+    return value
+end
 
 local function GetBarFrame(barId)
     return module.bars and module.bars[barId] or nil
@@ -49,27 +57,28 @@ end
 
 local function GetBarPosition(barId)
     local frame = GetBarFrame(barId)
-    if not frame or not frame.GetPoint then return nil end
+    if not frame then return nil end
+    if Anchor and Anchor.GetFramePosition then
+        return Anchor:GetFramePosition(frame)
+    end
+    if not frame.GetPoint then return nil end
     local point, relativeTo, relativePoint, x, y = frame:GetPoint(1)
     if not point then return nil end
     local relativeToName = (relativeTo and relativeTo.GetName and relativeTo:GetName()) or (relativeTo == UIParent and "UIParent") or nil
-    return {
-        point = point,
-        relativeToName = relativeToName,
-        relativePoint = relativePoint,
-        x = x or 0,
-        y = y or 0,
-    }
+    return { point = point, relativeToName = relativeToName, relativePoint = relativePoint, x = x or 0, y = y or 0 }
 end
 
 local function HasPositionChanged(barId, startPos)
     if not startPos then return false end
+    local frame = GetBarFrame(barId)
+    if not frame then return true end
+    if Anchor and Anchor.HasPositionChanged then
+        return Anchor:HasPositionChanged(frame, startPos, POSITION_CHANGE_THRESHOLD)
+    end
     local current = GetBarPosition(barId)
     if not current then return true end
-    if math.abs(current.x - startPos.x) > POSITION_CHANGE_THRESHOLD or math.abs(current.y - startPos.y) > POSITION_CHANGE_THRESHOLD then
-        return true
-    end
-    return current.point ~= startPos.point or current.relativePoint ~= startPos.relativePoint or current.relativeToName ~= startPos.relativeToName
+    return math.abs(current.x - startPos.x) > POSITION_CHANGE_THRESHOLD or math.abs(current.y - startPos.y) > POSITION_CHANGE_THRESHOLD
+        or current.point ~= startPos.point or current.relativePoint ~= startPos.relativePoint or current.relativeToName ~= startPos.relativeToName
 end
 
 local function ShouldApplyAnchor(barId)
@@ -86,6 +95,11 @@ local function ReleaseAnchor(barId)
             handle:Release()
         end
         anchorHandles[barId] = nil
+    end
+    -- Clear frame's handle reference
+    local frame = GetBarFrame(barId)
+    if frame then
+        frame._anchorHandle = nil
     end
 end
 
@@ -169,11 +183,12 @@ local function CreateNudgeButton(parent, direction, deltaX, deltaY, barId)
         if not frame or not frame.GetPoint then return end
         local pos = GetBarPosition(barId)
         if not pos then return end
+        ReleaseAnchor(barId)
         local step = IsShiftKeyDown() and 10 or 1
         local newX = (pos.x or 0) + deltaX * step
         local newY = (pos.y or 0) + deltaY * step
         frame:ClearAllPoints()
-        frame:SetPoint(pos.point, UIParent, pos.point, newX, newY)
+        frame:SetPoint(pos.point, UIParent, pos.point, SnapToPixel(frame, newX), SnapToPixel(frame, newY))
         local layoutName = LibEditMode and LibEditMode:GetActiveLayoutName()
         if layoutName then
             local positions = GetEditModeLayoutPositions()
@@ -288,8 +303,7 @@ function Anchoring:RegisterBar(barId, frame)
         local defaultPos = GetBarPosition(barId)
         local default = defaultPos and { point = defaultPos.point or "CENTER", x = defaultPos.x or 0, y = defaultPos.y or 0 } or { point = "CENTER", x = 0, y = -180 }
         LibEditMode:AddFrame(frame, function(f, layoutName, point, x, y)
-            local id = f.barId
-            if not id then return end
+            local id = barId
             local key = module:IsSpecialResourceType(id) and "SpecialResource" or (module:IsResourceBarType(id) and "ResourceBar" or id)
             local positions = GetEditModeLayoutPositions()
             if not positions[layoutName] then positions[layoutName] = {} end
@@ -333,32 +347,9 @@ local function IsEditModeShown()
     return em and em:IsShown()
 end
 
-local function ProcessCombatApplyQueue()
-    local queue = combatApplyQueue
-    combatApplyQueue = {}
-    for barId, _ in pairs(queue) do
-        Anchoring:ApplyAnchor(barId)
-    end
-end
-
 function Anchoring:ApplyAnchor(barId)
     local frame = GetBarFrame(barId)
     if not frame then return end
-    
-    if InCombatLockdown() then
-        combatApplyQueue[barId] = true
-        if not combatEventRegistered then
-            combatEventRegistered = true
-            local ef = CreateFrame("Frame")
-            ef:RegisterEvent("PLAYER_REGEN_ENABLED")
-            ef:SetScript("OnEvent", function(_, event)
-                if event == "PLAYER_REGEN_ENABLED" then
-                    ProcessCombatApplyQueue()
-                end
-            end)
-        end
-        return
-    end
     
     if useLibEditMode and libEditModeRegisteredBars[barId] then
         local layoutName = LibEditMode:GetActiveLayoutName()
@@ -369,7 +360,7 @@ function Anchoring:ApplyAnchor(barId)
             if pos and pos.point then
                 ReleaseAnchor(barId)
                 frame:ClearAllPoints()
-                frame:SetPoint(pos.point, UIParent, pos.point, pos.x or 0, pos.y or 0)
+                frame:SetPoint(pos.point, UIParent, pos.point, SnapToPixel(frame, pos.x or 0), SnapToPixel(frame, pos.y or 0))
                 return
             end
         end
@@ -381,9 +372,9 @@ function Anchoring:ApplyAnchor(barId)
         local cx, cy = frame:GetCenter()
         local px, py = UIParent:GetCenter()
         if cx and cy and px and py then
-            frame:SetPoint("CENTER", UIParent, "CENTER", math.floor(cx - px + 0.5), math.floor(cy - py + 0.5))
+            frame:SetPoint("CENTER", UIParent, "CENTER", SnapToPixel(frame, cx - px), SnapToPixel(frame, cy - py))
         else
-            frame:SetPoint("CENTER", UIParent, "CENTER", 0, -180)
+            frame:SetPoint("CENTER", UIParent, "CENTER", 0, SnapToPixel(frame, -180))
         end
         SetBarDraggable(barId, frame, true)
         if not editModeStartPositions[barId] then
@@ -406,15 +397,17 @@ function Anchoring:ApplyAnchor(barId)
         target = anchorConfig.target,
         point = anchorConfig.point or "CENTER",
         relativePoint = anchorConfig.relativePoint or "CENTER",
-        offsetX = anchorConfig.offsetX or 0,
-        offsetY = anchorConfig.offsetY or 0,
+        offsetX = SnapToPixel(frame, anchorConfig.offsetX or 0),
+        offsetY = SnapToPixel(frame, anchorConfig.offsetY or 0),
         deferred = false,
     })
     
     if handle then
         anchorHandles[barId] = handle
+        frame._anchorHandle = handle  -- Store on frame for auto-width feature
     else
         module:Debug("Failed to create anchor for " .. barId)
+        frame._anchorHandle = nil
     end
 end
 
@@ -470,7 +463,7 @@ local function OnEditModeEnter()
             local cx, cy = frame:GetCenter()
             local px, py = UIParent:GetCenter()
             if cx and cy and px and py then
-                frame:SetPoint("CENTER", UIParent, "CENTER", math.floor(cx - px + 0.5), math.floor(cy - py + 0.5))
+                frame:SetPoint("CENTER", UIParent, "CENTER", SnapToPixel(frame, cx - px), SnapToPixel(frame, cy - py))
             end
             SetBarDraggable(barId, frame, true)
         end
@@ -574,6 +567,13 @@ function Anchoring:Initialize()
     RegisterScreenAnchor()
     self:UpdateAnchors()
     HookEditMode()
+    if Anchor and Anchor.RegisterSizeChangeCallback then
+        Anchor:RegisterSizeChangeCallback(function(anchorName)
+            if module:IsEnabled() then
+                module:NotifyAnchorTargetResized(anchorName)
+            end
+        end)
+    end
 end
 
 module.Anchoring = Anchoring

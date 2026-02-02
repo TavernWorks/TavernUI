@@ -43,7 +43,14 @@ local defaults = {
     viewers = {
         essential = {
             enabled = true,
-            anchorConfig = nil,
+            scale = 1.0,
+            anchorConfig = {
+                target = "UIParent",
+                point = "CENTER",
+                relativePoint = "CENTER",
+                offsetX = 0,
+                offsetY = -150,
+            },
             rowGrowDirection = "down",
             rowSpacing = 5,
             showKeybinds = false,
@@ -57,12 +64,12 @@ local defaults = {
                 {
                     name = "Default",
                     iconCount = 8,
-                    iconSize = 40,
-                    padding = 0,
+                    iconSize = 38,
+                    padding = 4,
                     yOffset = 0,
                     aspectRatioCrop = 1.0,
-                    zoom = 0,
-                    iconBorderSize = 0,
+                    zoom = 0.08,
+                    iconBorderSize = 1,
                     iconBorderColor = {r = 0, g = 0, b = 0, a = 1},
                     rowBorderSize = 0,
                     rowBorderColor = {r = 0, g = 0, b = 0, a = 1},
@@ -79,12 +86,19 @@ local defaults = {
         },
         utility = {
             enabled = true,
+            scale = 1.0,
             anchorBelowEssential = true,
             anchorPoint = "TOP",
             anchorRelativePoint = "BOTTOM",
             anchorOffsetX = 0,
             anchorGap = 5,
-            anchorConfig = nil,
+            anchorConfig = {
+                target = "TavernUI.uCDM.essential",
+                point = "TOP",
+                relativePoint = "BOTTOM",
+                offsetX = 0,
+                offsetY = -5,
+            },
             rowGrowDirection = "down",
             rowSpacing = 5,
             showKeybinds = false,
@@ -98,12 +112,12 @@ local defaults = {
                 {
                     name = "Default",
                     iconCount = 6,
-                    iconSize = 42,
-                    padding = -8,
+                    iconSize = 30,
+                    padding = 4,
                     yOffset = 0,
                     aspectRatioCrop = 1.0,
-                    zoom = 0,
-                    iconBorderSize = 0,
+                    zoom = 0.08,
+                    iconBorderSize = 1,
                     iconBorderColor = {r = 0, g = 0, b = 0, a = 1},
                     rowBorderSize = 0,
                     rowBorderColor = {r = 0, g = 0, b = 0, a = 1},
@@ -120,7 +134,14 @@ local defaults = {
         },
         buff = {
             enabled = true,
-            anchorConfig = nil,
+            scale = 1.0,
+            anchorConfig = {
+                target = "TavernUI.uCDM.essential",
+                point = "BOTTOM",
+                relativePoint = "TOP",
+                offsetX = 0,
+                offsetY = 5,
+            },
             rowGrowDirection = "down",
             rowSpacing = 5,
             showKeybinds = false,
@@ -134,12 +155,12 @@ local defaults = {
                 {
                     name = "Default",
                     iconCount = 6,
-                    iconSize = 42,
-                    padding = -8,
+                    iconSize = 40,
+                    padding = 4,
                     yOffset = 0,
                     aspectRatioCrop = 1.0,
-                    zoom = 0,
-                    iconBorderSize = 0,
+                    zoom = 0.08,
+                    iconBorderSize = 1,
                     iconBorderColor = {r = 0, g = 0, b = 0, a = 1},
                     rowBorderSize = 0,
                     rowBorderColor = {r = 0, g = 0, b = 0, a = 1},
@@ -156,6 +177,7 @@ local defaults = {
         },
         custom = {
             enabled = true,
+            scale = 1.0,
             anchorConfig = nil,
             rowGrowDirection = "down",
             rowSpacing = 5,
@@ -171,11 +193,11 @@ local defaults = {
                     name = "Default",
                     iconCount = 4,
                     iconSize = 40,
-                    padding = -8,
+                    padding = 4,
                     yOffset = 0,
                     aspectRatioCrop = 1.0,
                     zoom = 0,
-                    iconBorderSize = 0,
+                    iconBorderSize = 1,
                     iconBorderColor = {r = 0, g = 0, b = 0, a = 1},
                     rowBorderSize = 0,
                     rowBorderColor = {r = 0, g = 0, b = 0, a = 1},
@@ -236,6 +258,15 @@ function module:OnEnable()
         if m and m.SetSlotCooldown then
             m:SetSlotCooldown(viewer, tonumber(slot) or 1, tonumber(duration) or 30)
         end
+    end
+
+    -- Listen for UI scale changes to refresh pixel-perfect elements
+    self:RegisterMessage("TavernUI_UIScaleChanged", "OnUIScaleChanged")
+end
+
+function module:OnUIScaleChanged()
+    if self.LayoutEngine then
+        self:RefreshAllViewers()
     end
 end
 

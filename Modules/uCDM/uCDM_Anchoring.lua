@@ -33,48 +33,15 @@ local editModeHooked = false
 --------------------------------------------------------------------------------
 
 local function GetViewerPosition(viewer)
-    if not viewer or not viewer.GetPoint then return nil end
-    
-    local point, relativeTo, relativePoint, x, y = viewer:GetPoint(1)
-    if not point then return nil end
-    
-    local relativeToName = nil
-    if relativeTo then
-        if relativeTo.GetName then
-            relativeToName = relativeTo:GetName()
-        elseif relativeTo == UIParent then
-            relativeToName = "UIParent"
-        end
-    end
-    
-    return {
-        point = point,
-        relativeToName = relativeToName,
-        relativePoint = relativePoint,
-        x = x or 0,
-        y = y or 0,
-    }
+    if not viewer then return nil end
+    return Anchor:GetFramePosition(viewer)
 end
 
 local function HasPositionChanged(viewerKey, startPos)
     if not startPos then return false end
-    
     local viewer = module:GetViewerFrame(viewerKey)
     if not viewer then return false end
-    
-    local currentPos = GetViewerPosition(viewer)
-    if not currentPos then return true end
-    
-    local xDiff = math.abs(currentPos.x - startPos.x)
-    local yDiff = math.abs(currentPos.y - startPos.y)
-    
-    if xDiff > CONSTANTS.POSITION_CHANGE_THRESHOLD or yDiff > CONSTANTS.POSITION_CHANGE_THRESHOLD then
-        return true
-    end
-    
-    return currentPos.point ~= startPos.point
-        or currentPos.relativePoint ~= startPos.relativePoint
-        or currentPos.relativeToName ~= startPos.relativeToName
+    return Anchor:HasPositionChanged(viewer, startPos, CONSTANTS.POSITION_CHANGE_THRESHOLD)
 end
 
 local function ShouldApplyAnchor(viewerKey)
@@ -82,7 +49,7 @@ local function ShouldApplyAnchor(viewerKey)
     if not settings or not settings.anchorConfig then return false end
     
     local target = settings.anchorConfig.target
-    return target and target ~= "" and target ~= "UIParent"
+    return target and target ~= ""
 end
 
 --------------------------------------------------------------------------------
@@ -103,11 +70,7 @@ end
 local function ConfigMatches(viewerKey, config)
     local last = lastAppliedConfig[viewerKey]
     if not last then return false end
-    return last.target == (config.target or "")
-        and (last.point or "CENTER") == (config.point or "CENTER")
-        and (last.relativePoint or "CENTER") == (config.relativePoint or "CENTER")
-        and (last.offsetX or 0) == (config.offsetX or 0)
-        and (last.offsetY or 0) == (config.offsetY or 0)
+    return Anchor:ConfigEquals(last, config)
 end
 
 local function ClearAnchorConfig(viewerKey)
@@ -130,11 +93,11 @@ local function ApplyAnchor(viewerKey)
     local config = settings.anchorConfig
     local handle = anchorHandles[viewerKey]
     
-    if handle and not handle.released and ConfigMatches(viewerKey, config) then return end
+    if ConfigMatches(viewerKey, config) and (not handle or not handle.released) then return end
 
     Anchoring.RegisterAnchors()
     ReleaseAnchor(viewerKey)
-    
+
     handle = Anchor:AnchorTo(viewer, {
         target = config.target,
         point = config.point or "CENTER",

@@ -62,6 +62,7 @@ local function RefreshViewerComponents(viewerKey, property)
         rowBorderSize = true,
         rows = true,
         keepRowHeightWhenEmpty = true,
+        scale = true,
     }
     
     if layoutProperties[property] then
@@ -212,7 +213,7 @@ local function BuildRowOptions(viewerKey, rowIndex, orderBase)
 
     args.padding = MakeRowOption(viewerKey, rowIndex, "padding", "range", {
         order = order, name = L["PADDING"], desc = L["SPACING_BETWEEN_ICONS_DESC"],
-        min = -20, max = 20, step = 1, default = -8
+        min = -20, max = 20, step = 1, default = 4
     })
     order = order + 1
 
@@ -243,18 +244,30 @@ local function BuildRowOptions(viewerKey, rowIndex, orderBase)
     })
     order = order + 1
 
+    args.iconStyle = MakeRowOption(viewerKey, rowIndex, "iconStyle", "select", {
+        order = order,
+        name = "Icon Style",
+        desc = "Choose Square or Blizzard-style icons.",
+        values = {
+            blizzard = "Blizzard",
+            square = "Square",
+        },
+        default = "square",
+    })
+    order = order + 1
+
     args.iconBorderHeader = {type = "header", name = L["ICON_BORDER"], order = order}
     order = order + 1
 
     args.iconBorderSize = MakeRowOption(viewerKey, rowIndex, "iconBorderSize", "range", {
         order = order, name = L["ICON_BORDER_SIZE"], desc = L["SIZE_OF_ICON_BORDER_DESC"],
-        min = 0, max = 5, step = 1, default = 0
+        min = 0, max = 5, step = 1, default = 1
     })
     order = order + 1
 
     args.iconBorderColor = MakeRowOption(viewerKey, rowIndex, "iconBorderColor", "color", {
         order = order, name = L["ICON_BORDER_COLOR"], desc = L["COLOR_OF_ICON_BORDER_DESC"],
-        default = {r = 0, g = 0, b = 0, a = 1},
+        default = {r = 0, g = 1, b = 0, a = 1},
         disabled = function(row) return (row and row.iconBorderSize or 0) == 0 end
     })
     order = order + 1
@@ -782,6 +795,26 @@ local function BuildViewerOptions(viewerKey, viewerName, orderBase)
     }
     order = order + 1
 
+    args.scale = {
+        type = "range",
+        name = L["SCALE"],
+        desc = L["VIEWER_SCALE_DESC"] or "Scale the entire viewer and its contents",
+        order = order,
+        min = 0.5,
+        max = 2.0,
+        step = 0.05,
+        isPercent = true,
+        get = function()
+            return module:GetSetting(string.format("viewers.%s.scale", viewerKey), 1.0)
+        end,
+        set = function(_, value)
+            local path = string.format("viewers.%s.scale", viewerKey)
+            module:SetSetting(path, value, { type = "number", min = 0.5, max = 2.0 })
+            RefreshViewerComponents(viewerKey, "scale")
+        end,
+    }
+    order = order + 1
+
     local anchorOrder = viewerKey == "essential" and 5 or 10
     local anchorOptions = BuildAnchorOptions(viewerKey, anchorOrder)
 
@@ -952,13 +985,14 @@ local function BuildViewerOptions(viewerKey, viewerName, orderBase)
                 name = string.format(L["ROW_N"], #rows + 1),
                 iconCount = defaultIconCount,
                 iconSize = defaultIconSize,
-                padding = -8,
+                padding = 4,
                 yOffset = 0,
                 keepRowHeightWhenEmpty = true,
                 aspectRatioCrop = 1.0,
                 zoom = 0,
-                iconBorderSize = 0,
-                iconBorderColor = {r = 0, g = 0, b = 0, a = 1},
+                iconStyle = "square",
+                iconBorderSize = 1,
+                iconBorderColor = {r = 0, g = 1, b = 0, a = 1},
                 rowBorderSize = 0,
                 rowBorderColor = {r = 0, g = 0, b = 0, a = 1},
                 durationSize = 18,
@@ -991,13 +1025,14 @@ local function BuildViewerOptions(viewerKey, viewerName, orderBase)
             name = L["DEFAULT"],
             iconCount = defaultIconCount,
             iconSize = defaultIconSize,
-            padding = -8,
+            padding = 4,
             yOffset = 0,
             keepRowHeightWhenEmpty = true,
             aspectRatioCrop = 1.0,
             zoom = 0,
-            iconBorderSize = 0,
-            iconBorderColor = {r = 0, g = 0, b = 0, a = 1},
+            iconStyle = "square",
+            iconBorderSize = 1,
+            iconBorderColor = {r = 0, g = 1, b = 0, a = 1},
             rowBorderSize = 0,
             rowBorderColor = {r = 0, g = 0, b = 0, a = 1},
             durationSize = 18,

@@ -456,6 +456,21 @@ local function BuildBarOptions(barId)
     if not isSegmentedBar() then
         args.sizeHeader = { type = "header", name = L["SIZE"], order = order }
         order = order + 1
+        args.autoWidth = {
+            type = "toggle",
+            name = L["AUTO_WIDTH"] or "Auto Width",
+            desc = L["AUTO_WIDTH_DESC"] or "Automatically match the width of the anchor target",
+            order = order,
+            get = function()
+                local c = GetEffectiveConfig(barId)
+                return c.autoWidth == true
+            end,
+            set = function(_, value)
+                SetBarSetting(barId, "autoWidth", value)
+                RefreshBar(barId)
+            end,
+        }
+        order = order + 1
         args.width = {
             type = "range",
             name = L["WIDTH"],
@@ -471,6 +486,10 @@ local function BuildBarOptions(barId)
             set = function(_, value)
                 SetBarSetting(barId, CONSTANTS.KEY_WIDTH, value)
                 RefreshBar(barId)
+            end,
+            disabled = function()
+                local c = GetEffectiveConfig(barId)
+                return c.autoWidth == true
             end,
         }
         order = order + 1
@@ -514,6 +533,21 @@ local function BuildBarOptions(barId)
         order = order + 1
         args.segmentSizeHeader = { type = "header", name = L["SIZE"], order = order }
         order = order + 1
+        args.autoWidth = {
+            type = "toggle",
+            name = L["AUTO_WIDTH"] or "Auto Width",
+            desc = L["AUTO_WIDTH_DESC"] or "Automatically match the width of the anchor target",
+            order = order,
+            get = function()
+                local c = GetEffectiveConfig(barId)
+                return c.autoWidth == true
+            end,
+            set = function(_, value)
+                SetBarSetting(barId, "autoWidth", value)
+                RefreshBar(barId)
+            end,
+        }
+        order = order + 1
         args.width = {
             type = "range",
             name = L["WIDTH"],
@@ -529,6 +563,10 @@ local function BuildBarOptions(barId)
             set = function(_, value)
                 SetBarSetting(barId, CONSTANTS.KEY_WIDTH, value)
                 RefreshBar(barId)
+            end,
+            disabled = function()
+                local c = GetEffectiveConfig(barId)
+                return c.autoWidth == true
             end,
         }
         order = order + 1

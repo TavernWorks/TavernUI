@@ -82,7 +82,18 @@ function CooldownItem:setLayoutPosition(parent, relativeTo, x, y)
     self:setParent(parent)
     self.frame:ClearAllPoints()
     local anchorTo = relativeTo or parent
-    self.frame:SetPoint("CENTER", anchorTo, "CENTER", x, y)
+
+    -- Snap position offsets to pixel boundaries
+    local pxX, pxY = x, y
+    if PixelUtil and PixelUtil.GetNearestPixelSize then
+        local scale = self.frame:GetEffectiveScale()
+        if scale and scale > 0 then
+            pxX = PixelUtil.GetNearestPixelSize(x, scale)
+            pxY = PixelUtil.GetNearestPixelSize(y, scale)
+        end
+    end
+
+    self.frame:SetPoint("CENTER", anchorTo, "CENTER", pxX, pxY)
 end
 
 function CooldownItem:_checkConditions(context)
@@ -124,13 +135,27 @@ function CooldownItem:applyStyle(rowConfig)
     local scaleRef = module:GetViewerFrame(self.viewerKey) or frame
     local pxW = TavernUI:GetPixelSize(scaleRef, iconSize, 0)
     local pxH = TavernUI:GetPixelSize(scaleRef, iconHeight, 1)
+    local scale = frame:GetEffectiveScale() or 1
+    if scale > 0 then
+        pxW = math.floor(pxW * scale + 0.5) / scale
+        pxH = math.floor(pxH * scale + 0.5) / scale
+    end
     frame:SetSize(pxW, pxH)
+
+    -- Enable pixel snapping for the frame to ensure borders align on pixel boundaries
+    if frame.SetSnapToPixelGrid then
+        frame:SetSnapToPixelGrid(true)
+    end
+    if frame.SetTexelSnappingBias then
+        frame:SetTexelSnappingBias(0)
+    end
 
     frame._ucdmZoom = rowConfig.zoom or 0
     frame._ucdmAspectRatio = aspectRatio
     frame._ucdmIconSize = iconSize
 
     self:_applyTexCoord(rowConfig)
+    self:_applyIconStyle(rowConfig)
     self:_applyBorder(rowConfig.iconBorderSize, rowConfig.iconBorderColor)
     self:_applyTextStyle(rowConfig)
     self:_normalizeIconTexture()
@@ -162,27 +187,36 @@ function CooldownItem:_setupFrame()
     end
 
     local iconTex = frame.Icon or frame.icon
-    if iconTex and not frame.IconMask then
-        local mask = frame:CreateMaskTexture()
-        mask:SetAtlas("UI-HUD-CoolDownManager-Mask")
-        mask:SetAllPoints(iconTex)
-        iconTex:AddMaskTexture(mask)
-        frame.IconMask = mask
+    if iconTex then
+        if not frame.IconMaskBlizzard then
+            local maskBlizz = frame:CreateMaskTexture()
+            maskBlizz:SetAtlas("UI-HUD-CoolDownManager-Mask")
+            maskBlizz:SetAllPoints(iconTex)
+            frame.IconMaskBlizzard = maskBlizz
+        end
+
+        if not frame.IconMaskSquare then
+            local maskSquare = frame:CreateMaskTexture()
+            maskSquare:SetTexture("Interface\\AddOns\\TavernUI\\assets\\masks\\square.tga")
+            maskSquare:SetAllPoints(iconTex)
+            frame.IconMaskSquare = maskSquare
+        end
     end
 
     local cooldown = frame.Cooldown or frame.cooldown
     if cooldown then
-        if cooldown.SetDrawEdge then
-            cooldown:SetDrawEdge(false)
-        end
-        if cooldown.SetDrawBling then
-            cooldown:SetDrawBling(false)
-        end
-        if cooldown.SetSwipeTexture then
-            cooldown:SetSwipeTexture("Interface\\Buttons\\WHITE8X8")
-        end
-        if cooldown.SetSwipeColor then
-            cooldown:SetSwipeColor(0, 0, 0, 0.8)
+        if cooldown.SetDrawEdge then cooldown:SetDrawEdge(false) end
+        if cooldown.SetDrawBling then cooldown:SetDrawBling(false) end
+        if cooldown.SetSwipeTexture then cooldown:SetSwipeTexture("Interface\\Buttons\\WHITE8X8") end
+        if cooldown.SetSwipeColor then cooldown:SetSwipeColor(0, 0, 0, 0.8) end
+        if not cooldown.__ucdmSwipeHooked and module.CooldownTracker and module.CooldownTracker.ApplySwipeStyle then
+            cooldown.__ucdmSwipeHooked = true
+            if cooldown.SetCooldown then
+                hooksecurefunc(cooldown, "SetCooldown", function(self) module.CooldownTracker.ApplySwipeStyle(self) end)
+            end
+            if cooldown.SetCooldownFromDurationObject then
+                hooksecurefunc(cooldown, "SetCooldownFromDurationObject", function(self) module.CooldownTracker.ApplySwipeStyle(self) end)
+            end
         end
     end
 
@@ -298,34 +332,112 @@ function CooldownItem:_applyTexCoord(rowConfig)
     end
 end
 
+function CooldownItem:_applyIconStyle(rowConfig)
+    local frame = self.frame
+    if not frame then return end
+
+    local iconTex = frame.Icon or frame.icon
+    if not iconTex then return end
+
+    local style = rowConfig.iconStyle or "blizzard"
+
+    if iconTex.GetMaskTexture and iconTex.RemoveMaskTexture then
+        for i = 1, CONSTANTS.MAX_MASK_TEXTURES do
+            local mask = iconTex:GetMaskTexture(i)
+            if not mask then
+                break
+            end
+            iconTex:RemoveMaskTexture(mask)
+        end
+    end
+
+    if style == "square" then
+        if frame.IconMaskSquare and iconTex.AddMaskTexture then
+            iconTex:AddMaskTexture(frame.IconMaskSquare)
+        end
+    else
+        if frame.IconMaskBlizzard and iconTex.AddMaskTexture then
+            iconTex:AddMaskTexture(frame.IconMaskBlizzard)
+        end
+    end
+end
+
 function CooldownItem:_applyBorder(borderSize, borderColor)
     local frame = self.frame
     if not frame then return end
     
     borderSize = borderSize or 0
-    
-    if borderSize <= 0 then
-        if frame._ucdmBorder then
-            frame._ucdmBorder:Hide()
+
+    local iconBorderSize = borderSize
+    if not iconBorderSize or iconBorderSize <= 0 then
+        if frame._ucdmBorders then
+            for _, border in ipairs(frame._ucdmBorders) do
+                border:Hide()
+            end
         end
-        frame:SetHitRectInsets(0, 0, 0, 0)
         return
     end
 
-    local scaleRef = module:GetViewerFrame(self.viewerKey) or frame
-    local pxBorder = TavernUI:GetPixelSize(scaleRef, borderSize, 0)
-    if not frame._ucdmBorder then
-        frame._ucdmBorder = frame:CreateTexture(nil, "BACKGROUND", nil, -8)
+    -- Anchor borders to frame (not icon texture) for pixel-perfect positioning
+    local borderAnchor = frame
+
+    frame._ucdmBorders = frame._ucdmBorders or {}
+    if #frame._ucdmBorders == 0 then
+        local function CreateBorderLine()
+            local border = frame:CreateTexture(nil, "OVERLAY")
+            if border.SetSnapToPixelGrid then
+                border:SetSnapToPixelGrid(true)
+            end
+            if border.SetTexelSnappingBias then
+                border:SetTexelSnappingBias(0)
+            end
+            return border
+        end
+
+        local borderInset = 0
+
+        local topBorder = CreateBorderLine()
+        topBorder:SetPoint("TOPLEFT", borderAnchor, "TOPLEFT", borderInset, -borderInset)
+        topBorder:SetPoint("TOPRIGHT", borderAnchor, "TOPRIGHT", -borderInset, -borderInset)
+
+        local bottomBorder = CreateBorderLine()
+        bottomBorder:SetPoint("BOTTOMLEFT", borderAnchor, "BOTTOMLEFT", borderInset, borderInset)
+        bottomBorder:SetPoint("BOTTOMRIGHT", borderAnchor, "BOTTOMRIGHT", -borderInset, borderInset)
+
+        local leftBorder = CreateBorderLine()
+        leftBorder:SetPoint("TOPLEFT", borderAnchor, "TOPLEFT", borderInset, -borderInset)
+        leftBorder:SetPoint("BOTTOMLEFT", borderAnchor, "BOTTOMLEFT", borderInset, borderInset)
+
+        local rightBorder = CreateBorderLine()
+        rightBorder:SetPoint("TOPRIGHT", borderAnchor, "TOPRIGHT", -borderInset, -borderInset)
+        rightBorder:SetPoint("BOTTOMRIGHT", borderAnchor, "BOTTOMRIGHT", -borderInset, borderInset)
+
+        frame._ucdmBorders = { topBorder, bottomBorder, leftBorder, rightBorder }
     end
-    
-    local bc = borderColor or {r = 0, g = 0, b = 0, a = 1}
-    frame._ucdmBorder:SetColorTexture(bc.r, bc.g, bc.b, bc.a)
-    frame._ucdmBorder:ClearAllPoints()
-    frame._ucdmBorder:SetPoint("TOPLEFT", frame, "TOPLEFT", -pxBorder, pxBorder)
-    frame._ucdmBorder:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", pxBorder, -pxBorder)
-    frame._ucdmBorder:Show()
-    
-    frame:SetHitRectInsets(-pxBorder, -pxBorder, -pxBorder, -pxBorder)
+
+    local top, bottom, left, right = unpack(frame._ucdmBorders)
+    if not (top and bottom and left and right) then return end
+
+    local pixelSize = TavernUI:GetPixelSize(frame, iconBorderSize, 0)
+
+    if pixelSize <= 0 then
+        for _, border in ipairs(frame._ucdmBorders) do
+            border:Hide()
+        end
+        return
+    end
+
+    top:SetHeight(pixelSize)
+    bottom:SetHeight(pixelSize)
+    left:SetWidth(pixelSize)
+    right:SetWidth(pixelSize)
+
+    local bc = borderColor or { r = 0, g = 1, b = 0, a = 1 }
+    local shouldShow = iconBorderSize > 0
+    for _, border in ipairs(frame._ucdmBorders) do
+        border:SetColorTexture(bc.r, bc.g, bc.b, bc.a)
+        border:SetShown(shouldShow)
+    end
 end
 
 function CooldownItem:_applyTextStyle(rowConfig)
@@ -400,9 +512,16 @@ function CooldownItem:_normalizeIconTexture()
             if tex.SetBlendMode then tex:SetBlendMode("BLEND") end
         end
     end
-    if frame.IconMask then
-        frame.IconMask:ClearAllPoints()
-        frame.IconMask:SetAllPoints(frame.Icon or frame.icon)
+    local iconTex = frame.Icon or frame.icon
+    if iconTex then
+        if frame.IconMaskBlizzard then
+            frame.IconMaskBlizzard:ClearAllPoints()
+            frame.IconMaskBlizzard:SetAllPoints(iconTex)
+        end
+        if frame.IconMaskSquare then
+            frame.IconMaskSquare:ClearAllPoints()
+            frame.IconMaskSquare:SetAllPoints(iconTex)
+        end
     end
 end
 

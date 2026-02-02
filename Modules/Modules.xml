@@ -6,4 +6,5 @@
 	<Include file="ResourceBars\ResourceBars.xml"/>
 	<Include file="Skins\Skins.xml"/>
 	<Script file="QoL\QoL.lua"/>
+	<Script file="SpellScanner\SpellScanner.lua" />
 </Ui>

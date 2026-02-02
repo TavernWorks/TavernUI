@@ -110,7 +110,7 @@ local STANDARD_RESOLUTIONS = {
 local function GetScaleForHeight(height)
     if not height or height <= 0 then return 1.0 end
     local scale = PIXEL_PERFECT_SCALE_BY_HEIGHT[height] or (768 / height)
-    return math.max(0.4, math.min(1.15, scale))
+    return math.max(0.3, math.min(1.15, scale))
 end
 
 local function GetPixelPerfectUIScale()
@@ -119,7 +119,7 @@ local function GetPixelPerfectUIScale()
         return 1.0
     end
     local perfect = PIXEL_PERFECT_SCALE_BY_HEIGHT[physicalHeight] or (768 / physicalHeight)
-    return math.max(0.4, math.min(1.15, perfect))
+    return math.max(0.3, math.min(1.15, perfect))
 end
 
 function module:ApplyScaleForResolution(width, height)
@@ -592,11 +592,34 @@ function module:ApplyUIScale()
     else
         scale = self:GetSetting("uiScale", 1.0)
     end
-    scale = math.max(0.4, math.min(1.15, scale))
-    pcall(C_CVar.SetCVar, "useUiScale", "0")
+    scale = math.max(0.3, math.min(1.15, scale))
+
+    if InCombatLockdown and InCombatLockdown() then
+        self.pendingUIScale = scale
+        if not self.pendingApplyUIScale then
+            self.pendingApplyUIScale = true
+            self:RegisterEvent("PLAYER_REGEN_ENABLED", "ApplyUIScaleDeferred")
+        end
+        return
+    end
+
+    -- Use SetScale directly on UIParent to bypass CVar minimum restrictions
     if UIParent then
         UIParent:SetScale(scale)
+        -- Notify other modules that scale changed so they can refresh pixel-perfect elements
+        self:SendMessage("TavernUI_UIScaleChanged", scale)
     end
+end
+
+function module:ApplyUIScaleDeferred()
+    self:UnregisterEvent("PLAYER_REGEN_ENABLED", "ApplyUIScaleDeferred")
+    self.pendingApplyUIScale = nil
+    local pending = self.pendingUIScale
+    self.pendingUIScale = nil
+    if pending then
+        self:SetSetting("uiScale", pending)
+    end
+    self:ApplyUIScale()
 end
 
 local REPAIR_PRIORITY_ORDER = { "none", "guild_then_player", "guild", "player" }
@@ -788,7 +811,7 @@ function module:RegisterOptions()
                         name = L["SCALE"],
                         desc = L["GLOBAL_UI_SCALE_DESC"],
                         order = 2,
-                        min = 0.4,
+                        min = 0.3,
                         max = 1.15,
                         step = 0.01,
                         bigStep = 0.05,

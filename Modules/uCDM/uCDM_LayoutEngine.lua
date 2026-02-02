@@ -97,33 +97,37 @@ end
 local function GetActiveRows(settings)
     local rows = {}
     if not settings or not settings.rows then return rows end
-    
+
+    -- Scale multiplier for icon dimensions (borders remain pixel-perfect)
+    local scale = settings.scale or 1.0
+
     for _, row in ipairs(settings.rows) do
         if row.iconCount and row.iconCount > 0 then
             rows[#rows + 1] = {
                 iconCount = row.iconCount,
-                iconSize = row.iconSize or 50,
-                padding = row.padding or 0,
-                yOffset = row.yOffset or 0,
+                iconSize = (row.iconSize or 50) * scale,
+                padding = (row.padding or 0) * scale,
+                yOffset = (row.yOffset or 0) * scale,
                 aspectRatioCrop = row.aspectRatioCrop or 1.0,
                 zoom = row.zoom or 0,
-                iconBorderSize = row.iconBorderSize or 0,
-                iconBorderColor = row.iconBorderColor or {r = 0, g = 0, b = 0, a = 1},
-                rowBorderSize = row.rowBorderSize or 0,
+                iconStyle = row.iconStyle or "square",
+                iconBorderSize = row.iconBorderSize or 0,  -- NOT scaled - stays pixel-perfect
+                iconBorderColor = row.iconBorderColor or {r = 0, g = 1, b = 0, a = 1},
+                rowBorderSize = row.rowBorderSize or 0,  -- NOT scaled - stays pixel-perfect
                 rowBorderColor = row.rowBorderColor or {r = 0, g = 0, b = 0, a = 1},
-                durationSize = row.durationSize or 18,
+                durationSize = (row.durationSize or 18) * scale,
                 durationPoint = row.durationPoint or "CENTER",
-                durationOffsetX = row.durationOffsetX or 0,
-                durationOffsetY = row.durationOffsetY or 0,
-                stackSize = row.stackSize or 16,
+                durationOffsetX = (row.durationOffsetX or 0) * scale,
+                durationOffsetY = (row.durationOffsetY or 0) * scale,
+                stackSize = (row.stackSize or 16) * scale,
                 stackPoint = row.stackPoint or "BOTTOMRIGHT",
-                stackOffsetX = row.stackOffsetX or 0,
-                stackOffsetY = row.stackOffsetY or 0,
+                stackOffsetX = (row.stackOffsetX or 0) * scale,
+                stackOffsetY = (row.stackOffsetY or 0) * scale,
                 keepRowHeightWhenEmpty = row.keepRowHeightWhenEmpty ~= false,
             }
         end
     end
-    
+
     return rows
 end
 
@@ -193,9 +197,11 @@ end
 
 local function CalculateDimensions(viewer, rowAssignments, rows, viewerKey)
     local maxRowWidth = 0
+    local maxActualContentWidth = 0
     local totalHeight = 0
     local settings = viewerKey and module:GetViewerSettings(viewerKey) or nil
-    local rowSpacing = (settings and settings.rowSpacing ~= nil) and settings.rowSpacing or CONSTANTS.DEFAULT_ROW_GAP
+    local scale = (settings and settings.scale) or 1.0
+    local rowSpacing = ((settings and settings.rowSpacing ~= nil) and settings.rowSpacing or CONSTANTS.DEFAULT_ROW_GAP) * scale
     local pxRowGap = viewer and TavernUI:GetPixelSize(viewer, rowSpacing, 1) or rowSpacing
     
     for rowNum, rowConfig in ipairs(rows) do
@@ -213,11 +219,15 @@ local function CalculateDimensions(viewer, rowAssignments, rows, viewerKey)
             local pxPad = viewer and TavernUI:GetPixelSize(viewer, padding, 0) or padding
             local rowWidth = rowConfig.iconCount * pxIcon + (rowConfig.iconCount - 1) * pxPad
             maxRowWidth = math.max(maxRowWidth, rowWidth)
+            if actualIcons > 0 then
+                local actualBlockWidth = actualIcons * pxIcon + (actualIcons - 1) * pxPad
+                maxActualContentWidth = math.max(maxActualContentWidth, actualBlockWidth)
+            end
             totalHeight = totalHeight + pxIconH + (rowNum > 1 and pxRowGap or 0)
         end
     end
     
-    return maxRowWidth, totalHeight, pxRowGap
+    return maxRowWidth, totalHeight, pxRowGap, maxActualContentWidth
 end
 
 --------------------------------------------------------------------------------
@@ -241,14 +251,15 @@ local function ApplyRowBorder(viewer, rowNum, rowConfig, rowWidth, rowHeight, ro
     
     local borderSize = TavernUI:GetPixelSize(viewer, rawBorderSize, 0)
     local border = viewer[borderKey]
-    local halfWidth = rowWidth / 2
-    local halfHeight = rowHeight / 2
+    local halfWidth = math.floor(rowWidth / 2)
+    local halfHeight = math.floor(rowHeight / 2)
+    local centerY = math.floor(rowCenterY + 0.5)
     local color = rowConfig.rowBorderColor or {r = 0, g = 0, b = 0, a = 1}
     
     border:SetColorTexture(color.r, color.g, color.b, color.a)
     border:ClearAllPoints()
-    border:SetPoint("TOPLEFT", viewer, "CENTER", -halfWidth - borderSize, rowCenterY + halfHeight + borderSize)
-    border:SetPoint("BOTTOMRIGHT", viewer, "CENTER", halfWidth + borderSize, rowCenterY - halfHeight - borderSize)
+    border:SetPoint("TOPLEFT", viewer, "CENTER", -halfWidth - borderSize, centerY + halfHeight + borderSize)
+    border:SetPoint("BOTTOMRIGHT", viewer, "CENTER", halfWidth + borderSize, centerY - halfHeight - borderSize)
     border:Show()
 end
 
@@ -256,7 +267,7 @@ local function ApplyLayout(viewer, parentFrame, rowAssignments, rows, viewerKey)
     local settings = module:GetViewerSettings(viewerKey)
     local growDirection = (settings and settings.rowGrowDirection) or "down"
     
-    local maxRowWidth, totalHeight, rowGap = CalculateDimensions(viewer, rowAssignments, rows, viewerKey)
+    local maxRowWidth, totalHeight, rowGap, maxActualContentWidth = CalculateDimensions(viewer, rowAssignments, rows, viewerKey)
     
     -- Hide all row borders first to prevent artifacts
     for rowNum = 1, #rows do
@@ -268,12 +279,12 @@ local function ApplyLayout(viewer, parentFrame, rowAssignments, rows, viewerKey)
     
     -- Starting Y position
     local currentY = (growDirection == "up") and (-totalHeight / 2) or (totalHeight / 2)
-    
+
     for rowNum, rowConfig in ipairs(rows) do
         local rowItems = rowAssignments[rowNum] or {}
         local actualIcons = #rowItems
         local keepHeight = rowConfig.keepRowHeightWhenEmpty
-        
+
         local iconSize = rowConfig.iconSize
         local aspectRatio = rowConfig.aspectRatioCrop
         local iconHeight = iconSize / aspectRatio
@@ -281,20 +292,27 @@ local function ApplyLayout(viewer, parentFrame, rowAssignments, rows, viewerKey)
         local pxIcon = TavernUI:GetPixelSize(viewer, iconSize, 0)
         local pxIconH = TavernUI:GetPixelSize(viewer, iconHeight, 1)
         local pxPad = TavernUI:GetPixelSize(viewer, padding, 0)
-        
+
         if actualIcons > 0 or keepHeight then
             local rowWidth = rowConfig.iconCount * pxIcon + (rowConfig.iconCount - 1) * pxPad
-            local yOffset = rowConfig.yOffset or 0
+            local pxYOffset = TavernUI:GetPixelSize(viewer, rowConfig.yOffset or 0, 1)
             local rowCenterY = (growDirection == "up")
-                and (currentY + pxIconH / 2 + yOffset)
-                or (currentY - pxIconH / 2 + yOffset)
-            
+                and (currentY + pxIconH / 2 + pxYOffset)
+                or (currentY - pxIconH / 2 + pxYOffset)
+            local viewerScale = viewer:GetEffectiveScale() or 1
+            if viewerScale > 0 then
+                rowCenterY = math.floor(rowCenterY * viewerScale + 0.5) / viewerScale
+            end
+
             if actualIcons > 0 then
                 local actualBlockWidth = actualIcons * pxIcon + (actualIcons - 1) * pxPad
                 local startX = -actualBlockWidth / 2 + pxIcon / 2
                 for col, item in ipairs(rowItems) do
                     if item.frame then
                         local offsetX = startX + (col - 1) * (pxIcon + pxPad)
+                        if viewerScale > 0 then
+                            offsetX = math.floor(offsetX * viewerScale + 0.5) / viewerScale
+                        end
                         item:setLayoutPosition(parentFrame, viewer, offsetX, rowCenterY)
                         item:applyStyle(rowConfig)
                     end
@@ -311,12 +329,82 @@ local function ApplyLayout(viewer, parentFrame, rowAssignments, rows, viewerKey)
         end
     end
     
-    if maxRowWidth > 0 and totalHeight > 0 then
+    local effectiveWidth = (maxActualContentWidth > 0) and maxActualContentWidth or maxRowWidth
+    if effectiveWidth > 0 and totalHeight > 0 then
         layoutSettingSize[viewerKey] = true
         pcall(function()
-            viewer:SetSize(maxRowWidth, totalHeight)
+            viewer:SetSize(effectiveWidth, totalHeight)
         end)
         layoutSettingSize[viewerKey] = nil
+        local Anchor = LibStub("LibAnchorRegistry-1.0", true)
+        if Anchor and Anchor.NotifySizeChanged then
+            Anchor:NotifySizeChanged("TavernUI.uCDM." .. viewerKey)
+        end
+    end
+end
+
+local function SuppressFrame(frame)
+    if not frame then return end
+    if frame.SetAlpha then frame:SetAlpha(0) end
+    frame:Hide()
+    if not frame.__ucdmSuppressHooked then
+        frame.__ucdmSuppressHooked = true
+        hooksecurefunc(frame, "Show", function(self)
+            if self.SetAlpha then self:SetAlpha(0) end
+        end)
+    end
+end
+
+local function IsOurViewerChild(frame)
+    if not frame or not frame.GetParent then return false end
+    local parent = frame:GetParent()
+    if not parent then return false end
+    for _, viewerName in pairs(module.CONSTANTS.VIEWER_NAMES) do
+        if _G[viewerName] == parent then return true end
+    end
+    return false
+end
+
+local function HookProcGlowOnce()
+    if not ActionButtonSpellAlertManager or not ActionButtonSpellAlertManager.ShowAlert or ActionButtonSpellAlertManager.__ucdmProcGlowHooked then return end
+    ActionButtonSpellAlertManager.__ucdmProcGlowHooked = true
+    hooksecurefunc(ActionButtonSpellAlertManager, "ShowAlert", function(_, frame)
+        if IsOurViewerChild(frame) and frame.SpellActivationAlert then
+            SuppressFrame(frame.SpellActivationAlert)
+        end
+    end)
+end
+
+local function StyleViewerCooldowns(viewerKey)
+    HookProcGlowOnce()
+    local viewerName = module.CONSTANTS.VIEWER_NAMES[viewerKey]
+    if not viewerName then return end
+    local blizzViewer = _G[viewerName]
+    if not blizzViewer or not blizzViewer.GetChildren then return end
+    local applySwipe = module.CooldownTracker and module.CooldownTracker.ApplySwipeStyle
+    for _, child in ipairs({ blizzViewer:GetChildren() }) do
+        local cooldown = child.Cooldown or child.cooldown
+        if cooldown and applySwipe then
+            applySwipe(cooldown)
+        end
+        SuppressFrame(child.CooldownFlash)
+        SuppressFrame(child.SpellActivationAlert)
+        if child.PandemicIcon then
+            SuppressFrame(child.PandemicIcon)
+        end
+        if not child.__ucdmPandemicHooked and child.ShowPandemicStateFrame then
+            child.__ucdmPandemicHooked = true
+            hooksecurefunc(child, "ShowPandemicStateFrame", function(self)
+                if self.PandemicIcon then SuppressFrame(self.PandemicIcon) end
+            end)
+        end
+        for _, key in ipairs({ "DebuffBorder", "BuffBorder", "TempEnchantBorder" }) do
+            local border = child[key]
+            if border then
+                if border.SetTexture then border:SetTexture(nil) end
+                SuppressFrame(border)
+            end
+        end
     end
 end
 
@@ -359,7 +447,6 @@ function LayoutEngine.RefreshViewer(viewerKey)
         return
     end
     
-    -- Get items from registry
     local items = module.ItemRegistry.GetItemsForViewer(viewerKey)
     if not items or #items == 0 then
         layoutRunning[viewerKey] = false
@@ -380,6 +467,8 @@ function LayoutEngine.RefreshViewer(viewerKey)
 
     local parentFrame = module.ItemRegistry.GetParentFrameForViewer(viewerKey)
     ApplyLayout(viewer, parentFrame, rowAssignments, rows, viewerKey)
+    StyleViewerCooldowns(viewerKey)
+
     layoutRunning[viewerKey] = false
 end
 

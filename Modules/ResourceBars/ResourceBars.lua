@@ -52,6 +52,7 @@ local DEFAULT_BACKGROUND = { enabled = true, texture = nil, color = { r = 0, g =
 local DEFAULTS_SEGMENTED = {
     enabled = true,
     colorMode = CONSTANTS.COLOR_MODE_RESOURCE_TYPE,
+    autoWidth = false,
     segmentTexture = nil,
     width = 200,
     height = 20,
@@ -71,6 +72,7 @@ local defaults = {
         HEALTH = {
             enabled = false,
             anchorConfig = nil,
+            autoWidth = false,
             width = 200,
             height = 14,
             barTexture = nil,
@@ -89,6 +91,7 @@ local defaults = {
         PRIMARY_POWER = {
             enabled = true,
             anchorConfig = nil,
+            autoWidth = false,
             width = 200,
             height = 14,
             barTexture = nil,
@@ -107,6 +110,7 @@ local defaults = {
         ALTERNATE_POWER = {
             enabled = true,
             anchorConfig = nil,
+            autoWidth = false,
             width = 200,
             height = 14,
             barTexture = nil,
@@ -124,6 +128,7 @@ local defaults = {
         STAGGER = {
             enabled = true,
             anchorConfig = nil,
+            autoWidth = false,
             width = 200,
             height = 14,
             barTexture = nil,
@@ -179,6 +184,12 @@ end
 function module:OnEnable()
     self:RebuildActiveBars()
     self:RegisterPowerEvents()
+    -- Listen for UI scale changes to refresh pixel-perfect elements
+    self:RegisterMessage("TavernUI_UIScaleChanged", "OnUIScaleChanged")
+end
+
+function module:OnUIScaleChanged()
+    self:RebuildActiveBars()
 end
 
 function module:OnDisable()
@@ -577,6 +588,21 @@ function module:UpdateBar(barId)
     local frame = bars[barId]
     if frame and frame.SetFrameLevel and type(config[CONSTANTS.KEY_FRAME_LEVEL]) == "number" then
         frame:SetFrameLevel(config[CONSTANTS.KEY_FRAME_LEVEL])
+    end
+end
+
+function module:NotifyAnchorTargetResized(anchorName)
+    if not self:IsEnabled() or not anchorName then return end
+    local EditModeManagerFrame = _G.EditModeManagerFrame
+    if EditModeManagerFrame and EditModeManagerFrame:IsShown() then return end
+    for barId, _ in pairs(bars or {}) do
+        local config = self:GetBarConfig(barId)
+        if config and config.autoWidth and config.anchorConfig and config.anchorConfig.target == anchorName then
+            self:UpdateBar(barId)
+            if self.Anchoring then
+                self.Anchoring:ApplyAnchor(barId)
+            end
+        end
     end
 end
 
