@@ -1,0 +1,24 @@
+<Ui xmlns="http://www.blizzard.com/wow/ui/" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.blizzard.com/wow/ui/ ..\..\FrameXML\UI.xsd">
+    <Script file="DataBar.lua"/>
+    <Script file="DataBarUpdater.lua"/>
+    <Script file="DataBarOptions.lua"/>
+    <Script file="DataBarSlots.lua"/>
+    <Script file="Datatexts\Gold.lua"/>
+    <Script file="Datatexts\Experience.lua"/>
+    <Script file="Datatexts\Time.lua"/>
+    <Script file="Datatexts\FPS.lua"/>
+    <Script file="Datatexts\Latency.lua"/>
+    <Script file="Datatexts\Durability.lua"/>
+    <Script file="Datatexts\FriendsOnline.lua"/>
+    <Script file="Datatexts\GuildOnline.lua"/>
+    <Script file="Datatexts\MemoryUsage.lua"/>
+    <Script file="Datatexts\System.lua"/>
+    <Script file="Datatexts\Coords.lua"/>
+    <Script file="Datatexts\Bags.lua"/>
+    <Script file="Datatexts\Currencies.lua"/>
+    <Script file="Datatexts\MythicKey.lua"/>
+    <Script file="Datatexts\Volume.lua"/>
+    <Script file="Datatexts\PlayerSpec.lua"/>
+    <Script file="Datatexts\LootSpec.lua"/>
+    <Script file="Datatexts\LDBBroker.lua"/>
+</Ui>

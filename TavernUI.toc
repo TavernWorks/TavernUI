@@ -11,7 +11,7 @@
 ## X-WoWI-ID: 
 ## X-oUF: TavernUI
 
-## OptionalDeps: LibStub, AbstractFramework, LibSharedMedia-3.0
+## OptionalDeps: LibStub, AbstractFramework, LibSharedMedia-3.0, LibDataBroker-1.1
 ## SavedVariables: TavernUIConfig
 
 # Libraries (loaded via XML for proper order)

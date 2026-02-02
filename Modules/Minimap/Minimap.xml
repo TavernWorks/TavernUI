@@ -1,0 +1,10 @@
+<Ui xmlns="http://www.blizzard.com/wow/ui/" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.blizzard.com/wow/ui/ ..\FrameXML\UI.xsd">
+    <!-- Core module -->
+    <Script file="Minimap.lua"/>
+
+    <!-- Element subsystems -->
+    <Script file="Minimap_Elements.lua"/>
+
+    <!-- Options panel -->
+    <Script file="Minimap_Options.lua"/>
+</Ui>

@@ -21,6 +21,8 @@
     	<!-- LibAnchorRegistry-1.0 (inter-addon frame anchoring system) -->
 	<Script file="libs\LibAnchorRegistry-1.0\LibAnchorRegistry-1.0.lua"/>
 
-	<!-- LibEditMode (Edit Mode integration for resource bars) -->
+	<Script file="libs\LibDataBroker-1.1\LibDataBroker-1.1.lua"/>
+
 	<Include file="libs\LibEditMode\embed.xml"/>
+
 </Ui>
