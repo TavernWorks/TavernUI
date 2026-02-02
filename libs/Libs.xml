@@ -2,6 +2,8 @@
 	<!-- LibStub must always be loaded first -->
 	<Script file="libs\LibStub\LibStub.lua"/>
 	
+	
+	
 	<!-- CallbackHandler is needed by many Ace3 libraries -->
 	<Script file="libs\CallbackHandler-1.0\CallbackHandler-1.0.lua"/>
 	
@@ -20,6 +22,9 @@
 
     	<!-- LibAnchorRegistry-1.0 (inter-addon frame anchoring system) -->
 	<Script file="libs\LibAnchorRegistry-1.0\LibAnchorRegistry-1.0.lua"/>
+
+	<Script file="libs\LibSerialize\LibSerialize.lua"/>
+	<Script file="libs\LibDeflate\LibDeflate.lua"/>
 
 	<Script file="libs\LibDataBroker-1.1\LibDataBroker-1.1.lua"/>
 
