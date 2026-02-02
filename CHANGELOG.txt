@@ -1,5 +1,14 @@
 TavernUI Changelog
 ==================
+v1.0.0-beta-7 (2026-02-20)
+ - Fix: Scaling issue with Icons (Custom vs Blizzard)
+ - Fix: Keybinds not showing on custom Icons
+ - NEW: Data Texts and Databar Module
+ - Fix: Don't force a UI scale on people (sorry)
+ - QoL: Hiding Player frame should now be more consistent
+ - Remove: CDM scaling (sorry if you were using it, might be back)
+ - Remove: Legacy code that was refactored, and not tidied up
+ - Fix: Macros should correctly show durations
 
 v1.0.0-beta-6d (2026-01-31)
  - Fix: Logging when auto selling grays 
