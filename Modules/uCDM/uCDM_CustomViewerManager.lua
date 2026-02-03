@@ -33,10 +33,32 @@ function CustomViewerManager.CreateCustomViewerFrame(m, id, name)
     local wPixels = iconCount * iconSize + (iconCount - 1) * spacing
     local hPixels = iconSize / aspectRatio
 
+    -- Create the custom viewer as a sibling of the Essential viewer (when available)
+    -- so its effective scale matches Blizzard's Essential Cooldown viewer. This keeps
+    -- pixel-perfect math consistent between built-in and custom viewers.
     local globalName = "TavernUIuCDMViewer_" .. id:gsub("[^%w]", "_")
-    local frame = CreateFrame("Frame", globalName, UIParent)
+    local parent = UIParent
+    local essentialViewer = m and m.GetViewerFrame and m:GetViewerFrame("essential")
+    if essentialViewer and essentialViewer.GetParent then
+        local p = essentialViewer:GetParent()
+        if p then
+            parent = p
+        end
+    end
+
+    local frame = CreateFrame("Frame", globalName, parent)
     frame:SetSize(wPixels, hPixels)
-    frame:SetPoint("CENTER", UIParent, "CENTER", 0, 0)
+
+    -- Default position: center on the same parent; anchoring/LibEditMode will usually
+    -- reposition this frame based on the viewer's anchorConfig.
+    frame:SetPoint("CENTER", parent, "CENTER", 0, 0)
+
+    -- Match the local scale of the Essential viewer if present so that
+    -- EffectiveScale(customViewer) ≈ EffectiveScale(essentialViewer).
+    if essentialViewer and essentialViewer.GetScale and frame.SetScale then
+        local es = essentialViewer:GetScale() or 1
+        frame:SetScale(es)
+    end
 
     m.CustomViewerFrames[id] = frame
     local list = m:GetSetting("customViewers", {})

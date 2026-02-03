@@ -25,22 +25,47 @@ local function GetStacksAndRemainingBuffTime(auraData)
     return 0, nil
 end
 
-local function GetSpellStackAndChargeInfo(spellID, chargesCache)
+local function GetTargetDebuffDuration(spellID, auraSpellID)
+    if not UnitExists("target") then
+        return nil
+    end
+
+    -- Use auraSpellID if provided (for spells where cast ID differs from debuff ID)
+    local lookupID = auraSpellID or spellID
+    if not lookupID then
+        return nil
+    end
+
+    -- Direct spellID lookup - Blizzard API handles matching internally
+    local auraData = C_UnitAuras.GetUnitAuraBySpellID("target", lookupID)
+    if auraData and auraData.auraInstanceID then
+        return C_UnitAuras.GetAuraDuration("target", auraData.auraInstanceID)
+    end
+
+    return nil
+end
+
+local function GetSpellStackAndChargeInfo(spellID, chargesCache, auraSpellID)
     if not spellID then
-        return 0, nil, false, 0
+        return 0, nil, false, nil, nil, nil
     end
 
     local stacks = 0
     local charges = nil
     local hasCharges = false
     local chargeDuration = nil
-    local buffRemaining = nil   
-    
+    local buffRemaining = nil
+    local targetDebuffRemaining = nil
+
+    -- Check for player buff
     local auraData = C_UnitAuras.GetUnitAuraBySpellID("player", spellID)
     if auraData then
         stacks, buffRemaining = GetStacksAndRemainingBuffTime(auraData)
     end
-    
+
+    -- Check for target debuff (supports optional auraSpellID for spells where cast ID ≠ debuff ID)
+    targetDebuffRemaining = GetTargetDebuffDuration(spellID, auraSpellID)
+
     local chargeInfo = C_Spell.GetSpellCharges(spellID)
     if chargeInfo then
         charges = chargeInfo.currentCharges
@@ -51,7 +76,7 @@ local function GetSpellStackAndChargeInfo(spellID, chargesCache)
         hasCharges = chargesCache[spellID] or false
     end
 
-    return stacks, charges, hasCharges, chargeDuration, buffRemaining
+    return stacks, charges, hasCharges, chargeDuration, buffRemaining, targetDebuffRemaining
 end
 
 local function GetWeaponEnchantBuff(spellID)
@@ -140,6 +165,7 @@ end
 local Helpers = {
     CreateCooldownDuration = CreateCooldownDuration,
     GetStacksAndRemainingBuffTime = GetStacksAndRemainingBuffTime,
+    GetTargetDebuffDuration = GetTargetDebuffDuration,
     GetSpellStackAndChargeInfo = GetSpellStackAndChargeInfo,
     GetWeaponEnchantBuff = GetWeaponEnchantBuff,
     GetItemBuffInfo = GetItemBuffInfo,

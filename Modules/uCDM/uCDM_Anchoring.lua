@@ -252,7 +252,6 @@ local function OnEditModeSave()
         if startPos then
             if HasPositionChanged(viewerKey, startPos) then
                 ReleaseAnchor(viewerKey)
-                ClearAnchorConfig(viewerKey)
             else
                 ApplyAnchorWithSizeHook(viewerKey)
             end

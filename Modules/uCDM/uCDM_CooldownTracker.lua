@@ -22,6 +22,35 @@ end
 
 CooldownTracker._hasChargesCache = {}
 
+-- Curve-based cooldown detection for Midnight compatibility
+local CooldownCurves = {
+    initialized = false,
+    Binary = nil,
+}
+
+local function SetupCooldownCurves()
+    if CooldownCurves.initialized then return true end
+    if not C_CurveUtil or not C_CurveUtil.CreateCurve then
+        return false
+    end
+
+    CooldownCurves.Binary = C_CurveUtil.CreateCurve()
+    CooldownCurves.Binary:AddPoint(0.0, 0)
+    CooldownCurves.Binary:AddPoint(0.001, 1)
+    CooldownCurves.Binary:AddPoint(1.0, 1)
+
+    CooldownCurves.initialized = true
+    return true
+end
+
+-- Evaluate remaining percent using curves - returns a value usable by SetDesaturation
+local function EvaluateCooldownDesaturation(durationObj)
+    if not durationObj or not SetupCooldownCurves() then return 0 end
+    local ok, val = pcall(durationObj.EvaluateRemainingPercent, durationObj, CooldownCurves.Binary)
+    if not ok then return 0 end
+    return val  -- Can be a secret value - that's fine for SetDesaturation
+end
+
 local function ApplySwipeStyle(cooldown)
     if not cooldown then return end
     if cooldown.SetDrawEdge then cooldown:SetDrawEdge(false) end
@@ -51,22 +80,35 @@ function CooldownTracker.UpdateItem(itemID)
 
     return {
         stackDisplay = stackDisplay,
+        desaturation = EvaluateCooldownDesaturation(durationObj),
         duration = durationObj,
         buffRemaining = buffRemaining,
     }
 end
 
-function CooldownTracker.UpdateSpell(spellID)
-    local duration = C_Spell.GetSpellCooldownDuration(spellID)
-    local stacks, charges, hasCharges, chargeDuration, buffRemaining = Helpers.GetSpellStackAndChargeInfo(spellID, CooldownTracker._hasChargesCache)
+function CooldownTracker.UpdateSpell(spellID, auraSpellID)
+    -- Use GetSpellCooldownDuration directly - returns a duration object
+    -- The curve evaluation handles determining if there's an active cooldown
+    local durationObj = C_Spell.GetSpellCooldownDuration(spellID)
+
+    -- auraSpellID allows tracking a different spell ID for the target debuff
+    -- (useful when cast spell ID differs from debuff spell ID)
+    local stacks, charges, hasCharges, chargeDuration, buffRemaining, targetDebuffRemaining =
+        Helpers.GetSpellStackAndChargeInfo(spellID, CooldownTracker._hasChargesCache, auraSpellID)
     local stackDisplay = Helpers.GetStackDisplay(nil, nil, nil, stacks, hasCharges, charges)
     local isUsable, noMana = Helpers.GetSpellUsability(spellID)
 
+    -- Determine the primary duration object for desaturation
+    -- Priority: target debuff > player buff > charge > cooldown
+    local primaryDuration = targetDebuffRemaining or buffRemaining or chargeDuration or durationObj
+
     return {
         stackDisplay = stackDisplay,
-        duration = duration,
+        desaturation = EvaluateCooldownDesaturation(primaryDuration),
+        duration = durationObj,
         buffRemaining = buffRemaining,
         chargeDuration = chargeDuration,
+        targetDebuffRemaining = targetDebuffRemaining,
         isUsable = isUsable,
         noMana = noMana
     }
@@ -89,10 +131,11 @@ function CooldownTracker.UpdateActionSlot(slot)
         durationObj = Helpers.CreateCooldownDuration(startTime, duration)
     end)
     if not ok or not durationObj then
-        return { duration = nil, stackDisplay = nil }
+        return { duration = nil, desaturation = 0, stackDisplay = nil }
     end
     return {
         duration = durationObj,
+        desaturation = EvaluateCooldownDesaturation(durationObj),
         stackDisplay = nil,
     }
 end
@@ -105,19 +148,21 @@ function CooldownTracker.UpdateOverride(entry)
     end
     if not startTime or not duration then return nil end
     local durationObj = Helpers.CreateCooldownDuration(startTime, duration)
+    local desaturation = EvaluateCooldownDesaturation(durationObj)
     local data = {
         duration = durationObj,
+        desaturation = desaturation,
         stackDisplay = nil,
     }
     local frame = entry.frame
     local cooldown = GetCooldown(frame)
-    if cooldown and data.duration then
-        cooldown:SetCooldownFromDurationObject(data.duration, true)
+    if cooldown and durationObj then
+        cooldown:SetCooldownFromDurationObject(durationObj, true)
         cooldown:Show()
     end
     local icon = GetIcon(frame)
     if icon then
-        icon:SetDesaturation(data.duration and 1 or 0)
+        icon:SetDesaturation(desaturation)
         icon:SetVertexColor(1.0, 1.0, 1.0)
     end
     local countText = GetCount(frame)
@@ -160,7 +205,11 @@ local function TryGetScannerCooldown(entry)
     if startTime and duration then
         local durationObj = Helpers.CreateCooldownDuration(startTime, duration)
         if durationObj then
-            return { buffRemaining = durationObj, stackDisplay = nil }
+            return {
+                buffRemaining = durationObj,
+                desaturation = EvaluateCooldownDesaturation(durationObj),
+                stackDisplay = nil
+            }
         end
     end
 
@@ -175,7 +224,8 @@ function CooldownTracker.GetEntryData(entry)
     end
 
     if entry.spellID then
-        return CooldownTracker.UpdateSpell(entry.spellID)
+        -- Pass auraSpellID if provided (for spells where cast ID ≠ debuff ID)
+        return CooldownTracker.UpdateSpell(entry.spellID, entry.auraSpellID)
     elseif entry.itemID then
         return CooldownTracker.UpdateItem(entry.itemID)
     elseif entry.slotID then
@@ -198,10 +248,15 @@ function CooldownTracker.UpdateEntry(entry)
     local frame = entry.frame
     local cooldown = GetCooldown(frame)
 
+    -- Determine which duration object to use
+    -- Priority: target debuff > player buff > charge > cooldown
+    local durationObj = data.targetDebuffRemaining or data.buffRemaining or data.chargeDuration or data.duration
+    local desaturation = data.desaturation or 0
+
     if cooldown then
-        local durationObj = data.buffRemaining or data.chargeDuration or data.duration
         if durationObj then
-            local useReverse = data.buffRemaining ~= nil or data.duration ~= nil
+            -- Use reverse animation for countdowns (debuffs, buffs, cooldowns)
+            local useReverse = data.targetDebuffRemaining ~= nil or data.buffRemaining ~= nil or data.duration ~= nil
             cooldown:SetCooldownFromDurationObject(durationObj, useReverse)
             cooldown:Show()
         else
@@ -211,16 +266,14 @@ function CooldownTracker.UpdateEntry(entry)
 
     local icon = GetIcon(frame)
     if icon then
-        local hasCooldown = data.duration or data.buffRemaining or data.chargeDuration
+        -- Always apply desaturation from curve (0 = available, 1 = on cooldown)
+        -- The curve value handles the correct state
+        icon:SetDesaturation(desaturation)
 
-        if hasCooldown ~= nil then
-            icon:SetDesaturation(1)
-            icon:SetVertexColor(1.0, 1.0, 1.0)
-        elseif data.isUsable == false then
-            icon:SetDesaturation(0)
+        -- Apply vertex color based on usability
+        if data.isUsable == false then
             icon:SetVertexColor(data.noMana and 0.5 or 0.4, data.noMana and 0.5 or 0.4, data.noMana and 1.0 or 0.4)
         else
-            icon:SetDesaturation(0)
             icon:SetVertexColor(1.0, 1.0, 1.0)
         end
     end
@@ -236,6 +289,10 @@ function CooldownTracker.UpdateEntry(entry)
     end
 
     return data
+end
+
+function CooldownTracker.Initialize()
+    SetupCooldownCurves()
 end
 
 module.CooldownTracker = CooldownTracker

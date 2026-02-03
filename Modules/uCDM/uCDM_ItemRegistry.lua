@@ -160,7 +160,10 @@ function ItemRegistry._hookCooldownEvents(viewer, viewerKey)
     eventFrame:RegisterEvent("SPELL_UPDATE_COOLDOWN")
     eventFrame:RegisterEvent("BAG_UPDATE_COOLDOWN")
     eventFrame:RegisterEvent("ACTIONBAR_SLOT_CHANGED")
-    eventFrame:SetScript("OnEvent", function(self, event)
+    -- Register for target aura changes to support debuff/DoT tracking on custom spells
+    eventFrame:RegisterUnitEvent("UNIT_AURA", "target")
+    eventFrame:RegisterEvent("PLAYER_TARGET_CHANGED")
+    eventFrame:SetScript("OnEvent", function(self, event, unit)
         if not module:IsEnabled() then return end
         if InCombatLockdown() then return end
         if viewer:IsShown() then

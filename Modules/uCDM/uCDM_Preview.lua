@@ -26,16 +26,30 @@ end
 
 function Preview.ApplyPreviewFakeData(viewer, visibleItems)
     if not CreateCooldownDuration then return end
+    local frames = {}
+    for _, entry in ipairs(visibleItems) do
+        local item = entry.item
+        if not Preview.IsPreviewItem(item) then break end
+        local frame = item.frame
+        if frame then frames[#frames + 1] = frame end
+    end
+    if #frames == 0 then return end
+    local active = viewer.__ucdmPreviewActiveFrames
+    if active and #active == #frames then
+        local same = true
+        for i = 1, #frames do
+            if active[i] ~= frames[i] then same = false break end
+        end
+        if same then return end
+    end
     viewer.__ucdmPreviewCooldownCancelled = true
     viewer.__ucdmPreviewActiveFrames = nil
-    local frames = {}
     local now = GetTime()
     for _, entry in ipairs(visibleItems) do
         local item = entry.item
         if not Preview.IsPreviewItem(item) then break end
         local frame = item.frame
         if frame then
-            frames[#frames + 1] = frame
             if frame.Count then
                 local stack = (item.index or 1) % 10
                 frame.Count:SetText(stack > 0 and tostring(stack) or "1")
@@ -57,9 +71,6 @@ function Preview.ApplyPreviewFakeData(viewer, visibleItems)
                 frame._ucdmKeybindText:Hide()
             end
             local cooldown = frame.Cooldown or frame.cooldown
-            if cooldown and module.CooldownTracker and module.CooldownTracker.ApplySwipeStyle then
-                module.CooldownTracker.ApplySwipeStyle(cooldown)
-            end
             if cooldown then
                 local offset = ((item.index or 1) - 1) * 0.6
                 local startTime = now - offset
@@ -71,7 +82,6 @@ function Preview.ApplyPreviewFakeData(viewer, visibleItems)
             end
         end
     end
-    if #frames == 0 then return end
     viewer.__ucdmPreviewActiveFrames = frames
     viewer.__ucdmPreviewCooldownCancelled = false
     local function scheduleNext()

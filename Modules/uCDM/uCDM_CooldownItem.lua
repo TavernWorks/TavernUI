@@ -12,6 +12,11 @@ local CONSTANTS = {
     TEXTURE_SOURCE_SIZE = 64,      -- Standard WoW icon texture size
 }
 
+-- High frame level ensures keybind text renders above cooldown swipe
+local KEYBIND_OVERLAY_LEVEL = 500
+local TEXT_OVERLAY_LEVEL = 600
+local DEFAULT_KEYBIND_SIZE = 10
+
 -- Normalize frame element access (Blizzard uses inconsistent casing)
 local function GetIcon(frame)
     return frame and (frame.Icon or frame.icon)
@@ -91,7 +96,15 @@ function CooldownItem:setLayoutPosition(parent, relativeTo, x, y)
     self:setParent(parent)
     self.frame:ClearAllPoints()
     local anchorTo = relativeTo or parent
-    local scale = self.frame:GetEffectiveScale()
+
+    -- Use the viewer's effective scale for pixel snapping when available,
+    -- so custom viewers and Blizzard viewers share the same spacing math.
+    local scaleRef = (module and self.viewerKey and module.GetViewerFrame and module:GetViewerFrame(self.viewerKey))
+        or self.frame
+    local scale = (scaleRef and scaleRef.GetEffectiveScale and scaleRef:GetEffectiveScale())
+        or (self.frame and self.frame.GetEffectiveScale and self.frame:GetEffectiveScale())
+        or 1
+
     local pxX = (PixelUtil and scale and scale > 0 and PixelUtil.GetNearestPixelSize(x, scale)) or x
     local pxY = (PixelUtil and scale and scale > 0 and PixelUtil.GetNearestPixelSize(y, scale)) or y
     self.frame:SetPoint("CENTER", anchorTo, "CENTER", pxX, pxY)
@@ -205,7 +218,13 @@ function CooldownItem:_setupCustomFrameTooltips(frame)
     local item = self
     frame:SetScript("OnEnter", function()
         if module:GetSetting("viewers." .. (item.viewerKey or "custom") .. ".disableTooltips") then return end
-        GameTooltip:SetOwner(frame, "ANCHOR_RIGHT")
+        if GameTooltip_SetDefaultAnchor then
+            GameTooltip:SetOwner(UIParent, "ANCHOR_NONE")
+            GameTooltip:ClearAllPoints()
+            GameTooltip_SetDefaultAnchor(GameTooltip, UIParent)
+        else
+            GameTooltip:SetOwner(UIParent, "ANCHOR_RIGHT")
+        end
         if item.spellID then
             GameTooltip:SetSpellByID(item.spellID)
         elseif item.itemID then
@@ -319,6 +338,8 @@ function CooldownItem:_applyBorder(borderSize, borderColor)
     local borderAnchor = frame
     local cooldown = GetCooldown(frame)
     local cooldownLevel = (cooldown and cooldown.GetFrameLevel) and cooldown:GetFrameLevel() or 0
+    local frameLevel = (frame and frame.GetFrameLevel) and frame:GetFrameLevel() or 0
+    local baseLevel = (cooldownLevel > frameLevel) and cooldownLevel or frameLevel
 
     frame._ucdmBorders = frame._ucdmBorders or {}
     if #frame._ucdmBorders == 0 then
@@ -359,7 +380,7 @@ function CooldownItem:_applyBorder(borderSize, borderColor)
     end
 
     if frame._ucdmBorderOverlay then
-        frame._ucdmBorderOverlay:SetFrameLevel(cooldownLevel + 1)
+        frame._ucdmBorderOverlay:SetFrameLevel(baseLevel + 1)
     end
 
     local top, bottom, left, right = unpack(frame._ucdmBorders)
@@ -406,16 +427,38 @@ function CooldownItem:_applyTextStyle(rowConfig)
     local pxStackX = TavernUI:GetPixelSize(scaleRef, stackOffsetX, 0)
     local pxStackY = TavernUI:GetPixelSize(scaleRef, stackOffsetY, 1)
 
+    if not frame._ucdmTextOverlay then
+        frame._ucdmTextOverlay = CreateFrame("Frame", nil, frame)
+        frame._ucdmTextOverlay:SetFrameLevel(TEXT_OVERLAY_LEVEL)
+        frame._ucdmTextOverlay:SetAllPoints(frame)
+    end
+    local textOverlay = frame._ucdmTextOverlay
+    textOverlay:SetFrameLevel(TEXT_OVERLAY_LEVEL)
+
+    local function SetTextLevel(textElement)
+        if not textElement then return end
+        if not textElement.GetParent then return end
+        local parent = textElement:GetParent()
+        if parent and parent.GetObjectType and parent:GetObjectType() == "Frame" and parent.SetFrameLevel and parent.GetFrameLevel then
+            local currentLevel = parent:GetFrameLevel() or 0
+            if currentLevel < TEXT_OVERLAY_LEVEL then
+                parent:SetFrameLevel(TEXT_OVERLAY_LEVEL)
+            end
+        end
+    end
+
     if durationSize > 0 then
         local cooldown = GetCooldown(frame)
         if cooldown then
             if cooldown.text then
+                SetTextLevel(cooldown.text)
                 TavernUI:ApplyFont(cooldown.text, scaleRef, durationSize)
                 cooldown.text:ClearAllPoints()
                 cooldown.text:SetPoint(durationPoint, frame, durationPoint, pxDurX, pxDurY)
             end
             for _, region in ipairs({cooldown:GetRegions()}) do
                 if region and region.GetObjectType and region:GetObjectType() == "FontString" then
+                    SetTextLevel(region)
                     TavernUI:ApplyFont(region, scaleRef, durationSize)
                     region:ClearAllPoints()
                     region:SetPoint(durationPoint, frame, durationPoint, pxDurX, pxDurY)
@@ -429,6 +472,7 @@ function CooldownItem:_applyTextStyle(rowConfig)
         if chargeFrame then
             local fs = chargeFrame.Current or chargeFrame.Count or chargeFrame.count
             if fs then
+                SetTextLevel(fs)
                 TavernUI:ApplyFont(fs, scaleRef, stackSize)
                 fs:ClearAllPoints()
                 fs:SetPoint(stackPoint, frame, stackPoint, pxStackX, pxStackY)
@@ -437,9 +481,24 @@ function CooldownItem:_applyTextStyle(rowConfig)
 
         local countText = GetCount(frame)
         if countText then
+            SetTextLevel(countText)
             TavernUI:ApplyFont(countText, scaleRef, stackSize)
             countText:ClearAllPoints()
             countText:SetPoint(stackPoint, frame, stackPoint, pxStackX, pxStackY)
+        end
+
+        local applicationsFrame = frame.Applications or frame.applications
+        if applicationsFrame then
+            local applicationsText = applicationsFrame
+            if applicationsFrame.GetObjectType and applicationsFrame:GetObjectType() ~= "FontString" then
+                applicationsText = applicationsFrame.Applications or applicationsFrame.Text or applicationsFrame.text
+            end
+            if applicationsText and applicationsText.GetObjectType and applicationsText:GetObjectType() == "FontString" then
+                SetTextLevel(applicationsText)
+                TavernUI:ApplyFont(applicationsText, scaleRef, stackSize)
+                applicationsText:ClearAllPoints()
+                applicationsText:SetPoint(stackPoint, frame, stackPoint, pxStackX, pxStackY)
+            end
         end
     end
 end
@@ -481,10 +540,6 @@ function CooldownItem:_normalizeCooldown()
     if cooldown.SetSnapToPixelGrid then cooldown:SetSnapToPixelGrid(true) end
     if cooldown.SetTexelSnappingBias then cooldown:SetTexelSnappingBias(0) end
 end
-
--- High frame level ensures keybind text renders above cooldown swipe
-local KEYBIND_OVERLAY_LEVEL = 500
-local DEFAULT_KEYBIND_SIZE = 10
 
 function CooldownItem:setKeybind(keybind, settings)
     local frame = self.frame
@@ -540,6 +595,8 @@ end
 
 function CooldownItem:update()
     if not self.frame then return end
+
+    -- Check for manual override first (applies to all items)
     if self.viewerKey and self.layoutIndex and module.GetSlotCooldownOverride then
         local startTime, duration = module:GetSlotCooldownOverride(self.viewerKey, self.layoutIndex)
         if startTime and duration then
@@ -550,6 +607,8 @@ function CooldownItem:update()
             return
         end
     end
+
+    -- Only process custom items through our tracker - Blizzard handles their own items natively
     if self.source ~= "custom" then return end
     if not self.spellID and not self.itemID and not self.slotID and not self.actionSlotID then return end
 
@@ -560,6 +619,7 @@ function CooldownItem:update()
         itemID = self.itemID,
         slotID = self.slotID,
         actionSlotID = self.actionSlotID,
+        auraSpellID = self.auraSpellID,  -- Optional: for spells where cast ID ≠ debuff ID
         viewerKey = self.viewerKey,
         layoutIndex = self.layoutIndex,
     }
