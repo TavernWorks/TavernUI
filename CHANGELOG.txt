@@ -1,12 +1,23 @@
 TavernUI Changelog
 ==================
-v1.0.0-beta-9 (2026-02-20)
+v1.0.0-beta-10 (2026-02-03)
+ - NEW: Castbars
+ - NEW: Cursor and Crosshairs
+ - FIX: Padding fix for pixel perfect
+ - CHANGE: Keybinds should default to English
+ - FIX: Stack Size / Applications on Buffs should be configurable
+ - NEW: Custom Viewers can be displayed Vertical
+ - FIX: Custom Spells should only desaturate when on CD
+ - FIX: Screen Anchors may be better
+ - FIX: Text order, border order, general viewability 
+
+v1.0.0-beta-9 (2026-02-02)
  - Custom viewers
  - Visibility configuration
  - KNOWN issues
    - Saturation on custom spells even when they are availble is broken
 
-v1.0.0-beta-8a (2026-02-20)
+v1.0.0-beta-8a (2026-02-02)
  - Fix some more scaling issues, pixel perfect?
    - If you have issues try playing with your CDM scale
  - Auto width for Resoruce bars to anchor targets, see above, scaling sucks
@@ -19,7 +30,7 @@ v1.0.0-beta-8a (2026-02-20)
  - Added some basic sensible CDM defaults, minus resource bars
  - General: Options and code tidy for stability
 
-v1.0.0-beta-7 (2026-02-20)
+v1.0.0-beta-7 (2026-02-02)
  - Fix: Scaling issue with Icons (Custom vs Blizzard)
  - Fix: Keybinds not showing on custom Icons
  - NEW: Data Texts and Databar Module
