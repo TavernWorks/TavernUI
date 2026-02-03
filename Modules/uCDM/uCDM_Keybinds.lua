@@ -135,6 +135,18 @@ end
 local function GetKeybindFromActionButton(button)
     if not button then return nil end
 
+    local action = GetActionSlot(button)
+    if action then
+        local keybind = GetKeybindFromActionSlot(action)
+        if keybind then return keybind end
+    end
+
+    local buttonName = button:GetName()
+    if buttonName then
+        local key = GetBindingKey("CLICK " .. buttonName .. ":LeftButton")
+        if key then return FormatKeybind(key) end
+    end
+
     local hotkeyRegions = {button.HotKey, button.hotKey}
     for _, hotkey in ipairs(hotkeyRegions) do
         if hotkey then
@@ -150,12 +162,6 @@ local function GetKeybindFromActionButton(button)
         if ok and hotkey and hotkey ~= "" then
             return FormatKeybind(hotkey)
         end
-    end
-
-    local buttonName = button:GetName()
-    if buttonName then
-        local key = GetBindingKey("CLICK " .. buttonName .. ":LeftButton")
-        if key then return FormatKeybind(key) end
     end
 
     return nil
@@ -307,7 +313,10 @@ local function ProcessActionButton(button)
     local ok, actionType, id = pcall(GetActionInfo, action)
     if not ok or not actionType then return end
 
-    local keybind = GetKeybindFromActionButton(button) or GetKeybindFromActionSlot(action)
+    local keybind = GetKeybindFromActionButton(button)
+    if not keybind then
+        keybind = GetKeybindFromActionSlot(action)
+    end
     if not keybind then return end
 
     if actionType == "spell" and id then
@@ -461,7 +470,7 @@ local function ThrottledRebuild()
         updatePending = false
         RebuildCache()
         for _, viewerKey in ipairs(module.CONSTANTS.VIEWER_KEYS) do
-            module:RefreshViewer(viewerKey)
+            Keybinds.RefreshViewer(viewerKey)
         end
     end)
 end
@@ -495,4 +504,5 @@ function Keybinds.Initialize()
 end
 
 Keybinds.GetActionSlotFromButton = GetActionSlot
+Keybinds.RebuildCache = RebuildCache
 module.Keybinds = Keybinds
