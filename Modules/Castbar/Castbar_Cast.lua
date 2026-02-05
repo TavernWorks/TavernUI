@@ -99,11 +99,23 @@ end
 
 local function ApplyBarColor(bar, notInterruptible)
     if not bar.statusBar then return end
-    
+
     local settings = module:GetUnitSettings(bar.unitKey) or {}
     local interruptibleColor = settings.notInterruptibleColor or {r = 0.7, g = 0.2, b = 0.2, a = 1}
     local normalR, normalG, normalB, normalA = module:GetBarColor(bar.unitKey)
-    
+
+    local canAccess = not notInterruptible or (canaccessvalue and canaccessvalue(notInterruptible))
+    if canAccess then
+        local r, g, b, a
+        if notInterruptible then
+            r, g, b, a = interruptibleColor.r, interruptibleColor.g, interruptibleColor.b, interruptibleColor.a or 1
+        else
+            r, g, b, a = normalR, normalG, normalB, normalA or 1
+        end
+        bar.statusBar:SetStatusBarColor(r, g, b, a)
+        return
+    end
+
     local ok = false
     if bar.statusBar.SetStatusBarColorFromBoolean then
         ok = pcall(bar.statusBar.SetStatusBarColorFromBoolean, bar.statusBar,
@@ -112,7 +124,7 @@ local function ApplyBarColor(bar, notInterruptible)
             normalR, normalG, normalB, normalA or 1
         )
     end
-    
+
     if not ok and bar.statusBar.SetVertexColorFromBoolean then
         ok = pcall(bar.statusBar.SetVertexColorFromBoolean, bar.statusBar,
             notInterruptible,
@@ -120,16 +132,20 @@ local function ApplyBarColor(bar, notInterruptible)
             normalR, normalG, normalB, normalA or 1
         )
     end
-    
+
     if not ok then
         local statusBarTexture = bar.statusBar:GetStatusBarTexture()
         if statusBarTexture and statusBarTexture.SetVertexColorFromBoolean then
-            pcall(statusBarTexture.SetVertexColorFromBoolean, statusBarTexture,
+            ok = pcall(statusBarTexture.SetVertexColorFromBoolean, statusBarTexture,
                 notInterruptible,
                 interruptibleColor.r, interruptibleColor.g, interruptibleColor.b, interruptibleColor.a or 1,
                 normalR, normalG, normalB, normalA or 1
             )
         end
+    end
+
+    if not ok then
+        bar.statusBar:SetStatusBarColor(normalR, normalG, normalB, normalA or 1)
     end
 end
 
@@ -222,7 +238,7 @@ local function StopCast(bar, checkPreview)
 
     if checkPreview then
         local unitKey = bar.unitKey
-        C_Timer.After(0.1, function()
+        C_Timer.After(CONSTANTS.CAST_RETRY_DELAY, function()
             if not UnitCastingInfo(unitKey) and not UnitChannelInfo(unitKey) then
                 local settings = module:GetUnitSettings(unitKey) or {}
                 if settings.previewMode and bar.frame then
@@ -357,6 +373,12 @@ function Cast:SetupEvents(bar, unitKey)
             bar.statusBar:SetValue(progress)
             UpdateThrottledText(bar, elapsed, bar.timeText, remaining)
         else
+            -- Don't stop if we have valid timing and haven't passed end time
+            -- Note: WoW processes events before OnUpdate in the same frame, so
+            -- UNIT_SPELLCAST_INTERRUPTED will clear timing before this runs
+            if bar.startTime and bar.endTime and GetTime() < bar.endTime then
+                return
+            end
             StopCast(bar, true)
         end
     end
@@ -463,8 +485,11 @@ function Cast:SetupEvents(bar, unitKey)
             frame:SetScript("OnUpdate", OnUpdate)
             frame:Show()
         else
-            C_Timer.After(0.1, function()
-                if not UnitCastingInfo(unit) and not UnitChannelInfo(unit) then
+            C_Timer.After(CONSTANTS.CAST_RETRY_DELAY, function()
+                if UnitCastingInfo(unit) or UnitChannelInfo(unit) then
+                    -- API now ready, retry to show cast
+                    StartCast(spellID, isEmpowerEvent)
+                else
                     if isPlayer and module.Empowered then
                         module.Empowered:ClearEmpoweredState(bar)
                     end
