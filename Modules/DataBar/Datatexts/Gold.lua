@@ -3,12 +3,10 @@ local DataBar = TavernUI:GetModule("DataBar")
 
 local floor = math.floor
 local format = string.format
+local iconString = "|T%s:12|t"
 
 local function FormatGold(money)
-    local gold = floor(money / 10000)
-    local silver = floor((money % 10000) / 100)
-    local copper = money % 100
-    return format("%dg %ds %dc", gold, silver, copper)
+    return C_CurrencyInfo.GetCoinTextureString(money, 12) or "0"
 end
 
 local function FormatGoldDisplay(copper)
@@ -21,6 +19,27 @@ local function FormatGoldDisplay(copper)
         return format("%d,%03dg", floor(gold / 1000), gold % 1000)
     end
     return gold .. "g"
+end
+
+local sessionStartGold = nil
+local tokenTicker = nil
+
+local function InitTokenPriceTicker()
+    if not C_WowTokenPublic or not C_WowTokenPublic.UpdateMarketPrice then return end
+    C_WowTokenPublic.UpdateMarketPrice()
+    if not tokenTicker then
+        tokenTicker = C_Timer.NewTicker(60, function()
+            C_WowTokenPublic.UpdateMarketPrice()
+        end)
+    end
+end
+
+local function CleanupTokenPriceTicker()
+    if tokenTicker then
+        tokenTicker:Cancel()
+        tokenTicker = nil
+    end
+    sessionStartGold = nil
 end
 
 local function GetCharKey()
@@ -116,10 +135,16 @@ end
 DataBar:RegisterDatatext("Gold", {
     label = "Gold",
     labelShort = "G",
-    events = { "PLAYER_MONEY" },
+    events = { "PLAYER_MONEY", "PLAYER_ENTERING_WORLD", "TOKEN_MARKET_PRICE_UPDATED" },
+    init = InitTokenPriceTicker,
+    cleanup = CleanupTokenPriceTicker,
     update = function()
+        local money = GetMoney()
+        if not sessionStartGold then
+            sessionStartGold = money
+        end
         SaveCharacterGold()
-        return FormatGoldDisplay(GetMoney())
+        return FormatGoldDisplay(money)
     end,
     tooltip = function(frame)
         GameTooltip:SetOwner(frame, "ANCHOR_TOP")
@@ -129,6 +154,22 @@ DataBar:RegisterDatatext("Gold", {
 
         local money = GetMoney() or 0
         GameTooltip:AddDoubleLine("Current:", FormatGold(money), 0.8, 0.8, 0.8, 1, 1, 1)
+
+        if sessionStartGold then
+            local delta = money - sessionStartGold
+            if delta ~= 0 then
+                local sign, lr, lg, lb
+                if delta > 0 then
+                    sign = "+"
+                    lr, lg, lb = 0.2, 1, 0.2
+                else
+                    sign = "-"
+                    lr, lg, lb = 1, 0.2, 0.2
+                    delta = -delta
+                end
+                GameTooltip:AddDoubleLine("Session:", sign .. FormatGold(delta), 0.8, 0.8, 0.8, lr, lg, lb)
+            end
+        end
 
         if TavernUI.db and TavernUI.db.global and TavernUI.db.global.goldData then
             local charList = {}
@@ -183,6 +224,23 @@ DataBar:RegisterDatatext("Gold", {
             else
                 GameTooltip:AddDoubleLine("Market Price:", "Updating...", 0.8, 0.8, 0.8, 0.5, 0.5, 0.5)
             end
+        end
+
+        local hasCurrencies = false
+        for i = 1, 20 do
+            local info = C_CurrencyInfo.GetBackpackCurrencyInfo(i)
+            if not info or not info.name then break end
+            if not hasCurrencies then
+                GameTooltip:AddLine(" ")
+                GameTooltip:AddLine("Currencies", 1, 1, 1)
+                hasCurrencies = true
+            end
+            local icon = format(iconString, info.iconFileID)
+            local quantityText = tostring(info.quantity)
+            if info.maxQuantity and info.maxQuantity > 0 then
+                quantityText = format("%d / %d", info.quantity, info.maxQuantity)
+            end
+            GameTooltip:AddDoubleLine(icon .. " " .. info.name, quantityText, 1, 1, 1, 1, 1, 1)
         end
 
         GameTooltip:AddLine(" ")

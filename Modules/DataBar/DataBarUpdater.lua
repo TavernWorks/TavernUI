@@ -100,6 +100,10 @@ function module:UnregisterSlotUpdates(barId, slotIndex)
             activeSlots[datatextName] = nil
             eventDelays[datatextName] = nil
             initCalled[datatextName] = nil
+            local datatext = module:GetDatatext(datatextName)
+            if datatext and datatext.cleanup then
+                datatext.cleanup()
+            end
             for event, subs in pairs(eventSubscriptions) do
                 subs[datatextName] = nil
                 if not next(subs) then

@@ -5,7 +5,7 @@ local floor = math.floor
 
 DataBar:RegisterDatatext("Coordinates", {
     label = "Coords",
-    labelShort = "",
+    labelShort = "Pos",
     pollInterval = 0.5,
     update = function()
         local mapID = C_Map.GetBestMapForUnit("player")

@@ -61,7 +61,7 @@ end
 
 DataBar:RegisterDatatext("Volume", {
     label = "Volume",
-    labelShort = "V",
+    labelShort = "Vol",
     pollInterval = 1,
     update = function()
         if IsMuted() then

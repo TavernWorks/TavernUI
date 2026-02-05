@@ -37,19 +37,6 @@ local function CountOnlineFriends()
     return wowOnline, bnetOnline or 0
 end
 
-local function IsPlayerInGroup(name)
-    if not IsInGroup() then return false end
-    for i = 1, GetNumGroupMembers() do
-        local unit = IsInRaid() and ("raid" .. i) or ("party" .. i)
-        local unitName, unitRealm = UnitName(unit)
-        if unitName then
-            local fullUnit = unitRealm and unitRealm ~= "" and (unitName .. "-" .. unitRealm) or unitName
-            if fullUnit == name or unitName == name then return true end
-        end
-    end
-    return false
-end
-
 local function GetStatusText(info)
     if info.afk then return " |cffFFFF00(AFK)|r" end
     if info.dnd then return " |cffFF0000(DND)|r" end
@@ -90,7 +77,7 @@ local function BuildFriendsTooltip(frame)
             if classColor then r, g, b = classColor.r, classColor.g, classColor.b end
 
             local status = GetStatusText(info)
-            local groupMark = IsPlayerInGroup(info.name) and " |cffaaaaaa*|r" or ""
+            local groupMark = DataBar:IsPlayerInGroup(info.name) and " |cffaaaaaa*|r" or ""
             local levelStr = (info.level and info.level > 0) and (info.level .. " ") or ""
             local left = levelStr .. info.name .. groupMark .. status
 
@@ -142,7 +129,7 @@ local function BuildFriendsTooltip(frame)
             if classColor then r, g, b = classColor.r, classColor.g, classColor.b end
 
             local status = GetBNetStatusText(gameInfo)
-            local groupMark = (charName and IsPlayerInGroup(charName)) and " |cffaaaaaa*|r" or ""
+            local groupMark = (charName and DataBar:IsPlayerInGroup(charName)) and " |cffaaaaaa*|r" or ""
             local left = charName and (charName .. " (" .. accountName .. ")" .. groupMark .. status) or (accountName .. status)
 
             local right, rr, rg, rb
@@ -331,7 +318,7 @@ local function BuildFriendsContextMenu(frame)
         local hasInviteTargets = false
 
         for _, info in ipairs(wowFriends) do
-            if not IsPlayerInGroup(info.name) then
+            if not DataBar:IsPlayerInGroup(info.name) then
                 hasInviteTargets = true
                 local r, g, b = 1, 1, 1
                 local classColor = GetClassColor(info.className)
@@ -346,7 +333,7 @@ local function BuildFriendsContextMenu(frame)
 
         for _, entry in ipairs(bnetRetail) do
             local charName = entry.game.characterName
-            if charName and charName ~= "" and not IsPlayerInGroup(charName) then
+            if charName and charName ~= "" and not DataBar:IsPlayerInGroup(charName) then
                 hasInviteTargets = true
                 local gameID = entry.game.gameAccountID
                 inviteMenu:CreateButton(charName, function()

@@ -208,6 +208,13 @@ function module:SetupSlotInteractivity(slotFrame, slot)
     slotFrame:SetScript("OnLeave", nil)
     slotFrame:SetScript("OnMouseUp", nil)
 
+    if slotFrame.secureButton then
+        if not InCombatLockdown() then
+            slotFrame.secureButton:Hide()
+            slotFrame.secureButton = nil
+        end
+    end
+
     local datatext = self:GetDatatext(slot.datatext or "")
     if not datatext then
         slotFrame.datatext = nil
@@ -217,6 +224,20 @@ function module:SetupSlotInteractivity(slotFrame, slot)
 
     slotFrame.datatext = datatext
     slotFrame:EnableMouse(true)
+
+    -- If datatext provides a secure button (e.g. M+ Keystone teleport), set it up
+    if datatext.setupSecureButton then
+        local secureButton = datatext.setupSecureButton(slotFrame)
+        if secureButton and datatext.tooltip then
+            secureButton:SetScript("OnEnter", function(frame)
+                datatext.tooltip(frame)
+            end)
+            secureButton:SetScript("OnLeave", function()
+                GameTooltip:Hide()
+            end)
+        end
+        return
+    end
 
     if datatext.tooltip then
         slotFrame:SetScript("OnEnter", function(frame)
@@ -281,14 +302,44 @@ function module:UpdateSlotLabel(barId, slotIndex, text, rawValue)
         end
     end
 
-    local valueStr = rawValue or ""
+    local usePerformanceColor = slot and slot.usePerformanceColor ~= false
+    local isMultiSegment = type(rawValue) == "table"
+    local valueStr
     local hasInlineColor = false
-    if datatext and datatext.getColor then
-        local r, g, b = datatext.getColor()
-        if r and g and b then
-            valueStr = string.format("|cff%02x%02x%02x%s|r", r * 255, g * 255, b * 255, valueStr)
-            hasInlineColor = true
+
+    if isMultiSegment then
+        local segments = rawValue
+        local colors
+        if usePerformanceColor and datatext and datatext.getColor then
+            colors = datatext.getColor()
         end
+
+        local valueEsc = self:GetValueColorEscape(barId)
+        local parts = {}
+        for i, segment in ipairs(segments) do
+            local color = colors and colors[i]
+            if color then
+                parts[i] = string.format("|cff%02x%02x%02x%s|r", color[1] * 255, color[2] * 255, color[3] * 255, segment)
+            else
+                parts[i] = valueEsc .. segment .. "|r"
+            end
+        end
+        hasInlineColor = true
+        local separator = datatext and datatext.separator or " | "
+        valueStr = table.concat(parts, separator)
+    else
+        valueStr = rawValue or ""
+        if usePerformanceColor and datatext and datatext.getColor then
+            local r, g, b = datatext.getColor()
+            if r and g and b then
+                valueStr = string.format("|cff%02x%02x%02x%s|r", r * 255, g * 255, b * 255, valueStr)
+                hasInlineColor = true
+            end
+        end
+    end
+
+    if slotFrame then
+        slotFrame.hasInlineColor = hasInlineColor
     end
 
     if label and label ~= "" then
@@ -297,7 +348,7 @@ function module:UpdateSlotLabel(barId, slotIndex, text, rawValue)
             text:SetText(labelEsc .. label .. ":|r " .. valueStr)
         else
             local valueEsc = self:GetValueColorEscape(barId)
-            text:SetText(labelEsc .. label .. ":|r " .. valueEsc .. (rawValue or "") .. "|r")
+            text:SetText(labelEsc .. label .. ":|r " .. valueEsc .. (isMultiSegment and valueStr or (rawValue or "")) .. "|r")
         end
     elseif rawValue then
         text:SetText(valueStr)
@@ -310,7 +361,9 @@ function module:UpdateSlotColor(barId, slotIndex, text)
     local slotFrame = self.slotFrames[barId] and self.slotFrames[barId][slotIndex]
 
     local hasLabel = slot and slot.labelMode and slot.labelMode ~= "none"
-    if slotFrame and slotFrame.datatext and (slotFrame.datatext.getColor or hasLabel) then
+    local hasInlineColor = slotFrame and slotFrame.hasInlineColor
+
+    if hasLabel or hasInlineColor then
         text:SetTextColor(1, 1, 1)
         return
     end

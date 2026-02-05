@@ -20,7 +20,7 @@ local function RegisterLDBDatatext(name, obj)
     DataBar:RegisterDatatext(datatextName, {
         label = cleanName,
         update = function()
-            return obj.text or ""
+            return obj.text or cleanName
         end,
         tooltip = function(frame)
             if obj.OnTooltipShow then

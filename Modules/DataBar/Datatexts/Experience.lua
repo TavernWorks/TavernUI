@@ -4,7 +4,7 @@ local DataBar = TavernUI:GetModule("DataBar")
 local floor = math.floor
 
 DataBar:RegisterDatatext("Experience", {
-    label = "XP",
+    label = "Experience",
     labelShort = "XP",
     events = { "PLAYER_XP_UPDATE", "UPDATE_EXHAUSTION" },
     update = function()

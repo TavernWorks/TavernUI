@@ -19,34 +19,6 @@ local function ensureBarAnchorConfig(bar, defaults)
     return bar.anchorConfig
 end
 
-local function ensureDualAnchorConfig(bar)
-    if not bar.anchorConfig then
-        bar.anchorConfig = {
-            target = "UIParent",
-            point = "LEFT",
-            relativePoint = "LEFT",
-            offsetX = 0,
-            offsetY = 0,
-            useDualAnchor = true,
-            target2 = "UIParent",
-            point2 = "RIGHT",
-            relativePoint2 = "RIGHT",
-            offsetX2 = 0,
-            offsetY2 = 0,
-        }
-    else
-        bar.anchorConfig.useDualAnchor = true
-        if not bar.anchorConfig.target2 then
-            bar.anchorConfig.target2 = "UIParent"
-            bar.anchorConfig.point2 = "RIGHT"
-            bar.anchorConfig.relativePoint2 = "RIGHT"
-            bar.anchorConfig.offsetX2 = 0
-            bar.anchorConfig.offsetY2 = 0
-        end
-    end
-    return bar.anchorConfig
-end
-
 local function ensureSlotAnchorConfig(slot, barAnchorName)
     if not slot.anchorConfig then
         slot.anchorConfig = {
@@ -62,19 +34,44 @@ local function ensureSlotAnchorConfig(slot, barAnchorName)
     return slot.anchorConfig
 end
 
+-- Debounced UpdateBar: saves setting immediately, defers heavy rebuild
+local pendingBarUpdates = {}
+local DEBOUNCE_INTERVAL = 0.15
+
+local function DebouncedUpdateBar(barId)
+    if pendingBarUpdates[barId] then
+        pendingBarUpdates[barId]:Cancel()
+    end
+    pendingBarUpdates[barId] = C_Timer.NewTimer(DEBOUNCE_INTERVAL, function()
+        pendingBarUpdates[barId] = nil
+        module:UpdateBar(barId)
+    end)
+end
+
 local function createAnchorOptionSetter(barId, bar, field, default)
     return function(_, value)
         ensureBarAnchorConfig(bar)
         module:SetSetting(string.format("bars[%d].anchorConfig.%s", barId, field), value)
-        module:UpdateBar(barId)
-    end
-end
 
-local function createDualAnchorOptionSetter(barId, bar, field, default)
-    return function(_, value)
-        ensureDualAnchorConfig(bar)
-        module:SetSetting(string.format("bars[%d].anchorConfig.%s", barId, field), value)
-        module:UpdateBar(barId)
+        if field == "offsetX" or field == "offsetY" then
+            local frame = module.barFrames[barId]
+            if frame and bar.anchorConfig then
+                local target = bar.anchorConfig.target
+                if not target or target == "UIParent" or target == "" then
+                    frame:ClearAllPoints()
+                    frame:SetPoint(
+                        bar.anchorConfig.point or "CENTER",
+                        UIParent,
+                        bar.anchorConfig.relativePoint or "CENTER",
+                        bar.anchorConfig.offsetX or 0,
+                        bar.anchorConfig.offsetY or 0
+                    )
+                end
+            end
+            DebouncedUpdateBar(barId)
+        else
+            module:UpdateBar(barId)
+        end
     end
 end
 
@@ -82,14 +79,32 @@ local function createSlotAnchorOptionSetter(barId, slotIndex, slot, barAnchorNam
     return function(_, value)
         ensureSlotAnchorConfig(slot, barAnchorName)
         module:SetSetting(string.format("bars[%d].slots[%d].anchorConfig.%s", barId, slotIndex, field), value)
-        module:UpdateBar(barId)
+
+        if field == "offsetX" or field == "offsetY" then
+            DebouncedUpdateBar(barId)
+        else
+            module:UpdateBar(barId)
+        end
     end
 end
 
 local function createSimpleOptionSetter(barId, settingPath)
     return function(_, value)
         module:SetSetting(string.format("bars[%d].%s", barId, settingPath), value)
-        module:UpdateBar(barId)
+
+        if settingPath == "width" or settingPath == "height" then
+            local bar = module:GetBar(barId)
+            local frame = module.barFrames[barId]
+            if frame and bar then
+                frame:SetSize(bar.width, bar.height)
+                module:LayoutSlots(barId, bar)
+            end
+            DebouncedUpdateBar(barId)
+        elseif settingPath == "fontSize" or settingPath == "spacing" then
+            DebouncedUpdateBar(barId)
+        else
+            module:UpdateBar(barId)
+        end
     end
 end
 
@@ -105,47 +120,153 @@ local anchorPointValues = {
     BOTTOMRIGHT = "BOTTOMRIGHT",
 }
 
-local function addAnchorOption(args, barId, bar, prefix, order, field, default, isDual)
+local CATEGORY_DISPLAY_NAMES = {
+    screen = "SCREEN",
+    actionbars = "ACTION_BARS",
+    bars = "BARS",
+    resourcebars = "RESOURCE_BARS",
+    cooldowns = "COOLDOWNS",
+    cdm = "CDM",
+    ucdm = "UCDM_CATEGORY",
+    unitframes = "UNIT_FRAMES",
+    TavernUI = "TAVERN_UI_CATEGORY",
+    blizzard = "BLIZZARD",
+    misc = "MISC",
+}
+
+local CATEGORY_ORDER = {
+    screen = 0, actionbars = 1, bars = 2, resourcebars = 3, cooldowns = 4, cdm = 5, ucdm = 6,
+    unitframes = 7, TavernUI = 8, blizzard = 9, misc = 10,
+}
+
+local function GetCategoryForAnchor(anchorName)
+    if not Anchor or not anchorName then return nil end
+    local _, metadata = Anchor:Get(anchorName)
+    if metadata and metadata.category then
+        return metadata.category
+    end
+    return nil
+end
+
+local function GetBarAnchorCategory(bar)
+    local stored = bar.anchorCategory
+    if stored and stored ~= "None" then return stored end
+    local target = bar.anchorConfig and bar.anchorConfig.target
+    if target and target ~= "UIParent" then
+        local derived = GetCategoryForAnchor(target)
+        if derived then return derived end
+    end
+    return "None"
+end
+
+local function GetAvailableCategories(barId)
+    local categories = {}
+    local barAnchorName = module.anchorNames and module.anchorNames[barId]
+    if Anchor then
+        local allAnchors = Anchor:GetAll()
+        for anchorName, anchorData in pairs(allAnchors) do
+            if anchorName ~= barAnchorName and anchorData.metadata then
+                local cat = anchorData.metadata.category or "misc"
+                if not categories[cat] then categories[cat] = true end
+            end
+        end
+    end
+    local sorted = {}
+    for cat in pairs(categories) do
+        sorted[#sorted + 1] = cat
+    end
+    table.sort(sorted, function(a, b)
+        local oa, ob = CATEGORY_ORDER[a] or 99, CATEGORY_ORDER[b] or 99
+        if oa ~= ob then return oa < ob end
+        return a < b
+    end)
+    return sorted
+end
+
+local function addAnchorCategoryOption(args, barId, bar, order)
+    args.anchorCategory = {
+        type = "select",
+        name = L["CATEGORY"],
+        desc = L["CATEGORY_OF_ANCHOR_DESC"],
+        order = order,
+        values = function()
+            local vals = { None = L["NONE_NO_ANCHORING"] }
+            for _, cat in ipairs(GetAvailableCategories(barId)) do
+                local lkey = CATEGORY_DISPLAY_NAMES[cat]
+                vals[cat] = (lkey and L[lkey]) or cat:gsub("^%l", string.upper)
+            end
+            return vals
+        end,
+        get = function()
+            return GetBarAnchorCategory(bar)
+        end,
+        set = function(_, value)
+            if value == "None" or not value then
+                module:SetSetting(string.format("bars[%d].anchorCategory", barId), nil)
+                module:SetSetting(string.format("bars[%d].anchorConfig.target", barId), nil)
+            else
+                module:SetSetting(string.format("bars[%d].anchorCategory", barId), value)
+                local currentTarget = bar.anchorConfig and bar.anchorConfig.target
+                if currentTarget and currentTarget ~= "UIParent" then
+                    local currentCat = GetCategoryForAnchor(currentTarget)
+                    if currentCat ~= value then
+                        module:SetSetting(string.format("bars[%d].anchorConfig.target", barId), nil)
+                    end
+                end
+            end
+            module:UpdateBar(barId)
+        end,
+    }
+end
+
+local function addAnchorOption(args, barId, bar, prefix, order, field, default)
     local name = prefix .. (field:sub(1,1):upper() .. field:sub(2))
     local getter = function() return bar.anchorConfig and bar.anchorConfig[field] or default end
-    local setter = isDual and createDualAnchorOptionSetter(barId, bar, field, default) or createAnchorOptionSetter(barId, bar, field, default)
-    local disabled = isDual and function() return not (bar.anchorConfig and bar.anchorConfig.useDualAnchor) end or nil
+    local setter = createAnchorOptionSetter(barId, bar, field, default)
 
-    if field == "target" or field == "target2" then
+    if field == "target" then
         args[prefix .. field] = {
             type = "select",
-            name = name,
+            name = L["ANCHOR_TARGET"],
             desc = L["ANCHOR_TARGET_FRAME_DESC"],
             order = order,
-            disabled = disabled,
+            disabled = function()
+                local category = GetBarAnchorCategory(bar)
+                return not category or category == "None"
+            end,
             values = function()
-                local vals = { UIParent = L["SCREEN"] }
-                if Anchor then
-                    local dropdownData = Anchor:GetDropdownData()
-                    for _, entry in ipairs(dropdownData) do
-                        vals[entry.value] = entry.text
+                local vals = {}
+                local selectedCategory = GetBarAnchorCategory(bar)
+                if Anchor and selectedCategory and selectedCategory ~= "None" then
+                    local barAnchorName = module.anchorNames and module.anchorNames[barId]
+                    local anchorsByCategory = Anchor:GetByCategory(selectedCategory)
+                    for anchorName, anchorData in pairs(anchorsByCategory) do
+                        if anchorName ~= barAnchorName then
+                            local displayName = anchorData.metadata and anchorData.metadata.displayName or anchorName
+                            vals[anchorName] = displayName
+                        end
                     end
                 end
                 return vals
             end,
             get = function()
                 local val = bar.anchorConfig and bar.anchorConfig[field]
-                if not val or val == "" then return "UIParent" end
+                if not val or val == "" or val == "UIParent" then return nil end
                 return val
             end,
             set = function(_, value)
-                if isDual then
-                    ensureDualAnchorConfig(bar)
-                else
-                    ensureBarAnchorConfig(bar, {target = value, point = "CENTER", relativePoint = "CENTER", offsetX = 0, offsetY = 0})
+                ensureBarAnchorConfig(bar, {target = value, point = "CENTER", relativePoint = "CENTER", offsetX = 0, offsetY = 0})
+                module:SetSetting(string.format("bars[%d].anchorConfig.target", barId), value)
+                local category = GetCategoryForAnchor(value)
+                if category then
+                    module:SetSetting(string.format("bars[%d].anchorCategory", barId), category)
                 end
-                module:SetSetting(string.format("bars[%d].anchorConfig.%s", barId, field), value)
                 module:UpdateBar(barId)
             end,
         }
-    elseif field == "point" or field == "point2" or field:find("Point") then
+    elseif field == "point" or field:find("Point") then
         local descText = L["POINT_ON_BAR_DESC"]
-        if field == "relativePoint" or field == "relativePoint2" then
+        if field == "relativePoint" then
             descText = L["POINT_ON_TARGET_DESC"]
         end
         args[prefix .. field] = {
@@ -153,7 +274,6 @@ local function addAnchorOption(args, barId, bar, prefix, order, field, default, 
             name = name,
             desc = descText,
             order = order,
-            disabled = disabled,
             values = anchorPointValues,
             get = getter,
             set = setter,
@@ -167,7 +287,6 @@ local function addAnchorOption(args, barId, bar, prefix, order, field, default, 
             min = -500,
             max = 500,
             step = 1,
-            disabled = disabled,
             get = getter,
             set = setter,
         }
@@ -378,9 +497,11 @@ function module:BuildSlotOptions(args, barId, bar)
     }
 
     for slotIndex, slot in ipairs(bar.slots) do
+        local dtName = slot.datatext or ""
+        local slotLabel = dtName ~= "" and (slotIndex .. ": " .. dtName) or string.format(L["SLOT_N"], slotIndex)
         local slotArgs = {
             type = "group",
-            name = string.format(L["SLOT_N"], slotIndex),
+            name = slotLabel,
             desc = string.format(L["CONFIGURE_SLOT_N_DESC"], slotIndex),
             order = (slotIndex + 1) * 10,
             args = {},
@@ -405,11 +526,40 @@ function module:BuildSlotOptions(args, barId, bar)
                 self:SetSetting(path .. ".datatext", value)
                 self:SetSetting(path .. ".width", nil)
                 self:SetSetting(path .. ".labelMode", nil)
+                self:SetSetting(path .. ".usePerformanceColor", nil)
                 self:SetSetting(path .. ".anchorConfig", nil)
                 self:UpdateBar(barId)
                 self:RefreshOptions(true)
             end,
         }
+
+        if slotIndex > 1 then
+            local moveFromUp = slotIndex
+            slotArgs.args.moveUp = {
+                type = "execute",
+                name = L["MOVE_UP"],
+                desc = L["MOVE_SLOT_UP_DESC"],
+                order = 2,
+                func = function()
+                    self:MoveSlot(barId, moveFromUp, moveFromUp - 1)
+                    self:RefreshOptions(true)
+                end,
+            }
+        end
+
+        if slotIndex < #bar.slots then
+            local moveFromDown = slotIndex
+            slotArgs.args.moveDown = {
+                type = "execute",
+                name = L["MOVE_DOWN"],
+                desc = L["MOVE_SLOT_DOWN_DESC"],
+                order = 3,
+                func = function()
+                    self:MoveSlot(barId, moveFromDown, moveFromDown + 1)
+                    self:RefreshOptions(true)
+                end,
+            }
+        end
 
         slotArgs.args.width = {
             type = "input",
@@ -427,11 +577,13 @@ function module:BuildSlotOptions(args, barId, bar)
             end,
         }
 
+        local isLDB = (slot.datatext or ""):sub(1, 5) == "LDB: "
         slotArgs.args.labelMode = {
             type = "select",
             name = L["LABEL"],
             desc = L["SHOW_LABEL_DESC"],
             order = 7,
+            hidden = isLDB,
             values = {none = L["NONE"], short = L["SHORT"], full = L["FULL"]},
             get = function() return slot.labelMode or "none" end,
             set = function(_, value)
@@ -441,6 +593,21 @@ function module:BuildSlotOptions(args, barId, bar)
         }
 
         local selectedDatatext = self:GetDatatext(slot.datatext or "")
+
+        if selectedDatatext and selectedDatatext.getColor then
+            slotArgs.args.usePerformanceColor = {
+                type = "toggle",
+                name = L["USE_PERFORMANCE_COLOR"],
+                desc = L["USE_PERFORMANCE_COLOR_DESC"],
+                order = 7.5,
+                get = function() return slot.usePerformanceColor ~= false end,
+                set = function(_, value)
+                    self:SetSetting(string.format("bars[%d].slots[%d].usePerformanceColor", barId, slotIndex), value)
+                    self:UpdateBar(barId)
+                end,
+            }
+        end
+
         if selectedDatatext and selectedDatatext.options then
             local optOrder = 8
             for key, opt in pairs(selectedDatatext.options) do
@@ -631,11 +798,7 @@ function module:BuildStylingOptions(args, barId, bar)
     }
 
     addHeader(L["LAYOUT"], 50)
-    args.growthDirection = {type = "select", name = L["GROWTH_DIRECTION"], desc = L["GROWTH_DIRECTION_DESC"], order = 51,
-        values = {horizontal = L["HORIZONTAL"], vertical = L["VERTICAL"]},
-        get = function() return bar.growthDirection end,
-        set = createSimpleOptionSetter(barId, "growthDirection")}
-    addRange("spacing", L["SPACING"], L["SPACING_BETWEEN_SLOTS_DESC"], 52, 0, 50, 1)
+    addRange("spacing", L["SPACING"], L["SPACING_BETWEEN_SLOTS_DESC"], 51, 0, 50, 1)
 end
 
 function module:BuildPositionOptions(args, barId, bar)
@@ -644,39 +807,24 @@ function module:BuildPositionOptions(args, barId, bar)
         return
     end
 
-    args.useDualAnchor = {
-        type = "toggle",
-        name = L["USE_DUAL_ANCHOR"],
-        desc = L["USE_DUAL_ANCHOR_DESC"],
-        order = 1,
-        get = function() return bar.anchorConfig and bar.anchorConfig.useDualAnchor or false end,
-        set = function(_, value)
-            if value then ensureDualAnchorConfig(bar) end
-            self:SetSetting(string.format("bars[%d].anchorConfig.useDualAnchor", barId), value)
-            self:UpdateBar(barId)
-        end,
-    }
-
-    args.anchorHeader = {type = "header", name = L["FIRST_ANCHOR_POINT"], order = 10}
-    addAnchorOption(args, barId, bar, "anchor", 11, "target", "UIParent", false)
-    addAnchorOption(args, barId, bar, "anchor", 12, "point", "CENTER", false)
-    addAnchorOption(args, barId, bar, "relative", 13, "relativePoint", "CENTER", false)
-    addAnchorOption(args, barId, bar, "", 14, "offsetX", 0, false)
-    addAnchorOption(args, barId, bar, "", 15, "offsetY", 0, false)
-
-    args.dualAnchorHeader = {type = "header", name = L["SECOND_ANCHOR_POINT"], order = 20, disabled = function() return not (bar.anchorConfig and bar.anchorConfig.useDualAnchor) end}
-    addAnchorOption(args, barId, bar, "anchor", 21, "target2", "UIParent", true)
-    addAnchorOption(args, barId, bar, "anchor", 22, "point2", "RIGHT", true)
-    addAnchorOption(args, barId, bar, "relative", 23, "relativePoint2", "RIGHT", true)
-    addAnchorOption(args, barId, bar, "", 24, "offsetX2", 0, true)
-    addAnchorOption(args, barId, bar, "", 25, "offsetY2", 0, true)
+    args.anchorHeader = {type = "header", name = L["ANCHOR_POINT"], order = 10}
+    addAnchorCategoryOption(args, barId, bar, 11)
+    addAnchorOption(args, barId, bar, "anchor", 12, "target", nil)
+    addAnchorOption(args, barId, bar, "anchor", 13, "point", "CENTER")
+    addAnchorOption(args, barId, bar, "relative", 14, "relativePoint", "CENTER")
+    addAnchorOption(args, barId, bar, "", 15, "offsetX", 0)
+    addAnchorOption(args, barId, bar, "", 16, "offsetY", 0)
 
     args.clearAnchor = {
         type = "execute",
         name = L["CLEAR_ANCHOR"],
         desc = L["CLEAR_ANCHOR_DESC"],
         order = 100,
-        func = function() self:SetSetting(string.format("bars[%d].anchorConfig", barId), nil); self:UpdateBar(barId) end,
+        func = function()
+            self:SetSetting(string.format("bars[%d].anchorCategory", barId), nil)
+            self:SetSetting(string.format("bars[%d].anchorConfig", barId), nil)
+            self:UpdateBar(barId)
+        end,
     }
 end
 

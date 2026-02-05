@@ -3,34 +3,57 @@ local DataBar = TavernUI:GetModule("DataBar")
 
 local floor = math.floor
 local format = string.format
+local min = math.min
 
-local function GetFPSColor(fps)
-    if fps < 30 then return "ff3333" end
-    return nil
-end
-
-local function GetMSColor(ms)
-    if ms > 100 then return "ff3333" end
-    if ms > 50 then return "ffff00" end
-    return "00ff00"
-end
+local cachedFps, cachedMs = 0, 0
+local cachedAddons = {}
+local cachedTotal = 0
+local lastMemUpdate = 0
+local MEM_UPDATE_INTERVAL = 30
 
 DataBar:RegisterDatatext("System", {
     label = "System",
-    labelShort = "",
+    labelShort = "Sys",
     pollInterval = 1,
+    separator = " | ",
     update = function()
-        local fps = floor(GetFramerate() + 0.5)
+        cachedFps = floor(GetFramerate() + 0.5)
         local _, _, homePing = GetNetStats()
-        local ms = floor(homePing or 0)
+        cachedMs = floor(homePing or 0)
 
-        local fpsColor = GetFPSColor(fps)
-        local msColor = GetMSColor(ms)
+        local now = GetTime()
+        if now - lastMemUpdate >= MEM_UPDATE_INTERVAL then
+            lastMemUpdate = now
+            UpdateAddOnMemoryUsage()
+            for k in pairs(cachedAddons) do cachedAddons[k] = nil end
+            for i = 1, C_AddOns.GetNumAddOns() do
+                local mem = GetAddOnMemoryUsage(i)
+                if mem > 0 then
+                    cachedAddons[#cachedAddons + 1] = { name = C_AddOns.GetAddOnInfo(i), mem = mem }
+                end
+            end
+            table.sort(cachedAddons, function(a, b) return a.mem > b.mem end)
+            cachedTotal = collectgarbage("count")
+        end
 
-        local fpsStr = fpsColor and format("|cff%s%d|r", fpsColor, fps) or tostring(fps)
-        local msStr = format("|cff%s%d|r", msColor, ms)
+        return { tostring(cachedFps), tostring(cachedMs) }
+    end,
+    getColor = function()
+        local fpsColor
+        if cachedFps < 30 then
+            fpsColor = { 1, 0.2, 0.2 }
+        end
 
-        return fpsStr .. " | " .. msStr
+        local msColor
+        if cachedMs > 100 then
+            msColor = { 1, 0.2, 0.2 }
+        elseif cachedMs > 50 then
+            msColor = { 1, 1, 0 }
+        else
+            msColor = { 0, 1, 0 }
+        end
+
+        return { fpsColor, msColor }
     end,
     tooltip = function(frame)
         GameTooltip:SetOwner(frame, "ANCHOR_TOP")
@@ -38,12 +61,22 @@ DataBar:RegisterDatatext("System", {
         GameTooltip:AddLine("System", 1, 1, 1)
         GameTooltip:AddLine(" ")
 
-        local fps = floor(GetFramerate() + 0.5)
-        local _, _, homePing, worldPing = GetNetStats()
+        local _, _, _, worldPing = GetNetStats()
 
-        GameTooltip:AddDoubleLine("Framerate:", format("%d fps", fps), 0.7, 0.7, 0.7, 1, 1, 1)
-        GameTooltip:AddDoubleLine("Home Latency:", format("%d ms", floor(homePing or 0)), 0.7, 0.7, 0.7, 1, 1, 1)
+        GameTooltip:AddDoubleLine("Framerate:", format("%d fps", cachedFps), 0.7, 0.7, 0.7, 1, 1, 1)
+        GameTooltip:AddDoubleLine("Home Latency:", format("%d ms", cachedMs), 0.7, 0.7, 0.7, 1, 1, 1)
         GameTooltip:AddDoubleLine("World Latency:", format("%d ms", floor(worldPing or 0)), 0.7, 0.7, 0.7, 1, 1, 1)
+
+        if #cachedAddons > 0 then
+            GameTooltip:AddLine(" ")
+            GameTooltip:AddLine("Top Addons (Memory)", 1, 1, 1)
+            for i = 1, min(#cachedAddons, 10) do
+                local a = cachedAddons[i]
+                GameTooltip:AddDoubleLine(a.name, DataBar:FormatMemory(a.mem), 0.7, 0.7, 0.7, 1, 1, 0)
+            end
+            GameTooltip:AddLine(" ")
+            GameTooltip:AddDoubleLine("Total:", DataBar:FormatMemory(cachedTotal), 1, 1, 1, 0, 1, 0)
+        end
 
         GameTooltip:Show()
     end,

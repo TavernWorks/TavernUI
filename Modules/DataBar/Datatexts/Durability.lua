@@ -25,7 +25,7 @@ end
 
 DataBar:RegisterDatatext("Durability", {
     label = "Gear",
-    labelShort = "D",
+    labelShort = "Dur",
     events = { "UPDATE_INVENTORY_DURABILITY" },
     update = function()
         return GetDurabilityPercent() .. "%"

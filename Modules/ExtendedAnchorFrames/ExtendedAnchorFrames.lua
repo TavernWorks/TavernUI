@@ -131,7 +131,10 @@ local function RegisterAllFrames()
     if not module:IsEnabled() then return end
     if not Anchor then return end
 
-    RegisterBlizzardActionBars()
+    -- Only register Blizzard action bars if no third-party bar addon is loaded
+    if not _G.Bartender4 and not _G.Dominos then
+        RegisterBlizzardActionBars()
+    end
     RegisterBlizzardUnitFrames()
     RegisterDominoesActionBars()
     RegisterBTActionBars()

@@ -5,7 +5,7 @@ local floor = math.floor
 
 DataBar:RegisterDatatext("Latency", {
     label = "Latency",
-    labelShort = "M",
+    labelShort = "ms",
     pollInterval = 30,
     update = function()
         local _, _, _, world = GetNetStats()

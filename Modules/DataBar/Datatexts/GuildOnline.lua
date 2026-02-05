@@ -13,19 +13,6 @@ local function GetClassColor(className)
     return nil
 end
 
-local function IsPlayerInGroup(name)
-    if not IsInGroup() then return false end
-    for i = 1, GetNumGroupMembers() do
-        local unit = IsInRaid() and ("raid" .. i) or ("party" .. i)
-        local unitName, unitRealm = UnitName(unit)
-        if unitName then
-            local fullUnit = unitRealm and unitRealm ~= "" and (unitName .. "-" .. unitRealm) or unitName
-            if fullUnit == name or unitName == name then return true end
-        end
-    end
-    return false
-end
-
 local function StripMyRealm(name)
     if not name then return name end
     local myRealm = GetRealmName():gsub("%s", "")
@@ -75,7 +62,7 @@ local function BuildGuildTooltip(frame)
             end
 
             local displayName = StripMyRealm(name)
-            local groupMark = IsPlayerInGroup(name) and " |cffaaaaaa*|r" or ""
+            local groupMark = DataBar:IsPlayerInGroup(name) and " |cffaaaaaa*|r" or ""
             local left = level .. " " .. displayName .. groupMark .. statusText .. " |cff999999-|r " .. (rankName or "")
 
             local right, rr, rg, rb
@@ -165,7 +152,7 @@ local function BuildGuildContextMenu(frame)
 
         for i = 1, totalMembers do
             local name, _, _, level, _, _, _, _, online, _, engClass = GetGuildRosterInfo(i)
-            if online and name ~= playerName and not IsPlayerInGroup(name) then
+            if online and name ~= playerName and not DataBar:IsPlayerInGroup(name) then
                 hasInviteTargets = true
                 local r, g, b = 1, 1, 1
                 local classColor = GetClassColor(engClass)

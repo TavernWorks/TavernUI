@@ -43,7 +43,7 @@ end
 
 DataBar:RegisterDatatext("Bags", {
     label = "Bags",
-    labelShort = "",
+    labelShort = "Bag",
     events = { "BAG_UPDATE" },
     update = function()
         local used, total = GetBagTotals()

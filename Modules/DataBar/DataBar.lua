@@ -29,7 +29,6 @@ local defaultBarSettings = {
     useLabelClassColor = false,
     font = nil,
     fontSize = 12,
-    growthDirection = "horizontal",
     spacing = 4,
     anchorConfig = nil,
 }
@@ -42,6 +41,8 @@ function module:RegisterDatatext(name, config)
     config = config or {}
     datatextRegistry[name] = {
         name = name,
+        init = config.init,
+        cleanup = config.cleanup,
         update = config.update,
         events = config.events,
         pollInterval = config.pollInterval,
@@ -50,9 +51,11 @@ function module:RegisterDatatext(name, config)
         getColor = config.getColor,
         label = config.label or name,
         labelShort = config.labelShort,
+        separator = config.separator,
         options = config.options,
         onScroll = config.onScroll,
         eventDelay = config.eventDelay,
+        setupSecureButton = config.setupSecureButton,
     }
     self.datatextListDirty = true
 end
@@ -122,6 +125,11 @@ function module:OnEnable()
                 category = "blizzard",
             })
         end
+
+        Anchor:Register("TavernUI.Screen Edge", UIParent, {
+            displayName = "Screen Edge",
+            category = "screen",
+        })
     end
 
     for barId, bar in pairs(bars) do
@@ -145,6 +153,7 @@ function module:OnDisable()
 
     if Anchor then
         Anchor:Unregister("Blizzard.Minimap")
+        Anchor:Unregister("TavernUI.Screen Edge")
     end
 
     self:UnregisterAllEvents()
@@ -184,6 +193,21 @@ function module:FormatMemory(kb)
     else
         return string.format("%.0f KB", kb)
     end
+end
+
+function module:IsPlayerInGroup(name)
+    if not IsInGroup() then return false end
+    if not name then return false end
+    local shortName = name:match("^([^%-]+)") or name
+    for i = 1, GetNumGroupMembers() do
+        local unit = IsInRaid() and ("raid" .. i) or ("party" .. i)
+        local unitName, unitRealm = UnitName(unit)
+        if unitName then
+            local fullUnit = unitRealm and unitRealm ~= "" and (unitName .. "-" .. unitRealm) or unitName
+            if fullUnit == name or unitName == name or unitName == shortName then return true end
+        end
+    end
+    return false
 end
 
 function module:PLAYER_ENTERING_WORLD()
@@ -433,43 +457,7 @@ function module:UpdateBarPosition(barId, bar)
     if bar.anchorConfig and bar.anchorConfig.target then
         local target = bar.anchorConfig.target
 
-        if bar.anchorConfig.useDualAnchor and bar.anchorConfig.target2 then
-            local target2 = bar.anchorConfig.target2
-
-            if (target == "UIParent" or target == "") and (target2 == "UIParent" or target2 == "") then
-                frame:ClearAllPoints()
-                local point1 = bar.anchorConfig.point or "LEFT"
-                local relativePoint1 = bar.anchorConfig.relativePoint or "LEFT"
-                local offsetX1 = bar.anchorConfig.offsetX or 0
-                local offsetY1 = bar.anchorConfig.offsetY or 0
-                local point2 = bar.anchorConfig.point2 or "RIGHT"
-                local relativePoint2 = bar.anchorConfig.relativePoint2 or "RIGHT"
-                local offsetX2 = bar.anchorConfig.offsetX2 or 0
-                local offsetY2 = bar.anchorConfig.offsetY2 or 0
-
-                frame:SetPoint(point1, UIParent, relativePoint1, offsetX1, offsetY1)
-                frame:SetPoint(point2, UIParent, relativePoint2, offsetX2, offsetY2)
-            elseif Anchor then
-                local config = {
-                    target = target,
-                    point = bar.anchorConfig.point or "LEFT",
-                    relativePoint = bar.anchorConfig.relativePoint or "LEFT",
-                    offsetX = bar.anchorConfig.offsetX or 0,
-                    offsetY = bar.anchorConfig.offsetY or 0,
-                    target2 = target2,
-                    point2 = bar.anchorConfig.point2 or "RIGHT",
-                    relativePoint2 = bar.anchorConfig.relativePoint2 or "RIGHT",
-                    offsetX2 = bar.anchorConfig.offsetX2 or 0,
-                    offsetY2 = bar.anchorConfig.offsetY2 or 0,
-                }
-
-                local handle = Anchor:AnchorDual(frame, config)
-                self.anchorHandles[barId] = handle
-            else
-                frame:ClearAllPoints()
-                frame:SetPoint("CENTER", UIParent, "CENTER", 0, 0)
-            end
-        elseif target == "UIParent" or target == "" then
+        if target == "UIParent" or target == "" then
             frame:ClearAllPoints()
             local point = bar.anchorConfig.point or "CENTER"
             local relativePoint = bar.anchorConfig.relativePoint or "CENTER"
