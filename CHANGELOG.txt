@@ -1,5 +1,19 @@
 TavernUI Changelog
 ==================
+v1.0.0-beta-12 (2026-02-07)
+ - FIX: Data Bars
+ - FIX: Cast Bars - Interrupt + Colors
+ - FIX: Memory Leak in Data Bars
+ - FIX: Gold is shiny Data Bars
+ - NEW: Visibility Module - Applies to CDM and Resource Bars
+ - NEW: Blizzard Overlay Overrides - Applies to CDM - Currently Support Pandemic
+ - FIX: Anchoring should stop you sailing away, even as a DK
+ - FIX: Buffs should be less jumpy
+ - FIX: Things with stacks, should now not get stuck with rewind timers
+ - ADJUSTMENT: Pixels should be a little more perfect (breaking change)
+ - ADJUSTMENT: Spacing and Borders should honor scaling a little bit more accurately
+ - ADJUSTMENT: Auto Sizing of Resources should now actually size
+
 v1.0.0-beta-11 (2026-02-03)
  - FIX: Keybinds not showing anymore
  - FIX: Anchoring going and coming back between reloads (TEMP requires de-anchor before edit mode)
