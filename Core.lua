@@ -111,19 +111,6 @@ end
 TavernUI:SetDefaultModulePrototype(TavernUI.modulePrototype)
 TavernUI:SetDefaultModuleState(false) -- Modules disabled by default, we control enabling
 
-function TavernUI:GetPixelSize(region, physicalPixels, direction)
-    if not region or not physicalPixels or physicalPixels <= 0 then
-        return physicalPixels or 0
-    end
-    if PixelUtil and PixelUtil.GetNearestPixelSize then
-        local scale = region.GetEffectiveScale and region:GetEffectiveScale()
-        if scale and scale > 0 then
-            return PixelUtil.GetNearestPixelSize(physicalPixels, scale, direction or 0)
-        end
-    end
-    return physicalPixels
-end
-
 function TavernUI:GetTexturePath(key, mediaType, default)
     if not key or key == "" then
         return default or "Interface\\Buttons\\WHITE8x8"

@@ -19,7 +19,6 @@ libs\Libs.xml
 
 # Core files (must load first to define TavernUI and RegisterModuleDefaults)
 Core.lua
-visibility.lua
 Core_Config.lua
 
 # Localization (load before modules that use L)

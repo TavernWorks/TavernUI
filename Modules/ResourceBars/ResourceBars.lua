@@ -184,8 +184,48 @@ end
 function module:OnEnable()
     self:RebuildActiveBars()
     self:RegisterPowerEvents()
-    -- Listen for UI scale changes to refresh pixel-perfect elements
     self:RegisterMessage("TavernUI_UIScaleChanged", "OnUIScaleChanged")
+    self:RegisterMessage("TavernUI_VisibilityStateChanged", "ApplyVisibility")
+    
+    local Visibility = TavernUI.Visibility
+    if Visibility then
+        self._lastVisibilityState = Visibility:ShouldShow()
+    end
+    
+    if not self._visibilityPollTimer then
+        self._visibilityPollTimer = C_Timer.NewTicker(0.2, function()
+            if not self:IsEnabled() then return end
+            local Visibility = TavernUI.Visibility
+            if Visibility then
+                local currentState = Visibility:ShouldShow()
+                if self._lastVisibilityState ~= currentState then
+                    self._lastVisibilityState = currentState
+                    self:ApplyVisibility()
+                end
+            end
+        end)
+    end
+    
+    C_Timer.After(0, function()
+        if self:IsEnabled() then self:ApplyVisibility() end
+    end)
+end
+
+function module:ApplyVisibility()
+    if not self:IsEnabled() then return end
+    local Visibility = TavernUI.Visibility
+    for barId, frame in pairs(bars) do
+        if frame then
+            local config = self:GetBarConfig(barId)
+            if config and config[CONSTANTS.KEY_ENABLED] ~= false then
+                if Visibility then
+                    self:ApplyVisibilityToBar(frame, Visibility:ShouldShow(), Visibility:GetHiddenOpacity(), Visibility:GetVisibleOnHover())
+                else
+                    self:ApplyVisibilityToBar(frame, true)
+                end
+            end
+        end
+    end
 end
 
 function module:OnUIScaleChanged()
@@ -193,6 +233,11 @@ function module:OnUIScaleChanged()
 end
 
 function module:OnDisable()
+    if self._visibilityPollTimer then
+        self._visibilityPollTimer:Cancel()
+        self._visibilityPollTimer = nil
+    end
+    self._lastVisibilityState = nil
     self:UnregisterAllEvents()
     self:ClearAllBars()
 end
@@ -538,6 +583,29 @@ function module:UpdateBars(barIds)
     end
 end
 
+function module:ApplyVisibilityToBar(frame, visible, hiddenAlpha, visibleOnHover)
+    if not frame then return end
+    if visible then
+        frame:SetAlpha(1)
+        frame:SetScript("OnEnter", nil)
+        frame:SetScript("OnLeave", nil)
+    else
+        local alpha = (hiddenAlpha and hiddenAlpha > 0) and hiddenAlpha or 0
+        if visibleOnHover and frame:IsMouseOver() then
+            frame:SetAlpha(1)
+        else
+            frame:SetAlpha(alpha)
+        end
+        if visibleOnHover then
+            frame:SetScript("OnEnter", function() frame:SetAlpha(1) end)
+            frame:SetScript("OnLeave", function() frame:SetAlpha(alpha) end)
+        else
+            frame:SetScript("OnEnter", nil)
+            frame:SetScript("OnLeave", nil)
+        end
+    end
+end
+
 function module:UpdateBar(barId)
     if not bars[barId] then
         return
@@ -569,8 +637,8 @@ function module:UpdateBar(barId)
             bars[barId]:ApplyVisualConfig()
         elseif bars[barId].Hide then
             bars[barId]:Hide()
+            return
         end
-        return
     end
 
     if bars[barId].Show then
@@ -588,6 +656,13 @@ function module:UpdateBar(barId)
     local frame = bars[barId]
     if frame and frame.SetFrameLevel and type(config[CONSTANTS.KEY_FRAME_LEVEL]) == "number" then
         frame:SetFrameLevel(config[CONSTANTS.KEY_FRAME_LEVEL])
+    end
+
+    local Visibility = TavernUI.Visibility
+    if Visibility then
+        self:ApplyVisibilityToBar(frame, Visibility:ShouldShow(), Visibility:GetHiddenOpacity(), Visibility:GetVisibleOnHover())
+    else
+        self:ApplyVisibilityToBar(frame, true)
     end
 end
 
@@ -653,6 +728,12 @@ function module:GetAllBarIds()
     for _, id in ipairs(power) do all[#all + 1] = id end
     for _, id in ipairs(resource) do all[#all + 1] = id end
     return all
+end
+
+function module:RefreshVisibilityForAllBars()
+    for barId in pairs(bars) do
+        self:UpdateBar(barId)
+    end
 end
 
 module.bars = bars

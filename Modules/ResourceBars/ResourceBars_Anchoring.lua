@@ -534,30 +534,30 @@ function Anchoring.RefreshBar(barId)
 end
 
 local SCREEN_ANCHOR_NAME = "TavernUI.Screen"
-local screenAnchorFrame = nil
 local screenAnchorRegistered = false
-
-local function GetOrCreateScreenAnchorFrame()
-    if screenAnchorFrame then return screenAnchorFrame end
-    if not UIParent then return nil end
-    local f = CreateFrame("Frame", "TavernUI_ScreenAnchor", UIParent)
-    f:SetSize(10, 10)
-    f:SetPoint("CENTER", UIParent, "CENTER", 0, 0)
-    f:SetAlpha(0)
-    f:EnableMouse(false)
-    screenAnchorFrame = f
-    return f
-end
 
 local function RegisterScreenAnchor()
     if not screenAnchorRegistered and Anchor then
-        local frame = GetOrCreateScreenAnchorFrame()
+        local frame = _G.SpellActivationOverlayFrame
         if frame then
             Anchor:Register(SCREEN_ANCHOR_NAME, frame, {
                 displayName = "Screen",
                 category = "screen",
             })
             screenAnchorRegistered = true
+        else
+            C_Timer.After(0.1, function()
+                if not screenAnchorRegistered and Anchor then
+                    frame = _G.SpellActivationOverlayFrame
+                    if frame then
+                        Anchor:Register(SCREEN_ANCHOR_NAME, frame, {
+                            displayName = "Screen",
+                            category = "screen",
+                        })
+                        screenAnchorRegistered = true
+                    end
+                end
+            end)
         end
     end
 end

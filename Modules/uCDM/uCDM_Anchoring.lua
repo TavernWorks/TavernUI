@@ -16,7 +16,6 @@ local Anchoring = {}
 local libEditModeRegisteredViewers = {}
 
 local anchorHandles = {}
-local lastAppliedConfig = {}
 local anchorTimers = {}
 local editModeSavePending = false
 local editModeHooked = false
@@ -45,13 +44,6 @@ local function ReleaseAnchor(viewerKey)
         end
         anchorHandles[viewerKey] = nil
     end
-    lastAppliedConfig[viewerKey] = nil
-end
-
-local function ConfigMatches(viewerKey, config)
-    local last = lastAppliedConfig[viewerKey]
-    if not last then return false end
-    return Anchor:ConfigEquals(last, config)
 end
 
 local function ClearAnchorConfig(viewerKey)
@@ -72,31 +64,21 @@ local function ApplyAnchor(viewerKey)
     
     local settings = module:GetViewerSettings(viewerKey)
     local config = settings.anchorConfig
-    local handle = anchorHandles[viewerKey]
     
-    if ConfigMatches(viewerKey, config) and (not handle or not handle.released) then return end
-
     Anchoring.RegisterAnchors()
     ReleaseAnchor(viewerKey)
 
-    handle = Anchor:AnchorTo(viewer, {
+    local handle = Anchor:AnchorTo(viewer, {
         target = config.target,
         point = config.point or "CENTER",
         relativePoint = config.relativePoint or "CENTER",
         offsetX = config.offsetX or 0,
         offsetY = config.offsetY or 0,
-        deferred = false,
+        deferred = true,
     })
     
     if handle then
         anchorHandles[viewerKey] = handle
-        lastAppliedConfig[viewerKey] = {
-            target = config.target,
-            point = config.point or "CENTER",
-            relativePoint = config.relativePoint or "CENTER",
-            offsetX = config.offsetX or 0,
-            offsetY = config.offsetY or 0,
-        }
     else
         module:LogError("Failed to create anchor for " .. viewerKey)
     end
@@ -230,13 +212,6 @@ local function FlushEditModeSave()
     editModeSavePending = false
     if not module:IsEnabled() then return end
 
-    -- Clear cached config state so anchors are force-reapplied
-    -- This is necessary because Blizzard's Edit Mode may have repositioned frames,
-    -- and we need to reapply our anchors even if the config hasn't changed
-    for _, viewerKey in ipairs(GetAllViewerKeys()) do
-        lastAppliedConfig[viewerKey] = nil
-    end
-
     for _, viewerKey in ipairs(GetAllViewerKeys()) do
         -- Only apply anchor if config exists
         -- Don't release existing anchors if there's no config - that would break frames
@@ -306,9 +281,82 @@ function Anchoring.RefreshViewer(viewerKey)
     end
 end
 
+function Anchoring.ApplyAllAnchors()
+    if not module:IsEnabled() then return end
+    
+    local EditModeManagerFrame = _G.EditModeManagerFrame
+    if EditModeManagerFrame and EditModeManagerFrame:IsShown() then
+        return
+    end
+    
+    Anchoring.RegisterAnchors()
+    
+    for viewerKey in pairs(module.CONSTANTS.VIEWER_NAMES) do
+        if ShouldApplyAnchor(viewerKey) then
+            ApplyAnchor(viewerKey)
+        end
+    end
+    
+    for _, id in ipairs(module:GetCustomViewerIds()) do
+        if ShouldApplyAnchor(id) then
+            ApplyAnchor(id)
+        end
+    end
+end
+
+local function RegisterScreenAnchor()
+    local SCREEN_ANCHOR_NAME = "TavernUI.Screen"
+    if not Anchor:Exists(SCREEN_ANCHOR_NAME) then
+        local frame = _G.SpellActivationOverlayFrame
+        if frame then
+            Anchor:Register(SCREEN_ANCHOR_NAME, frame, {
+                displayName = "Screen",
+                category = "screen",
+            })
+        else
+            C_Timer.After(0.1, function()
+                if not Anchor:Exists(SCREEN_ANCHOR_NAME) then
+                    frame = _G.SpellActivationOverlayFrame
+                    if frame then
+                        Anchor:Register(SCREEN_ANCHOR_NAME, frame, {
+                            displayName = "Screen",
+                            category = "screen",
+                        })
+                    end
+                end
+            end)
+        end
+    end
+end
+
 function Anchoring.Initialize()
+    RegisterScreenAnchor()
     Anchoring.RegisterAnchors()
     HookEditMode()
+    
+    for viewerKey in pairs(module.CONSTANTS.VIEWER_NAMES) do
+        module:WatchSetting(string.format("viewers.%s.anchorConfig", viewerKey), function()
+            if module:IsEnabled() then
+                if ShouldApplyAnchor(viewerKey) then
+                    ApplyAnchorWithSizeHook(viewerKey)
+                else
+                    ReleaseAnchor(viewerKey)
+                end
+            end
+        end)
+    end
+    
+    for _, id in ipairs(module:GetCustomViewerIds()) do
+        module:WatchSetting(string.format("viewers.%s.anchorConfig", id), function()
+            if module:IsEnabled() then
+                if ShouldApplyAnchor(id) then
+                    ApplyAnchorWithSizeHook(id)
+                else
+                    ReleaseAnchor(id)
+                end
+            end
+        end)
+    end
 end
 
 --------------------------------------------------------------------------------

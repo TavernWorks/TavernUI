@@ -1274,6 +1274,71 @@ local function BuildViewerOptions(viewerKey, viewerName, orderBase)
     return args
 end
 
+local function BuildOverlaysOptions()
+    return {
+        pandemicHeader = {
+            type = "header",
+            name = L["PANDEMIC"] or "Pandemic",
+            order = 0,
+        },
+        pandemicEnabled = {
+            type = "toggle",
+            name = L["SHOW_PANDEMIC"] or "Show Pandemic",
+            desc = L["SHOW_PANDEMIC_DESC"] or "Show border color when aura is in pandemic window",
+            order = 1,
+            get = function()
+                return module:GetSetting("overlays.pandemic.enabled", true) ~= false
+            end,
+            set = function(_, value)
+                module:SetSetting("overlays.pandemic.enabled", value)
+            end,
+        },
+        pandemicBorderColor = {
+            type = "color",
+            name = L["PANDEMIC_BORDER_COLOR"] or "Border Color",
+            desc = L["PANDEMIC_BORDER_COLOR_DESC"] or "Border color when aura is in pandemic window",
+            order = 2,
+            hasAlpha = false,
+            get = function()
+                local color = module:GetSetting("overlays.pandemic.borderColor", {r = 1, g = 0, b = 0, a = 1})
+                if color and type(color) == "table" then
+                    return color.r or 1, color.g or 0, color.b or 0
+                end
+                return 1, 0, 0
+            end,
+            set = function(_, r, g, b)
+                local color = module:GetSetting("overlays.pandemic.borderColor", {r = 1, g = 0, b = 0, a = 1})
+                if type(color) ~= "table" then
+                    color = {r = 1, g = 0, b = 0, a = 1}
+                end
+                color.r = r
+                color.g = g
+                color.b = b
+                module:SetSetting("overlays.pandemic.borderColor", color)
+            end,
+        },
+        pandemicBorderWidth = {
+            type = "range",
+            name = L["PANDEMIC_BORDER_WIDTH"] or "Border Width",
+            desc = L["PANDEMIC_BORDER_WIDTH_DESC"] or "Border width in pixels when aura is in pandemic window",
+            order = 3,
+            min = 1,
+            max = 10,
+            step = 1,
+            get = function()
+                return module:GetSetting("overlays.pandemic.borderWidth", 2)
+            end,
+            set = function(_, value)
+                module:SetSetting("overlays.pandemic.borderWidth", value, {
+                    type = "number",
+                    min = 1,
+                    max = 10,
+                })
+            end,
+        },
+    }
+end
+
 local function BuildGeneralOptions()
     return {
         debugHeader = {
@@ -1356,61 +1421,6 @@ local function BuildGeneralOptions()
             end,
         },
     }
-end
-
-local VISIBILITY_OPTION_SCHEMA = {
-    { key = "visibilityDesc", type = "description", nameKey = "VISIBILITY_DESC", order = 1 },
-    { key = "visibilityCombatHeader", type = "header", nameKey = "VISIBILITY_COMBAT", order = 2 },
-    { key = "showInCombat", type = "toggle", path = "general.visibility.combat.showInCombat", nameKey = "SHOW_IN_COMBAT", order = 3 },
-    { key = "showOutOfCombat", type = "toggle", path = "general.visibility.combat.showOutOfCombat", nameKey = "SHOW_OUT_OF_COMBAT", order = 4 },
-    { key = "visibilityTargetHeader", type = "header", nameKey = "VISIBILITY_TARGET", order = 5 },
-    { key = "showWhenTargetExists", type = "toggle", path = "general.visibility.target.showWhenTargetExists", nameKey = "SHOW_WHEN_TARGET_EXISTS", order = 6 },
-    { key = "visibilityGroupHeader", type = "header", nameKey = "VISIBILITY_GROUP", order = 11 },
-    { key = "showSolo", type = "toggle", path = "general.visibility.group.showSolo", nameKey = "SHOW_WHEN_SOLO", order = 12 },
-    { key = "showParty", type = "toggle", path = "general.visibility.group.showParty", nameKey = "SHOW_WHEN_IN_PARTY", order = 13 },
-    { key = "showRaid", type = "toggle", path = "general.visibility.group.showRaid", nameKey = "SHOW_WHEN_IN_RAID", order = 14 },
-    { key = "visibilityHideHeader", type = "header", nameKey = "VISIBILITY_HIDE_WHEN", order = 15 },
-    { key = "hideWhenInVehicle", type = "toggle", path = "general.visibility.hideWhenInVehicle", nameKey = "HIDE_WHEN_IN_VEHICLE", order = 16 },
-    { key = "hideWhenMounted", type = "toggle", path = "general.visibility.hideWhenMounted", nameKey = "HIDE_WHEN_MOUNTED", order = 17 },
-    { key = "hideWhenMountedWhen", type = "select", path = "general.visibility.hideWhenMountedWhen", nameKey = "HIDE_WHEN_MOUNTED_WHEN", descKey = "HIDE_WHEN_MOUNTED_WHEN_DESC", order = 18, default = "both", values = { both = "VISIBILITY_WHEN_BOTH", grounded = "VISIBILITY_WHEN_GROUNDED", flying = "VISIBILITY_WHEN_FLYING" } },
-}
-
-local function MakeVisibilityOption(entry)
-    if entry.type == "description" then
-        return { type = "description", name = L[entry.nameKey], order = entry.order, fontSize = "small" }
-    end
-    if entry.type == "header" then
-        return { type = "header", name = L[entry.nameKey], order = entry.order }
-    end
-    local path = entry.path
-    local defaultVal = entry.default
-    local opt = {
-        type = entry.type,
-        name = L[entry.nameKey],
-        order = entry.order,
-        get = function() return module:GetSetting(path, defaultVal) end,
-        set = function(_, value)
-            module:SetSetting(path, value)
-            if module:IsEnabled() then module:RefreshAllViewers() end
-        end,
-    }
-    if entry.descKey then opt.desc = L[entry.descKey] end
-    if entry.type == "select" and entry.values then
-        local resolved = {}
-        for k, v in pairs(entry.values) do
-            resolved[k] = type(v) == "string" and L[v] or v
-        end
-        opt.values = resolved
-    end
-    return opt
-end
-
-local function BuildVisibilityOptions()
-    local result = {}
-    for _, entry in ipairs(VISIBILITY_OPTION_SCHEMA) do
-        result[entry.key] = MakeVisibilityOption(entry)
-    end
-    return result
 end
 
 local function GetActionSlotSelectValues()
@@ -1590,12 +1600,6 @@ function module:BuildOptions()
                 order = 0,
                 args = BuildGeneralOptions(),
             },
-            visibility = {
-                type = "group",
-                name = L["VISIBILITY"],
-                order = 0.5,
-                args = BuildVisibilityOptions(),
-            },
             essential = {
                 type = "group",
                 name = L["ESSENTIAL_COOLDOWNS"],
@@ -1625,6 +1629,12 @@ function module:BuildOptions()
                 name = L["MY_VIEWERS"],
                 order = 5,
                 args = {},
+            },
+            overlays = {
+                type = "group",
+                name = L["OVERLAYS"] or "Overlays",
+                order = 6,
+                args = BuildOverlaysOptions(),
             },
         },
     }

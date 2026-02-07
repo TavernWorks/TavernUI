@@ -41,13 +41,12 @@ local defaults = {
             combat = 0.3,
             initial = 0.05,
         },
-        visibility = {
-            combat = { showInCombat = true, showOutOfCombat = true },
-            target = { showWhenTargetExists = false },
-            group = { showSolo = true, showParty = true, showRaid = true },
-            hideWhenInVehicle = false,
-            hideWhenMounted = false,
-            hideWhenMountedWhen = "both",
+    },
+    overlays = {
+        pandemic = {
+            enabled = true,
+            borderColor = {r = 1, g = 0, b = 0, a = 1},
+            borderWidth = 2,
         },
     },
     viewers = {
@@ -324,22 +323,76 @@ function module:OnEnable()
         end
     end
 
-    -- Listen for UI scale changes to refresh pixel-perfect elements
     self:RegisterMessage("TavernUI_UIScaleChanged", "OnUIScaleChanged")
+    self:RegisterMessage("TavernUI_VisibilityStateChanged", "ApplyVisibility")
+    local Visibility = TavernUI.Visibility
+    if Visibility then
+        self._lastVisibilityState = Visibility:ShouldShow()
+    end
+    C_Timer.After(0, function()
+        if self:IsEnabled() then self:ApplyVisibility() end
+    end)
+end
+
+function module:ApplyVisibility()
+    if not self:IsEnabled() or not self.LayoutEngine then return end
+    for _, viewerKey in ipairs(CONSTANTS.VIEWER_KEYS) do
+        if viewerKey ~= "custom" then
+            self.LayoutEngine.ApplyVisibilityToViewer(viewerKey)
+        end
+    end
+    for _, id in ipairs(self:GetCustomViewerIds()) do
+        self.LayoutEngine.ApplyVisibilityToViewer(id)
+    end
 end
 
 function module:OnUIScaleChanged()
-    if self.LayoutEngine then
+    if not self.LayoutEngine then return end
+    local PP = TavernUI.PixelPerfect
+    if not PP then
         self:RefreshAllViewers()
+        return
+    end
+    
+    for _, viewerKey in ipairs(CONSTANTS.VIEWER_KEYS) do
+        if viewerKey ~= "custom" then
+            local viewer = self:GetViewerFrame(viewerKey)
+            if viewer then
+                PP.UpdateFrame(viewer)
+                if self.ItemRegistry then
+                    local items = self.ItemRegistry.GetItemsForViewer(viewerKey)
+                    if items then
+                        for _, item in ipairs(items) do
+                            if item.frame then
+                                PP.UpdateFrame(item.frame)
+                            end
+                        end
+                    end
+                end
+            end
+        end
+    end
+    for _, id in ipairs(self:GetCustomViewerIds()) do
+        local viewer = self:GetViewerFrame(id)
+        if viewer then
+            PP.UpdateFrame(viewer)
+            if self.ItemRegistry then
+                local items = self.ItemRegistry.GetItemsForViewer(id)
+                if items then
+                    for _, item in ipairs(items) do
+                        if item.frame then
+                            PP.UpdateFrame(item.frame)
+                        end
+                    end
+                end
+            end
+        end
     end
 end
 
 function module:OnDisable()
     self.__onEnableCalled = nil
-    if self._visibilityCallbackId and TavernUI.Visibility and TavernUI.Visibility.UnregisterCallback then
-        TavernUI.Visibility.UnregisterCallback(self._visibilityCallbackId)
-        self._visibilityCallbackId = nil
-    end
+    self._lastVisibilityState = nil
     self:UnregisterAllEvents()
     self:StopUpdateLoop()
 
@@ -398,6 +451,15 @@ end
 function module:Update()
     if not self:IsEnabled() then return end
 
+    local Visibility = TavernUI.Visibility
+    if Visibility then
+        local currentState = Visibility:ShouldShow()
+        if self._lastVisibilityState ~= currentState then
+            self._lastVisibilityState = currentState
+            self:ApplyVisibility()
+        end
+    end
+
     if self.ItemRegistry then
         for _, viewerKey in ipairs(CONSTANTS.VIEWER_KEYS) do
             if viewerKey ~= "custom" then
@@ -419,11 +481,6 @@ end
 function module:OnPlayerEnteringWorld()
     if not self:IsEnabled() then return end
     self:StartUpdateLoop()
-    if TavernUI.Visibility and TavernUI.Visibility.RegisterCallback and not self._visibilityCallbackId then
-        self._visibilityCallbackId = TavernUI.Visibility.RegisterCallback(function()
-            if self:IsEnabled() then self:RefreshAllViewers() end
-        end)
-    end
 
     C_Timer.After(0, function()
         if not self:IsEnabled() then return end
@@ -443,7 +500,20 @@ function module:OnPlayerEnteringWorld()
                 reg.CollectBlizzardItems(viewerKey)
             end
         end
+        if self.LayoutEngine and self.LayoutEngine.EnsureHooksInstalled then
+            self.LayoutEngine.EnsureHooksInstalled()
+        end
+        if self.Anchoring and self.Anchoring.ApplyAllAnchors then
+            self.Anchoring.ApplyAllAnchors()
+        end
         self:RefreshAllViewers()
+    end)
+    
+    C_Timer.After(1, function()
+        if not self:IsEnabled() then return end
+        if self.Anchoring and self.Anchoring.ApplyAllAnchors then
+            self.Anchoring.ApplyAllAnchors()
+        end
     end)
 end
 
@@ -494,18 +564,9 @@ function module:HandleEnabledChange(newValue, oldValue)
     if newValue then
         if self:IsEnabled() then
             self:StartUpdateLoop()
-            if TavernUI.Visibility and TavernUI.Visibility.RegisterCallback and not self._visibilityCallbackId then
-                self._visibilityCallbackId = TavernUI.Visibility.RegisterCallback(function()
-                    if self:IsEnabled() then self:RefreshAllViewers() end
-                end)
-            end
             self:RefreshAllViewers()
         end
     else
-        if self._visibilityCallbackId and TavernUI.Visibility and TavernUI.Visibility.UnregisterCallback then
-            TavernUI.Visibility.UnregisterCallback(self._visibilityCallbackId)
-            self._visibilityCallbackId = nil
-        end
         self:StopUpdateLoop()
         for _, viewerKey in ipairs(CONSTANTS.VIEWER_KEYS) do
             local viewer = self:GetViewerFrame(viewerKey)

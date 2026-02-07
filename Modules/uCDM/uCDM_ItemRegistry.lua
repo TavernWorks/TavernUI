@@ -133,11 +133,86 @@ function ItemRegistry.HookBlizzardViewers()
                         ItemRegistry.CollectBlizzardItems(vk)
                     end
                     module:RefreshAllViewers()
+                    ItemRegistry._hookPandemicWindow()
                 end)
                 self:UnregisterAllEvents()
             end
         end)
+    else
+        ItemRegistry._hookPandemicWindow()
     end
+end
+
+function ItemRegistry._hookPandemicWindow()
+    print("|cFF00FF00[uCDM]|r _hookPandemicWindow called")
+    
+    if not CooldownViewerItemMixin then
+        print("|cFFFF0000[uCDM]|r CooldownViewerItemMixin not found")
+        return
+    end
+    
+    print("|cFF00FF00[uCDM]|r CooldownViewerItemMixin found, checking methods...")
+    print("|cFF00FF00[uCDM]|r ShowPandemicStateFrame =", CooldownViewerItemMixin.ShowPandemicStateFrame)
+    print("|cFF00FF00[uCDM]|r HidePandemicStateFrame =", CooldownViewerItemMixin.HidePandemicStateFrame)
+    print("|cFF00FF00[uCDM]|r CheckPandemicTimeDisplay =", CooldownViewerItemMixin.CheckPandemicTimeDisplay)
+    print("|cFF00FF00[uCDM]|r IsInPandemicTime =", CooldownViewerItemMixin.IsInPandemicTime)
+    
+    if CooldownViewerItemMixin.CheckPandemicTimeDisplay then
+        hooksecurefunc(CooldownViewerItemMixin, "CheckPandemicTimeDisplay", function(self, timeNow)
+            print("|cFFFF00FF[uCDM]|r CheckPandemicTimeDisplay called, timeNow =", timeNow)
+            local inPandemic = self:IsInPandemicTime(timeNow)
+            print("|cFFFF00FF[uCDM]|r IsInPandemicTime =", inPandemic)
+            if inPandemic then
+                print("|cFFFF00FF[uCDM]|r In pandemic window, checking for PandemicIcon...")
+                print("|cFFFF00FF[uCDM]|r self.PandemicIcon =", self.PandemicIcon)
+                if self.PandemicIcon then
+                    print("|cFFFF00FF[uCDM]|r Hiding PandemicIcon")
+                    self.PandemicIcon:Hide()
+                else
+                    print("|cFFFF00FF[uCDM]|r PandemicIcon is nil, checking all regions...")
+                    for _, region in ipairs({self:GetRegions()}) do
+                        if region and region.GetName then
+                            local name = region:GetName()
+                            if name and (name:lower():find("pandemic") or name:lower():find("icon")) then
+                                print("|cFFFF00FF[uCDM]|r Found region:", name)
+                            end
+                        end
+                    end
+                end
+            end
+        end)
+    end
+    
+    if CooldownViewerItemMixin.ShowPandemicStateFrame then
+        hooksecurefunc(CooldownViewerItemMixin, "ShowPandemicStateFrame", function(self)
+            print("|cFFFF00FF[uCDM]|r ShowPandemicStateFrame called")
+            print("|cFFFF00FF[uCDM]|r self.PandemicIcon =", self.PandemicIcon)
+            if self.PandemicIcon then
+                print("|cFFFF00FF[uCDM]|r Hiding PandemicIcon")
+                self.PandemicIcon:Hide()
+            else
+                print("|cFFFF00FF[uCDM]|r PandemicIcon is nil, checking for alternatives...")
+                for k, v in pairs(self) do
+                    if type(k) == "string" and (k:lower():find("pandemic") or k:lower():find("icon")) then
+                        print("|cFFFF00FF[uCDM]|r Found:", k, "=", v)
+                    end
+                end
+            end
+        end)
+    end
+
+    if CooldownViewerItemMixin.HidePandemicStateFrame then
+        hooksecurefunc(CooldownViewerItemMixin, "HidePandemicStateFrame", function(self)
+            print("|cFFFF00FF[uCDM]|r HidePandemicStateFrame called")
+            print("|cFFFF00FF[uCDM]|r self.PandemicIcon =", self.PandemicIcon)
+            if self.PandemicIcon then
+                print("|cFFFF00FF[uCDM]|r Hiding PandemicIcon")
+                self.PandemicIcon:Hide()
+            end
+        end)
+    end
+
+    print("|cFF00FF00[uCDM]|r Pandemic window hooks installed")
 end
 
 function ItemRegistry._hookBuffViewerEvents(viewer, viewerKey)
