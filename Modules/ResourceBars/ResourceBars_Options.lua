@@ -1438,6 +1438,10 @@ local function BuildClassColoursOptions()
 end
 
 function Options:Initialize()
+    local function onVisibilitySettingChanged()
+        if module.OnVisibilityChanged then module:OnVisibilityChanged() end
+    end
+
     local args = {
         general = {
             type = "group",
@@ -1474,6 +1478,50 @@ function Options:Initialize()
                     end,
                     set = function(_, value)
                         module:SetSetting("throttleInterval", value)
+                    end,
+                },
+                visibilityHeader = {
+                    type = "header",
+                    name = L["VISIBILITY"],
+                    order = 10,
+                },
+                visibilityDesc = {
+                    type = "description",
+                    name = L["RESOURCE_BARS_VISIBILITY_DESC"],
+                    order = 11,
+                    fontSize = "small",
+                },
+                hideWhenMounted = {
+                    type = "toggle",
+                    name = L["HIDE_WHEN_MOUNTED"],
+                    order = 12,
+                    get = function()
+                        return module:GetSetting("visibility.hideWhenMounted", false)
+                    end,
+                    set = function(_, value)
+                        module:SetSetting("visibility.hideWhenMounted", value)
+                        onVisibilitySettingChanged()
+                    end,
+                },
+                hideWhenMountedWhen = {
+                    type = "select",
+                    name = L["HIDE_WHEN_MOUNTED_WHEN"],
+                    desc = L["HIDE_WHEN_MOUNTED_WHEN_DESC"],
+                    order = 13,
+                    values = {
+                        both = L["VISIBILITY_WHEN_BOTH"],
+                        grounded = L["VISIBILITY_WHEN_GROUNDED"],
+                        flying = L["VISIBILITY_WHEN_FLYING"],
+                    },
+                    get = function()
+                        return module:GetSetting("visibility.hideWhenMountedWhen", "both")
+                    end,
+                    set = function(_, value)
+                        module:SetSetting("visibility.hideWhenMountedWhen", value)
+                        onVisibilitySettingChanged()
+                    end,
+                    disabled = function()
+                        return not module:GetSetting("visibility.hideWhenMounted", false)
                     end,
                 },
             },

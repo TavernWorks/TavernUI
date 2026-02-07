@@ -398,6 +398,7 @@ L["ASSIGN_ENTRY_TO_VIEWER_DESC"] = "Assign entry to viewer"
 
 L["VISIBILITY"] = "Visibility"
 L["VISIBILITY_DESC"] = "When to show all CDM viewers. Tick the states where the bar should be visible; untick to hide in that state. Default: shown everywhere."
+L["RESOURCE_BARS_VISIBILITY_DESC"] = "Hide resource bars based on mount status. Also works for druid Travel Form."
 L["VISIBILITY_COMBAT"] = "Combat"
 L["VISIBILITY_COMBAT_DESC"] = "Show only in combat, only out of combat, or both (leave both unchecked)."
 L["SHOW_IN_COMBAT"] = "Show in combat"

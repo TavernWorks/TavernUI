@@ -64,6 +64,10 @@ local DEFAULTS_SEGMENTED = {
 local defaults = {
     enabled = true,
     throttleInterval = 0.1,
+    visibility = {
+        hideWhenMounted = false,
+        hideWhenMountedWhen = "both",
+    },
     resourceColours = {},
     classColours = {},
     resourceBarAnchorConfig = nil,
@@ -186,6 +190,13 @@ function module:OnEnable()
     self:RegisterPowerEvents()
     -- Listen for UI scale changes to refresh pixel-perfect elements
     self:RegisterMessage("TavernUI_UIScaleChanged", "OnUIScaleChanged")
+    -- Register visibility callback for mount/vehicle hiding
+    if TavernUI.Visibility and TavernUI.Visibility.RegisterCallback and not self._visibilityCallbackId then
+        self._visibilityCallbackId = TavernUI.Visibility.RegisterCallback(function()
+            if self:IsEnabled() then self:OnVisibilityChanged() end
+        end)
+    end
+    self:OnVisibilityChanged()
 end
 
 function module:OnUIScaleChanged()
@@ -195,10 +206,16 @@ end
 function module:OnDisable()
     self:UnregisterAllEvents()
     self:ClearAllBars()
+    if self._visibilityCallbackId and TavernUI.Visibility then
+        TavernUI.Visibility.UnregisterCallback(self._visibilityCallbackId)
+        self._visibilityCallbackId = nil
+    end
 end
 
 function module:OnProfileChanged()
+    self._hiddenByVisibility = nil
     self:RebuildActiveBars()
+    self:OnVisibilityChanged()
 end
 
 function module:OnPlayerEnteringWorld()
@@ -212,6 +229,44 @@ end
 function module:OnShapeshiftFormChanged()
     if UnitClassBase("player") == "DRUID" then
         self:RebuildActiveBars()
+    end
+end
+
+function module:ShouldHideByVisibility()
+    local Visibility = TavernUI and TavernUI.Visibility
+    if not Visibility then return false end
+
+    -- Check ResourceBars' own visibility config
+    local config = self:GetSetting("visibility")
+    if config and not Visibility.ShouldShow(config) then return true end
+
+    -- Also respect uCDM's mount visibility so one toggle hides everything
+    local ucdm = TavernUI:GetModule("uCDM", true)
+    if ucdm and ucdm.GetSetting then
+        local ucdmConfig = ucdm:GetSetting("general.visibility")
+        if ucdmConfig and ucdmConfig.hideWhenMounted then
+            local mountConfig = {
+                hideWhenMounted = ucdmConfig.hideWhenMounted,
+                hideWhenMountedWhen = ucdmConfig.hideWhenMountedWhen,
+            }
+            if not Visibility.ShouldShow(mountConfig) then return true end
+        end
+    end
+
+    return false
+end
+
+function module:OnVisibilityChanged()
+    if self:ShouldHideByVisibility() then
+        for _, bar in pairs(bars) do
+            if bar.Hide then bar:Hide() end
+        end
+        self._hiddenByVisibility = true
+    elseif self._hiddenByVisibility then
+        self._hiddenByVisibility = nil
+        for barId in pairs(bars) do
+            self:UpdateBar(barId)
+        end
     end
 end
 
@@ -540,6 +595,11 @@ end
 
 function module:UpdateBar(barId)
     if not bars[barId] then
+        return
+    end
+
+    if self._hiddenByVisibility then
+        bars[barId]:Hide()
         return
     end
 

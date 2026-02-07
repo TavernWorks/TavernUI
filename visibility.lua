@@ -13,6 +13,19 @@ local lastMounted, lastFlying
 local pollTimer = nil
 local POLL_INTERVAL = 0.5
 
+local playerClass
+local TRAVEL_FORM_SPELL_ID = 783
+local MOUNT_FORM_SPELL_ID = 210053
+
+local function IsInDruidTravelForm()
+    if not playerClass then
+        playerClass = select(2, UnitClass("player"))
+    end
+    if playerClass ~= "DRUID" then return false end
+    return C_UnitAuras.GetPlayerAuraBySpellID(TRAVEL_FORM_SPELL_ID) ~= nil
+        or C_UnitAuras.GetPlayerAuraBySpellID(MOUNT_FORM_SPELL_ID) ~= nil
+end
+
 local function UpdateCache()
     cache.inCombat = UnitAffectingCombat("player")
     cache.hasTarget = UnitExists("target")
@@ -24,7 +37,7 @@ local function UpdateCache()
     cache.groupRaid = IsInRaid()
     cache.instanceType = select(2, GetInstanceInfo()) or "none"
     cache.role = UnitGroupRolesAssigned("player") or "NONE"
-    cache.mounted = IsMounted()
+    cache.mounted = IsMounted() or IsInDruidTravelForm()
     cache.flying = IsFlying()
     cache.inVehicle = UnitInVehicle("player")
 end
@@ -146,10 +159,25 @@ function Visibility.Initialize()
     eventFrame:RegisterEvent("ZONE_CHANGED_NEW_AREA")
     eventFrame:RegisterEvent("GROUP_ROSTER_UPDATE")
     eventFrame:RegisterEvent("PLAYER_ENTERING_WORLD")
+    eventFrame:RegisterEvent("UPDATE_SHAPESHIFT_FORM")
     eventFrame:RegisterUnitEvent("UNIT_FLAGS", "player")
+    eventFrame:RegisterUnitEvent("UNIT_AURA", "player")
     eventFrame:SetScript("OnEvent", function(f, event, arg1)
         if event == "UNIT_ENTERED_VEHICLE" or event == "UNIT_EXITED_VEHICLE" then
             if arg1 ~= "player" then return end
+        end
+        -- UNIT_AURA fires frequently; only check mount/flying state, skip full cache update
+        if event == "UNIT_AURA" then
+            local mounted = IsMounted() or IsInDruidTravelForm()
+            local flying = IsFlying()
+            if mounted ~= cache.mounted or flying ~= cache.flying then
+                cache.mounted = mounted
+                cache.flying = flying
+                lastMounted, lastFlying = mounted, flying
+                SyncMountPoll()
+                NotifyCallbacks()
+            end
+            return
         end
         OnEvent(f, event)
     end)
