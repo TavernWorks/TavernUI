@@ -9,6 +9,7 @@ local CONSTANTS = {
     UNIT_FOCUS  = "focus",
 
     TEXT_THROTTLE = 0.1,
+    CAST_RETRY_DELAY = 0.1,
     PREVIEW_DURATION = 3.0,
     PREVIEW_ICON_ID = 136048,
 
