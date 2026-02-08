@@ -54,7 +54,12 @@ local function GetCastInfo(unit)
         end
     end
 
-    return spellName, text, texture, startTimeMS, endTimeMS, notInterruptible,
+    local safeNotInterruptible = false
+    if canaccessvalue(notInterruptible) then
+        safeNotInterruptible = notInterruptible and true or false
+    end
+
+    return spellName, text, texture, startTimeMS, endTimeMS, safeNotInterruptible,
            unitSpellID, isChanneled, channelStages, durationObj, hasSecretTiming
 end
 
@@ -101,52 +106,15 @@ local function ApplyBarColor(bar, notInterruptible)
     if not bar.statusBar then return end
 
     local settings = module:GetUnitSettings(bar.unitKey) or {}
-    local interruptibleColor = settings.notInterruptibleColor or {r = 0.7, g = 0.2, b = 0.2, a = 1}
-    local normalR, normalG, normalB, normalA = module:GetBarColor(bar.unitKey)
-
-    local canAccess = not notInterruptible or (canaccessvalue and canaccessvalue(notInterruptible))
-    if canAccess then
-        local r, g, b, a
-        if notInterruptible then
-            r, g, b, a = interruptibleColor.r, interruptibleColor.g, interruptibleColor.b, interruptibleColor.a or 1
-        else
-            r, g, b, a = normalR, normalG, normalB, normalA or 1
-        end
-        bar.statusBar:SetStatusBarColor(r, g, b, a)
-        return
+    local r, g, b, a
+    if notInterruptible then
+        local c = settings.notInterruptibleColor or {r = 0.7, g = 0.2, b = 0.2, a = 1}
+        r, g, b, a = c.r, c.g, c.b, c.a or 1
+    else
+        r, g, b, a = module:GetBarColor(bar.unitKey)
+        a = a or 1
     end
-
-    local ok = false
-    if bar.statusBar.SetStatusBarColorFromBoolean then
-        ok = pcall(bar.statusBar.SetStatusBarColorFromBoolean, bar.statusBar,
-            notInterruptible,
-            interruptibleColor.r, interruptibleColor.g, interruptibleColor.b, interruptibleColor.a or 1,
-            normalR, normalG, normalB, normalA or 1
-        )
-    end
-
-    if not ok and bar.statusBar.SetVertexColorFromBoolean then
-        ok = pcall(bar.statusBar.SetVertexColorFromBoolean, bar.statusBar,
-            notInterruptible,
-            interruptibleColor.r, interruptibleColor.g, interruptibleColor.b, interruptibleColor.a or 1,
-            normalR, normalG, normalB, normalA or 1
-        )
-    end
-
-    if not ok then
-        local statusBarTexture = bar.statusBar:GetStatusBarTexture()
-        if statusBarTexture and statusBarTexture.SetVertexColorFromBoolean then
-            ok = pcall(statusBarTexture.SetVertexColorFromBoolean, statusBarTexture,
-                notInterruptible,
-                interruptibleColor.r, interruptibleColor.g, interruptibleColor.b, interruptibleColor.a or 1,
-                normalR, normalG, normalB, normalA or 1
-            )
-        end
-    end
-
-    if not ok then
-        bar.statusBar:SetStatusBarColor(normalR, normalG, normalB, normalA or 1)
-    end
+    bar.statusBar:SetStatusBarColor(r, g, b, a)
 end
 
 Cast.ApplyBarColor = ApplyBarColor
