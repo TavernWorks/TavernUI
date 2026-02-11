@@ -536,6 +536,10 @@ end
 function LayoutEngine.ApplyVisibilityToViewer(viewerKey, deferInHookContext)
     local viewer = module:GetViewerFrame(viewerKey)
     if not viewer then return end
+    if not module:IsEnabled() then
+        viewer:Hide()
+        return
+    end
     local settings = module:GetViewerSettings(viewerKey)
     if not settings or settings.enabled == false then
         viewer:Hide()
@@ -605,6 +609,12 @@ function LayoutEngine.RefreshViewer(viewerKey, skipDebounce)
 
     local viewer = module:GetViewerFrame(viewerKey)
     if not viewer then
+        done()
+        return
+    end
+
+    if not module:IsEnabled() then
+        viewer:Hide()
         done()
         return
     end
