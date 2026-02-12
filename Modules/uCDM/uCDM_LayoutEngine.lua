@@ -625,11 +625,11 @@ local function StyleViewerCooldowns(viewerKey)
     if not viewerName then return end
     local blizzViewer = _G[viewerName]
     if not blizzViewer or not blizzViewer.GetChildren then return end
-    local applySwipe = module.CooldownTracker and module.CooldownTracker.ApplySwipeStyle
+    local ensureSwipe = module.CooldownTracker and module.CooldownTracker.EnsureSwipeStyleAndHooks
     for _, child in ipairs({ blizzViewer:GetChildren() }) do
         local cooldown = child.Cooldown or child.cooldown
-        if cooldown and applySwipe then
-            applySwipe(cooldown)
+        if cooldown and ensureSwipe then
+            ensureSwipe(cooldown)
         end
     end
 end
@@ -693,9 +693,8 @@ function LayoutEngine.RefreshViewer(viewerKey)
 
     local rows = GetActiveRows(settings, viewerKey)
     local items = (module.ItemRegistry and module.ItemRegistry.GetItemsForViewer(viewerKey)) or {}
-    local skipLayoutInCombat = inCombat and (viewerKey == "essential" or viewerKey == "utility")
 
-    if #rows > 0 and (#items > 0 or ShouldRunLayoutWithNoItems(viewerKey, settings)) and not skipLayoutInCombat then
+    if #rows > 0 and (#items > 0 or ShouldRunLayoutWithNoItems(viewerKey, settings)) then
         local rowAssignments, visibleItems = GetRowAssignmentsWithPreview(viewer, viewerKey, settings, items, rows)
         local assignedItems = {}
         for _, entry in ipairs(visibleItems) do

@@ -177,19 +177,37 @@ function ItemRegistry._hookPandemicWindow()
     end
 end
 
+local function hideProcGlow(frame)
+    if ActionButtonSpellAlertManager then
+        ActionButtonSpellAlertManager:HideAlert(frame)
+    end
+    if frame.SpellActivationAlert then
+        frame.SpellActivationAlert:Hide()
+    end
+end
+
 function ItemRegistry._hookProcGlow()
-    if not CooldownViewerCooldownItemMixin or not ActionButtonSpellAlertManager then
+    if not ActionButtonSpellAlertManager then
         return
     end
-    if CooldownViewerCooldownItemMixin.OnSpellActivationOverlayGlowShowEvent then
-        hooksecurefunc(CooldownViewerCooldownItemMixin, "OnSpellActivationOverlayGlowShowEvent", function(self)
-            ActionButtonSpellAlertManager:HideAlert(self)
-        end)
-    end
-    if CooldownViewerCooldownItemMixin.RefreshOverlayGlow then
-        hooksecurefunc(CooldownViewerCooldownItemMixin, "RefreshOverlayGlow", function(self)
-            ActionButtonSpellAlertManager:HideAlert(self)
-        end)
+    local mixins = {
+        CooldownViewerCooldownItemMixin,
+        CooldownViewerEssentialItemMixin,
+        CooldownViewerUtilityItemMixin,
+    }
+    for _, mixin in ipairs(mixins) do
+        if mixin then
+            if mixin.OnSpellActivationOverlayGlowShowEvent then
+                hooksecurefunc(mixin, "OnSpellActivationOverlayGlowShowEvent", function(self)
+                    hideProcGlow(self)
+                end)
+            end
+            if mixin.RefreshOverlayGlow then
+                hooksecurefunc(mixin, "RefreshOverlayGlow", function(self)
+                    hideProcGlow(self)
+                end)
+            end
+        end
     end
 end
 
@@ -238,11 +256,6 @@ function ItemRegistry.CollectBlizzardItems(viewerKey)
 
     local category = VIEWER_CATEGORIES[viewerKey]
     if not category then return end
-
-    local LayoutEngine = module.LayoutEngine
-    if LayoutEngine and InCombatLockdown() and (viewerKey == "essential" or viewerKey == "utility") then
-        return
-    end
 
     local cooldownIDs = nil
     if viewer.GetCooldownIDs then

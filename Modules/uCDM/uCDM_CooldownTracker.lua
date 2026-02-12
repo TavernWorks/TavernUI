@@ -87,7 +87,22 @@ local function ApplySwipeStyle(cooldown)
     if cooldown.SetDrawSwipe then cooldown:SetDrawSwipe(true) end
 end
 
+local function EnsureSwipeStyleAndHooks(cooldown)
+    if not cooldown then return end
+    ApplySwipeStyle(cooldown)
+    if not cooldown.__ucdmSwipeHooked then
+        cooldown.__ucdmSwipeHooked = true
+        if cooldown.SetCooldown then
+            hooksecurefunc(cooldown, "SetCooldown", function(self) ApplySwipeStyle(self) end)
+        end
+        if cooldown.SetCooldownFromDurationObject then
+            hooksecurefunc(cooldown, "SetCooldownFromDurationObject", function(self) ApplySwipeStyle(self) end)
+        end
+    end
+end
+
 CooldownTracker.ApplySwipeStyle = ApplySwipeStyle
+CooldownTracker.EnsureSwipeStyleAndHooks = EnsureSwipeStyleAndHooks
 
 function CooldownTracker.UpdateTrinket(slotID)
     local itemID = GetInventoryItemID("player", slotID)

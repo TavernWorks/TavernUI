@@ -201,13 +201,6 @@ function CooldownItem:applyStyle(rowConfig)
         end
     end
 
-    if self.viewerKey == "buff" and module.CooldownTracker and module.CooldownTracker.ApplySwipeStyle then
-        local cooldown = GetCooldown(frame)
-        if cooldown then
-            module.CooldownTracker.ApplySwipeStyle(cooldown)
-        end
-    end
-
     self._lastRowConfig = rowConfig
 end
 
@@ -251,19 +244,8 @@ end
 function CooldownItem:_setupCooldownStyle(frame)
     local cooldown = GetCooldown(frame)
     if not cooldown then return end
-    if cooldown.SetDrawEdge then cooldown:SetDrawEdge(false) end
-    if cooldown.SetDrawBling then cooldown:SetDrawBling(false) end
-    if cooldown.SetEdgeScale then cooldown:SetEdgeScale(0) end
-    if cooldown.SetSwipeTexture then cooldown:SetSwipeTexture(SWIPE_TEXTURE) end
-    if cooldown.SetSwipeColor then cooldown:SetSwipeColor(0, 0, 0, 0.8) end
-    if not cooldown.__ucdmSwipeHooked and module.CooldownTracker then
-        cooldown.__ucdmSwipeHooked = true
-        if cooldown.SetCooldown then
-            hooksecurefunc(cooldown, "SetCooldown", function(self) module.CooldownTracker.ApplySwipeStyle(self) end)
-        end
-        if cooldown.SetCooldownFromDurationObject then
-            hooksecurefunc(cooldown, "SetCooldownFromDurationObject", function(self) module.CooldownTracker.ApplySwipeStyle(self) end)
-        end
+    if module.CooldownTracker and module.CooldownTracker.EnsureSwipeStyleAndHooks then
+        module.CooldownTracker.EnsureSwipeStyleAndHooks(cooldown)
     end
 end
 
@@ -370,7 +352,12 @@ function CooldownItem:_stripBlizzardCruft()
     if frame.AuraType then frame.AuraType:Hide() end
     if frame.TypeIcon then frame.TypeIcon:Hide() end
     if frame.TypeOverlay then frame.TypeOverlay:Hide() end
-    
+
+    local cooldown = GetCooldown(frame)
+    if cooldown and module.CooldownTracker and module.CooldownTracker.EnsureSwipeStyleAndHooks then
+        module.CooldownTracker.EnsureSwipeStyleAndHooks(cooldown)
+    end
+
     if frame.ShowPandemicStateFrame then
         hooksecurefunc(frame, "ShowPandemicStateFrame", function(self)
             if self.PandemicIcon then self.PandemicIcon:Hide() end
@@ -385,9 +372,10 @@ function CooldownItem:_stripBlizzardCruft()
             restoreOverlayBorder(self)
         end)
     end
-    if frame.OnSpellActivationOverlayGlowShowEvent and ActionButtonSpellAlertManager then
+    if frame.OnSpellActivationOverlayGlowShowEvent then
         hooksecurefunc(frame, "OnSpellActivationOverlayGlowShowEvent", function(self)
-            ActionButtonSpellAlertManager:HideAlert(self)
+            if ActionButtonSpellAlertManager then ActionButtonSpellAlertManager:HideAlert(self) end
+            if self.SpellActivationAlert then self.SpellActivationAlert:Hide() end
             if module:GetSetting("overlays.proc.enabled", true) then
                 applyOverlayBorder(self, "proc")
             end
@@ -395,6 +383,9 @@ function CooldownItem:_stripBlizzardCruft()
     end
     if frame.OnSpellActivationOverlayGlowHideEvent then
         hooksecurefunc(frame, "OnSpellActivationOverlayGlowHideEvent", restoreOverlayBorder)
+    end
+    if frame.SpellActivationAlert then
+        frame.SpellActivationAlert:Hide()
     end
 
     local originalOnEnter = frame:GetScript("OnEnter")
