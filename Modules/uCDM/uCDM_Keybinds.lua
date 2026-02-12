@@ -3,6 +3,8 @@ local module = TavernUI:GetModule("uCDM", true)
 
 if not module then return end
 
+local issecretvalue = issecretvalue
+
 local Keybinds = {}
 
 local CONSTANTS = {
@@ -64,69 +66,94 @@ local function FormatKeybind(keybind)
     return upper
 end
 
+local function IsValidActionButton(button)
+    if not button then return false end
+    if not C_Widget.IsFrameWidget(button) then return false end
+    
+    local buttonName = button.GetName and button:GetName()
+    if not buttonName then return false end
+    
+    local hasAction = false
+    if type(button.action) == "number" and button.action > 0 then
+        hasAction = true
+    elseif button.GetAction and type(button.GetAction) == "function" then
+        local action = button:GetAction()
+        if type(action) == "number" and action > 0 then
+            hasAction = true
+        end
+    end
+    
+    return hasAction
+end
+
 local function BuildActionButtonCache()
     if actionButtonsCached then return end
 
     cachedActionButtons = {}
     local added = {}
 
-    local barPrefixes = {
-        "ActionButton",
-        "MultiBarBottomLeftButton",
-        "MultiBarBottomRightButton",
-        "MultiBarRightButton",
-        "MultiBarLeftButton",
-        "MultiBar5Button",
-        "MultiBar6Button",
-        "MultiBar7Button",
+    local knownPatterns = {
+        {prefix = "ActionButton", count = 12},
+        {prefix = "MultiBarBottomLeftButton", count = 12},
+        {prefix = "MultiBarBottomRightButton", count = 12},
+        {prefix = "MultiBarRightButton", count = 12},
+        {prefix = "MultiBarLeftButton", count = 12},
+        {prefix = "MultiBar5Button", count = 12},
+        {prefix = "MultiBar6Button", count = 12},
+        {prefix = "MultiBar7Button", count = 12},
+        {prefix = "BT4Button", count = 180},
+        {prefix = "DominosActionButton", count = 180},
     }
 
-    for _, prefix in ipairs(barPrefixes) do
-        for i = 1, 12 do
-            local button = _G[prefix .. i]
-            if button and not added[button] then
-                cachedActionButtons[#cachedActionButtons + 1] = button
-                added[button] = true
+    for _, pattern in ipairs(knownPatterns) do
+        for i = 1, pattern.count do
+            local button = _G[pattern.prefix .. i]
+            if button and C_Widget.IsFrameWidget(button) and not added[button] then
+                if IsValidActionButton(button) then
+                    cachedActionButtons[#cachedActionButtons + 1] = button
+                    added[button] = true
+                end
             end
-        end
-    end
-
-    for i = 1, 180 do
-        local button = _G["BT4Button" .. i]
-        if button and not added[button] then
-            cachedActionButtons[#cachedActionButtons + 1] = button
-            added[button] = true
-        end
-    end
-
-    for i = 1, 180 do
-        local button = _G["DominosActionButton" .. i]
-        if button and not added[button] then
-            cachedActionButtons[#cachedActionButtons + 1] = button
-            added[button] = true
         end
     end
 
     for bar = 1, 15 do
         for i = 1, 12 do
             local button = _G["ElvUI_Bar" .. bar .. "Button" .. i]
-            if button and not added[button] then
-                cachedActionButtons[#cachedActionButtons + 1] = button
-                added[button] = true
+            if button and C_Widget.IsFrameWidget(button) and not added[button] then
+                if IsValidActionButton(button) then
+                    cachedActionButtons[#cachedActionButtons + 1] = button
+                    added[button] = true
+                end
             end
         end
     end
 
-    for globalName, frame in pairs(_G) do
-        if type(globalName) == "string" and type(frame) == "table" and not added[frame] then
-            local ok, hasGetObjectType = pcall(function() return type(frame.GetObjectType) == "function" end)
-            if ok and hasGetObjectType then
-                local ok2, hasAction = pcall(function()
-                    return frame.action or (frame.GetAction and type(frame.GetAction) == "function")
-                end)
-                if ok2 and hasAction and globalName:match("Button%d+$") then
-                    cachedActionButtons[#cachedActionButtons + 1] = frame
-                    added[frame] = true
+    if ElvUI then
+        local AB = ElvUI:GetModule('ActionBars', true)
+        if AB and AB.handledBars then
+            for _, bar in pairs(AB.handledBars) do
+                if bar and bar.buttons then
+                    for _, button in ipairs(bar.buttons) do
+                        if button and C_Widget.IsFrameWidget(button) and not added[button] then
+                            if IsValidActionButton(button) then
+                                cachedActionButtons[#cachedActionButtons + 1] = button
+                                added[button] = true
+                            end
+                        end
+                    end
+                end
+            end
+        end
+
+        local LAB = ElvUI.Libs and ElvUI.Libs.LAB
+        if LAB and LAB.actionButtons then
+            for button in pairs(LAB.actionButtons) do
+                if button and C_Widget.IsFrameWidget(button) and not added[button] then
+                    if IsValidActionButton(button) then
+                        cachedActionButtons[#cachedActionButtons + 1] = button
+                        added[button] = true
+                    end
                 end
             end
         end
@@ -136,13 +163,15 @@ local function BuildActionButtonCache()
 end
 
 local function GetActionSlot(button)
-    if not button then return nil end
+    if not button or not C_Widget.IsFrameWidget(button) then return nil end
 
     local action
     local buttonName = button.GetName and button:GetName()
 
     if buttonName and buttonName:match("^BT4Button") then
-        action = button._state_action
+        if type(button._state_action) == "number" and button._state_action > 0 then
+            action = button._state_action
+        end
     end
 
     if not action or action == 0 then
@@ -151,14 +180,10 @@ local function GetActionSlot(button)
         end
     end
 
-    if (not action or action == 0) and button.GetAction then
-        local ok, r1, r2 = pcall(button.GetAction, button)
-        if ok then
-            if type(r1) == "number" and r1 > 0 then
-                action = r1
-            elseif type(r2) == "number" and r2 > 0 then
-                action = r2
-            end
+    if (not action or action == 0) and button.GetAction and type(button.GetAction) == "function" then
+        action = button:GetAction()
+        if type(action) ~= "number" or action <= 0 then
+            action = nil
         end
     end
 
@@ -201,7 +226,7 @@ local function GetKeybindFromActionSlot(slot)
 end
 
 local function GetKeybindFromActionButton(button)
-    if not button then return nil end
+    if not button or not C_Widget.IsFrameWidget(button) then return nil end
 
     local action = GetActionSlot(button)
     if action then
@@ -209,25 +234,29 @@ local function GetKeybindFromActionButton(button)
         if keybind then return keybind end
     end
 
-    local buttonName = button:GetName()
+    local buttonName = button.GetName and button:GetName()
     if buttonName then
         local key = GetBindingKey("CLICK " .. buttonName .. ":LeftButton")
         if key then return FormatKeybind(key) end
     end
 
-    local hotkeyRegions = {button.HotKey, button.hotKey}
-    for _, hotkey in ipairs(hotkeyRegions) do
-        if hotkey then
-            local ok, text = pcall(function() return hotkey:GetText() end)
-            if ok and text and text ~= "" and text ~= RANGE_INDICATOR then
-                return FormatKeybind(text)
-            end
+    if button.HotKey and C_Widget.IsWidget(button.HotKey) then
+        local text = button.HotKey.GetText and button.HotKey:GetText()
+        if text and text ~= "" and text ~= RANGE_INDICATOR then
+            return FormatKeybind(text)
         end
     end
 
-    if button.GetHotkey then
-        local ok, hotkey = pcall(function() return button:GetHotkey() end)
-        if ok and hotkey and hotkey ~= "" then
+    if button.hotKey and C_Widget.IsWidget(button.hotKey) then
+        local text = button.hotKey.GetText and button.hotKey:GetText()
+        if text and text ~= "" and text ~= RANGE_INDICATOR then
+            return FormatKeybind(text)
+        end
+    end
+
+    if button.GetHotkey and type(button.GetHotkey) == "function" then
+        local hotkey = button:GetHotkey()
+        if hotkey and hotkey ~= "" then
             return FormatKeybind(hotkey)
         end
     end
@@ -313,9 +342,8 @@ local function ProcessActionButton(button)
     local action = GetActionSlot(button)
     if not action then return end
 
-    local ok, actionType, id = pcall(GetActionInfo, action)
-
-    if not ok or not actionType then return end
+    local actionType, id = GetActionInfo(action)
+    if not actionType then return end
 
     local keybind = GetKeybindFromActionButton(button)
     if not keybind then
@@ -357,12 +385,16 @@ local function RebuildCache()
     itemToKeybind = {}
 
     for _, button in ipairs(cachedActionButtons) do
-        pcall(ProcessActionButton, button)
+        ProcessActionButton(button)
     end
 end
 
 function Keybinds.GetSpellKeybind(spellID, visited)
     if not spellID then return nil end
+
+    if issecretvalue and issecretvalue(spellID) then
+        return nil
+    end
 
     visited = visited or {}
     if visited[spellID] then return nil end
@@ -428,7 +460,7 @@ function Keybinds.UpdateItem(item)
 
     if not keybind and item.source == "blizzard" then
         local frame = item.frame
-        pcall(function()
+        if C_Widget.IsFrameWidget(frame) then
             local spellID = frame.GetSpellID and frame:GetSpellID() or frame.spellID
             local itemID = frame.GetItemID and frame:GetItemID() or frame.itemID
             local slotID = frame.GetSlotID and frame:GetSlotID() or frame.slotID
@@ -448,7 +480,7 @@ function Keybinds.UpdateItem(item)
             if slotID and not keybind then
                 keybind = Keybinds.GetTrinketKeybind(slotID)
             end
-        end)
+        end
     end
 
     local settings = module:GetViewerSettings(item.viewerKey)
@@ -485,7 +517,6 @@ function Keybinds.Initialize()
     eventFrame:RegisterEvent("ACTIONBAR_SLOT_CHANGED")
     eventFrame:RegisterEvent("UPDATE_BINDINGS")
     eventFrame:RegisterEvent("PLAYER_ENTERING_WORLD")
-    eventFrame:RegisterEvent("SPELLS_CHANGED")
     eventFrame:RegisterEvent("UPDATE_MACROS")
 
     eventFrame:SetScript("OnEvent", function(self, event)
@@ -500,7 +531,22 @@ function Keybinds.Initialize()
             return
         end
 
-        ThrottledRebuild()
+        if event == "UPDATE_BINDINGS" then
+            ThrottledRebuild()
+            return
+        end
+
+        if event == "UPDATE_MACROS" then
+            ThrottledRebuild()
+            return
+        end
+
+        if event == "ACTIONBAR_SLOT_CHANGED" then
+            if not InCombatLockdown() then
+                ThrottledRebuild()
+            end
+            return
+        end
     end)
 
     if IsLoggedIn() then

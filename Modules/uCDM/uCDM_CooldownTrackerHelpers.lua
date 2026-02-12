@@ -73,7 +73,8 @@ local function GetSpellStackAndChargeInfo(spellID, chargesCache, auraSpellID)
         chargesCache[spellID] = true
         chargeDuration = C_Spell.GetSpellChargeDuration(spellID)
     else
-        hasCharges = chargesCache[spellID] or false
+        chargesCache[spellID] = false
+        hasCharges = false
     end
 
     return stacks, charges, hasCharges, chargeDuration, buffRemaining, targetDebuffRemaining
@@ -132,14 +133,14 @@ local function GetStackDisplay(itemCount, itemCharges, spellCharges, buffStacks,
         -- Prefer spell charges over item charges when they match or item charges is nil
         local displayCharges = (itemCharges == itemCount or not itemCharges) and spellCharges or itemCharges
         if displayCharges then return displayCharges end
-        if buffStacks and buffStacks > 0 then return buffStacks end
+        if buffStacks and buffStacks > 1 then return buffStacks end
         if itemCount > 1 then return itemCount end
         return nil
     end
 
     -- Spell context
     if hasCharges and charges then return charges end
-    if buffStacks and buffStacks > 0 then return buffStacks end
+    if buffStacks and buffStacks > 1 then return buffStacks end
     return nil
 end
 

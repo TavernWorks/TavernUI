@@ -61,6 +61,14 @@ local function ProviderPrimaryPower()
     }
 end
 
+local function IndexInTable(t, value)
+    if not t then return false end
+    for _, v in ipairs(t) do
+        if v == value then return true end
+    end
+    return false
+end
+
 local function ProviderComboPoints()
     if not module.Data:IsResourceRelevant("COMBO_POINTS", select(3, UnitClass("player")), GetSpecialization(), GetShapeshiftForm()) then
         return nil
@@ -73,9 +81,19 @@ local function ProviderComboPoints()
         return nil
     end
     
+    local chargedPowerPoints = GetUnitChargedPowerPoints and GetUnitChargedPowerPoints("player") or nil
+    local segments = {}
+    for i = 1, max do
+        segments[i] = {
+            ready = (i <= current),
+            charged = chargedPowerPoints and IndexInTable(chargedPowerPoints, i) or false,
+        }
+    end
+    
     return {
         current = current,
         max = max,
+        segments = segments,
     }
 end
 

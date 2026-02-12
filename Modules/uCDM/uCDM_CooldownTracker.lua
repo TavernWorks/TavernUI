@@ -20,6 +20,30 @@ local function GetCount(frame)
     return frame and (frame.Count or frame.count)
 end
 
+local function SetStackDisplayOnFrame(frame, stackDisplay)
+    local countText = GetCount(frame)
+    if countText then
+        if stackDisplay then
+            countText:SetText(stackDisplay)
+            countText:Show()
+        else
+            countText:Hide()
+        end
+    end
+    local chargeFrame = frame.ChargeCount
+    if chargeFrame then
+        local fs = chargeFrame.Current or chargeFrame.Count or chargeFrame.count
+        if fs then
+            if stackDisplay then
+                fs:SetText(stackDisplay)
+                fs:Show()
+            else
+                fs:Hide()
+            end
+        end
+    end
+end
+
 CooldownTracker._hasChargesCache = {}
 
 -- Curve-based cooldown detection for Midnight compatibility
@@ -51,12 +75,15 @@ local function EvaluateCooldownDesaturation(durationObj)
     return val  -- Can be a secret value - that's fine for SetDesaturation
 end
 
+local BLIZZARD_SWIPE_TEXTURE = "Interface\\HUD\\UI-HUD-CoolDownManager-Icon-Swipe"
+
 local function ApplySwipeStyle(cooldown)
     if not cooldown then return end
     if cooldown.SetDrawEdge then cooldown:SetDrawEdge(false) end
     if cooldown.SetDrawBling then cooldown:SetDrawBling(false) end
-    if cooldown.SetSwipeTexture then cooldown:SetSwipeTexture("Interface\\Buttons\\WHITE8X8") end
-    if cooldown.SetSwipeColor then cooldown:SetSwipeColor(0, 0, 0, 0.8) end
+    if cooldown.SetSwipeTexture then cooldown:SetSwipeTexture(BLIZZARD_SWIPE_TEXTURE) end
+    if cooldown.SetSwipeColor then cooldown:SetSwipeColor(1, 1, 1, 1) end
+    if cooldown.SetDrawSwipe then cooldown:SetDrawSwipe(true) end
 end
 
 CooldownTracker.ApplySwipeStyle = ApplySwipeStyle
@@ -165,8 +192,7 @@ function CooldownTracker.UpdateOverride(entry)
         icon:SetDesaturation(desaturation)
         icon:SetVertexColor(1.0, 1.0, 1.0)
     end
-    local countText = GetCount(frame)
-    if countText then countText:Hide() end
+    SetStackDisplayOnFrame(frame, nil)
     return data
 end
 
@@ -278,15 +304,7 @@ function CooldownTracker.UpdateEntry(entry)
         end
     end
 
-    local countText = GetCount(frame)
-    if countText then
-        if data.stackDisplay then
-            countText:SetText(data.stackDisplay)
-            countText:Show()
-        else
-            countText:Hide()
-        end
-    end
+    SetStackDisplayOnFrame(frame, data.stackDisplay)
 
     return data
 end

@@ -13,6 +13,8 @@ local CONSTANTS = {
     TEXTURE_SOURCE_SIZE = 64,      -- Standard WoW icon texture size
 }
 
+local BLIZZARD_SWIPE_TEXTURE = "Interface\\HUD\\UI-HUD-CoolDownManager-Icon-Swipe"
+
 -- High frame level ensures keybind text renders above cooldown swipe
 local KEYBIND_OVERLAY_LEVEL = 500
 local TEXT_OVERLAY_LEVEL = 600
@@ -180,7 +182,7 @@ function CooldownItem:applyStyle(rowConfig)
 
     self:_applyTexCoord(rowConfig)
     self:_applyIconStyle(rowConfig)
-    self:_applyBorder(rowConfig.iconBorderSize, rowConfig.iconBorderColor)
+    self:_applyBorder(rowConfig.iconBorderSize, rowConfig.iconBorderColor, rowConfig.iconStyle)
     self:_applyTextStyle(rowConfig)
     self:_normalizeIconTexture()
     self:_normalizeCooldown()
@@ -197,7 +199,14 @@ function CooldownItem:applyStyle(rowConfig)
             end
         end
     end
-    
+
+    if self.viewerKey == "buff" and module.CooldownTracker and module.CooldownTracker.ApplySwipeStyle then
+        local cooldown = GetCooldown(frame)
+        if cooldown then
+            module.CooldownTracker.ApplySwipeStyle(cooldown)
+        end
+    end
+
     self._lastRowConfig = rowConfig
 end
 
@@ -243,8 +252,8 @@ function CooldownItem:_setupCooldownStyle(frame)
     if not cooldown then return end
     if cooldown.SetDrawEdge then cooldown:SetDrawEdge(false) end
     if cooldown.SetDrawBling then cooldown:SetDrawBling(false) end
-    if cooldown.SetSwipeTexture then cooldown:SetSwipeTexture("Interface\\Buttons\\WHITE8X8") end
-    if cooldown.SetSwipeColor then cooldown:SetSwipeColor(0, 0, 0, 0.8) end
+    if cooldown.SetSwipeTexture then cooldown:SetSwipeTexture(BLIZZARD_SWIPE_TEXTURE) end
+    if cooldown.SetSwipeColor then cooldown:SetSwipeColor(1, 1, 1, 1) end
     if not cooldown.__ucdmSwipeHooked and module.CooldownTracker then
         cooldown.__ucdmSwipeHooked = true
         if cooldown.SetCooldown then
@@ -433,7 +442,7 @@ function CooldownItem:_applyIconStyle(rowConfig)
     local iconTex = GetIcon(frame)
     if not iconTex then return end
 
-    local style = rowConfig.iconStyle or "blizzard"
+    local style = rowConfig.iconStyle or "square"
 
     if iconTex.GetMaskTexture and iconTex.RemoveMaskTexture then
         for i = 1, CONSTANTS.MAX_MASK_TEXTURES do
@@ -456,21 +465,15 @@ function CooldownItem:_applyIconStyle(rowConfig)
     end
 end
 
-function CooldownItem:_applyBorder(borderSize, borderColor)
+local BLIZZARD_ICON_OVERLAY_ATLAS = "UI-HUD-CoolDownManager-IconOverlay"
+
+function CooldownItem:_applyBorder(borderSize, borderColor, iconStyle)
     local frame = self.frame
     if not frame then return end
 
     borderSize = borderSize or 0
-
-    local iconBorderSize = borderSize
-    if not iconBorderSize or iconBorderSize <= 0 then
-        if frame._ucdmBorders then
-            for _, border in ipairs(frame._ucdmBorders) do
-                border:Hide()
-            end
-        end
-        return
-    end
+    iconStyle = iconStyle or "square"
+    local useRounded = (iconStyle == "blizzard") and borderSize and borderSize > 0
 
     local borderAnchor = frame
     local cooldown = GetCooldown(frame)
@@ -520,11 +523,46 @@ function CooldownItem:_applyBorder(borderSize, borderColor)
         frame._ucdmBorderOverlay:SetFrameLevel(baseLevel + 1)
     end
 
+    if not frame._ucdmRoundedBorder and frame._ucdmBorderOverlay then
+        local tex = frame._ucdmBorderOverlay:CreateTexture(nil, "OVERLAY")
+        tex:SetAllPoints(frame)
+        if tex.SetAtlas then
+            tex:SetAtlas(BLIZZARD_ICON_OVERLAY_ATLAS)
+        end
+        frame._ucdmRoundedBorder = tex
+    end
+
+    local bc = borderColor or { r = 0, g = 0, b = 0, a = 1 }
+    frame._ucdmOriginalBorderColor = { r = bc.r, g = bc.g, b = bc.b, a = bc.a }
+    frame._ucdmOriginalBorderWidth = borderSize
+
+    if borderSize <= 0 then
+        if frame._ucdmRoundedBorder then
+            frame._ucdmRoundedBorder:Hide()
+        end
+        for _, border in ipairs(frame._ucdmBorders) do
+            border:Hide()
+        end
+        return
+    end
+
+    if useRounded and frame._ucdmRoundedBorder then
+        frame._ucdmRoundedBorder:SetVertexColor(bc.r, bc.g, bc.b, bc.a)
+        frame._ucdmRoundedBorder:Show()
+        for _, border in ipairs(frame._ucdmBorders) do
+            border:Hide()
+        end
+        return
+    end
+
+    if frame._ucdmRoundedBorder then
+        frame._ucdmRoundedBorder:Hide()
+    end
+
     local top, bottom, left, right = unpack(frame._ucdmBorders)
     if not (top and bottom and left and right) then return end
 
-    local pixelSize = PP.Scale(iconBorderSize, frame, 0)
-
+    local pixelSize = PP.Scale(borderSize, frame, 0)
     if pixelSize <= 0 then
         for _, border in ipairs(frame._ucdmBorders) do
             border:Hide()
@@ -536,25 +574,24 @@ function CooldownItem:_applyBorder(borderSize, borderColor)
     bottom:SetHeight(pixelSize)
     left:SetWidth(pixelSize)
     right:SetWidth(pixelSize)
-
-    frame._ucdmOriginalBorderWidth = iconBorderSize
-
-    local bc = borderColor or { r = 0, g = 0, b = 0, a = 1 }
-    frame._ucdmOriginalBorderColor = { r = bc.r, g = bc.g, b = bc.b, a = bc.a }
-    local shouldShow = iconBorderSize > 0
     for _, border in ipairs(frame._ucdmBorders) do
         border:SetColorTexture(bc.r, bc.g, bc.b, bc.a)
-        border:SetShown(shouldShow)
+        border:Show()
     end
 end
 
 function CooldownItem:_setBorderColor(r, g, b, a)
     local frame = self.frame
-    if not frame or not frame._ucdmBorders then return end
-    
+    if not frame then return end
+
     a = a or (frame._ucdmOriginalBorderColor and frame._ucdmOriginalBorderColor.a) or 1
-    for _, border in ipairs(frame._ucdmBorders) do
-        border:SetColorTexture(r, g, b, a)
+    if frame._ucdmRoundedBorder and frame._ucdmRoundedBorder:IsShown() then
+        frame._ucdmRoundedBorder:SetVertexColor(r, g, b, a)
+    end
+    if frame._ucdmBorders then
+        for _, border in ipairs(frame._ucdmBorders) do
+            border:SetColorTexture(r, g, b, a)
+        end
     end
 end
 
@@ -569,17 +606,20 @@ end
 function CooldownItem:_setBorderWidth(width)
     local frame = self.frame
     if not frame or not frame._ucdmBorders then return end
-    
+    if frame._ucdmRoundedBorder and frame._ucdmRoundedBorder:IsShown() then
+        return
+    end
+
     if not frame._ucdmOriginalBorderWidth then
         local top = frame._ucdmBorders[1]
         if top then
             frame._ucdmOriginalBorderWidth = top:GetHeight()
         end
     end
-    
+
     local PP = TavernUI.PixelPerfect
     local pixelSize = PP and PP.Scale(width, frame, 0) or width
-    
+
     local top, bottom, left, right = unpack(frame._ucdmBorders)
     if top then top:SetHeight(pixelSize) end
     if bottom then bottom:SetHeight(pixelSize) end
@@ -629,6 +669,7 @@ function CooldownItem:_applyDurationTextStyle(textOverlay, scaleRef, config)
     local point = config.point
     local offsetX = config.offsetX
     local offsetY = config.offsetY
+    local viewerSettings = self.viewerKey and module:GetViewerSettings(self.viewerKey) or nil
 
     cooldown._ucdmDurationTexts = cooldown._ucdmDurationTexts or {}
 
@@ -638,6 +679,7 @@ function CooldownItem:_applyDurationTextStyle(textOverlay, scaleRef, config)
         TavernUI:ApplyFont(cooldown.text, scaleRef, size)
         cooldown.text:ClearAllPoints()
         cooldown.text:SetPoint(point, self.frame, point, offsetX, offsetY)
+        if viewerSettings then module:ApplyTextColor(cooldown.text, viewerSettings, "durationTextColor") end
         cooldown._ucdmDurationTexts[cooldown.text] = true
     end
 
@@ -648,6 +690,7 @@ function CooldownItem:_applyDurationTextStyle(textOverlay, scaleRef, config)
             TavernUI:ApplyFont(region, scaleRef, size)
             region:ClearAllPoints()
             region:SetPoint(point, self.frame, point, offsetX, offsetY)
+            if viewerSettings then module:ApplyTextColor(region, viewerSettings, "durationTextColor") end
             cooldown._ucdmDurationTexts[region] = true
         end
     end
@@ -668,6 +711,7 @@ function CooldownItem:_applyStackTextStyle(textOverlay, scaleRef, config)
     local point = config.point
     local offsetX = config.offsetX
     local offsetY = config.offsetY
+    local viewerSettings = self.viewerKey and module:GetViewerSettings(self.viewerKey) or nil
 
     local chargeFrame = frame.ChargeCount
     if chargeFrame then
@@ -678,6 +722,7 @@ function CooldownItem:_applyStackTextStyle(textOverlay, scaleRef, config)
             TavernUI:ApplyFont(fs, scaleRef, size)
             fs:ClearAllPoints()
             fs:SetPoint(point, frame, point, offsetX, offsetY)
+            if viewerSettings then module:ApplyTextColor(fs, viewerSettings, "stackTextColor") end
         end
     end
 
@@ -688,6 +733,7 @@ function CooldownItem:_applyStackTextStyle(textOverlay, scaleRef, config)
         TavernUI:ApplyFont(countText, scaleRef, size)
         countText:ClearAllPoints()
         countText:SetPoint(point, frame, point, offsetX, offsetY)
+        if viewerSettings then module:ApplyTextColor(countText, viewerSettings, "stackTextColor") end
     end
 
     local applicationsFrame = frame.Applications or frame.applications
@@ -702,6 +748,7 @@ function CooldownItem:_applyStackTextStyle(textOverlay, scaleRef, config)
             TavernUI:ApplyFont(applicationsText, scaleRef, size)
             applicationsText:ClearAllPoints()
             applicationsText:SetPoint(point, frame, point, offsetX, offsetY)
+            if viewerSettings then module:ApplyTextColor(applicationsText, viewerSettings, "stackTextColor") end
         end
     end
 end
@@ -759,8 +806,6 @@ function CooldownItem:_normalizeIconTexture()
         if mask.SetSnapToPixelGrid then mask:SetSnapToPixelGrid(true) end
     end
 
-    -- Normalize all mask textures (including IconMask from custom frames)
-    normalizeMask(frame.IconMask)
     normalizeMask(frame.IconMaskBlizzard)
     normalizeMask(frame.IconMaskSquare)
 end
@@ -771,8 +816,8 @@ function CooldownItem:_normalizeCooldown()
 
     cooldown:ClearAllPoints()
     cooldown:SetAllPoints(self.frame)
-    cooldown:SetSwipeTexture("Interface\\Buttons\\WHITE8X8")
-    cooldown:SetSwipeColor(0, 0, 0, 0.8)
+    cooldown:SetSwipeTexture(BLIZZARD_SWIPE_TEXTURE)
+    cooldown:SetSwipeColor(1, 1, 1, 1)
 
     -- Apply pixel-perfect settings to cooldown frame
     if cooldown.SetSnapToPixelGrid then cooldown:SetSnapToPixelGrid(true) end
@@ -818,9 +863,8 @@ function CooldownItem:setKeybind(keybind, settings)
     local pxY = PP.Scale(offsetY, frame, 1)
 
     if keybind then
-        local color = settings.keybindColor or {r = 1, g = 1, b = 1, a = 1}
         keybindText:SetText(keybind)
-        keybindText:SetTextColor(color.r, color.g, color.b, color.a)
+        module:ApplyTextColor(keybindText, settings, "keybindColor")
         keybindText:ClearAllPoints()
         keybindText:SetPoint(point, overlay, point, pxX, pxY)
         keybindText:Show()

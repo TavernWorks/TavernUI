@@ -32,6 +32,45 @@ local CONSTANTS = {
 
 module.CONSTANTS = CONSTANTS
 
+local DEFAULT_TEXT_COLOR = {r = 1, g = 1, b = 1, a = 1}
+module.DEFAULT_TEXT_COLOR = DEFAULT_TEXT_COLOR
+
+function module:GetTextColor(settings, key, default)
+    local color
+    if settings and key then
+        color = settings[key]
+    elseif type(settings) == "table" and not key then
+        color = settings
+    end
+
+    if not color then
+        color = default or DEFAULT_TEXT_COLOR
+    end
+
+    if type(color) ~= "table" then
+        return DEFAULT_TEXT_COLOR.r, DEFAULT_TEXT_COLOR.g, DEFAULT_TEXT_COLOR.b, DEFAULT_TEXT_COLOR.a
+    end
+
+    local r = color.r or DEFAULT_TEXT_COLOR.r
+    local g = color.g or DEFAULT_TEXT_COLOR.g
+    local b = color.b or DEFAULT_TEXT_COLOR.b
+    local a = color.a
+    if a == nil then
+        a = DEFAULT_TEXT_COLOR.a
+    end
+
+    return r, g, b, a
+end
+
+function module:ApplyTextColor(fontString, settings, key, default)
+    if not fontString or not fontString.SetTextColor then
+        return
+    end
+
+    local r, g, b, a = self:GetTextColor(settings, key, default)
+    fontString:SetTextColor(r, g, b, a)
+end
+
 local defaults = {
     enabled = true,
     general = {
@@ -68,6 +107,8 @@ local defaults = {
             keybindOffsetX = 2,
             keybindOffsetY = -2,
             keybindColor = {r = 1, g = 1, b = 1, a = 1},
+            durationTextColor = {r = 1, g = 1, b = 1, a = 1},
+            stackTextColor = {r = 1, g = 1, b = 1, a = 1},
             disableTooltips = false,
             rows = {
                 {
@@ -116,6 +157,8 @@ local defaults = {
             keybindOffsetX = 2,
             keybindOffsetY = -2,
             keybindColor = {r = 1, g = 1, b = 1, a = 1},
+            durationTextColor = {r = 1, g = 1, b = 1, a = 1},
+            stackTextColor = {r = 1, g = 1, b = 1, a = 1},
             disableTooltips = false,
             rows = {
                 {
@@ -161,6 +204,8 @@ local defaults = {
             keybindOffsetX = 2,
             keybindOffsetY = -2,
             keybindColor = {r = 1, g = 1, b = 1, a = 1},
+            durationTextColor = {r = 1, g = 1, b = 1, a = 1},
+            stackTextColor = {r = 1, g = 1, b = 1, a = 1},
             disableTooltips = false,
             rows = {
                 {
@@ -198,6 +243,8 @@ local defaults = {
             keybindOffsetX = 2,
             keybindOffsetY = -2,
             keybindColor = {r = 1, g = 1, b = 1, a = 1},
+            durationTextColor = {r = 1, g = 1, b = 1, a = 1},
+            stackTextColor = {r = 1, g = 1, b = 1, a = 1},
             disableTooltips = false,
             rows = {
                 {
@@ -252,6 +299,8 @@ local DEFAULT_CUSTOM_VIEWER_SETTINGS = {
     keybindOffsetX = 2,
     keybindOffsetY = -2,
     keybindColor = {r = 1, g = 1, b = 1, a = 1},
+    durationTextColor = {r = 1, g = 1, b = 1, a = 1},
+    stackTextColor = {r = 1, g = 1, b = 1, a = 1},
     disableTooltips = false,
     rows = {
         {
@@ -297,6 +346,7 @@ function module:OnInitialize()
     self:RegisterEvent("PLAYER_EQUIPMENT_CHANGED", "OnEquipmentChanged")
     self:RegisterEvent("UPDATE_BINDINGS", "OnBindingsUpdate")
     self:RegisterEvent("PLAYER_ENTERING_WORLD", "OnPlayerEnteringWorld")
+    self:RegisterEvent("PLAYER_REGEN_ENABLED", "OnCombatEnded")
 
     -- Watch for setting changes
     self:WatchSetting("enabled", function(newValue, oldValue)
@@ -515,6 +565,22 @@ function module:OnPlayerEnteringWorld()
             self.Anchoring.ApplyAllAnchors()
         end
     end)
+end
+
+function module:OnCombatEnded()
+    if not self:IsEnabled() then return end
+    local LayoutEngine = self.LayoutEngine
+    local ItemRegistry = self.ItemRegistry
+    for _, viewerKey in ipairs(self.CONSTANTS.VIEWER_KEYS) do
+        if LayoutEngine and LayoutEngine.IsProtectedViewer and LayoutEngine.IsProtectedViewer(viewerKey) then
+            if ItemRegistry and ItemRegistry.CollectBlizzardItems then
+                ItemRegistry.CollectBlizzardItems(viewerKey)
+            end
+        end
+        if LayoutEngine and LayoutEngine.RefreshViewer then
+            LayoutEngine.RefreshViewer(viewerKey)
+        end
+    end
 end
 
 function module:OnEquipmentChanged()

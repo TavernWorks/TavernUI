@@ -61,10 +61,13 @@ local DEFAULTS_SEGMENTED = {
     segmentBackground = { enabled = true, texture = nil, color = { r = 0, g = 0, b = 0, a = 0.5 } },
 }
 
+local SUPERCHARGER_DEFAULT_COLOR = { r = 0.2, g = 0.6, b = 1.0, a = 1.0 }
+
 local defaults = {
     enabled = true,
     throttleInterval = 0.1,
-    resourceColours = {},
+    useSuperchargerColorOnPrimaryPower = false,
+    resourceColours = { SUPERCHARGER = { r = 0.2, g = 0.6, b = 1.0, a = 1.0 } },
     classColours = {},
     resourceBarAnchorConfig = nil,
     specialResourceAnchorConfig = nil,
@@ -440,6 +443,10 @@ end
 
 function module:GetEffectiveResourceColor(barId, resColours)
     resColours = resColours or self:GetSetting("resourceColours", {}) or {}
+    if barId == "SUPERCHARGER" then
+        local c = resColours.SUPERCHARGER
+        return (type(c) == "table" and (c.r or c.g or c.b) and c) or SUPERCHARGER_DEFAULT_COLOR
+    end
     if barId == CONSTANTS.BAR_ID_PRIMARY_POWER then
         local powerType = UnitPowerType("player")
         local ptColours = resColours.powerTypes and resColours.powerTypes[powerType]
@@ -540,6 +547,8 @@ function module:OnUnitPowerPointCharge(event, unit, powerType)
     
     if powerType == Enum.PowerType.Essence then
         self:UpdateBars({"ESSENCE"})
+    elseif powerType == Enum.PowerType.ComboPoints then
+        self:UpdateBars({"COMBO_POINTS"})
     end
 end
 

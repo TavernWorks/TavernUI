@@ -1,4 +1,4 @@
-## Interface: 120000
+## Interface: 120001, 120000
 ## Title: |cff00ff00TavernUI|r
 ## Notes: A modern UI addon for World of Warcraft
 ## Author: Mondo, LiQiuDgg
