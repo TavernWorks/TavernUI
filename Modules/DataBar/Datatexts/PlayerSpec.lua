@@ -28,11 +28,10 @@ local function GetActiveLoadoutInfo()
 end
 
 local function GetAllLoadouts(specID)
-    local TLM = GetTLM()
-    if TLM then
-        return TLM.GlobalAPI:GetLoadouts(specID) or {}
-    end
     local loadouts = {}
+    local seen = {}
+
+    -- Native Blizzard loadouts first (authoritative source)
     local builds = C_ClassTalents.GetConfigIDsBySpecID(specID)
     if builds then
         for _, configID in ipairs(builds) do
@@ -44,17 +43,34 @@ local function GetAllLoadouts(specID)
                     displayName = configInfo.name,
                     isBlizzardLoadout = true,
                 })
+                seen[configID] = true
             end
         end
     end
+
+    -- Append TLM custom loadouts (non-Blizzard only, avoid duplicates)
+    local TLM = GetTLM()
+    if TLM then
+        local tlm_loadouts = TLM.GlobalAPI:GetLoadouts(specID) or {}
+        for _, loadout in ipairs(tlm_loadouts) do
+            if not seen[loadout.id] then
+                table.insert(loadouts, loadout)
+                seen[loadout.id] = true
+            end
+        end
+    end
+
     return loadouts
 end
 
-local function LoadLoadout(loadoutID)
+local function LoadLoadout(loadoutID, is_blizzard)
     local TLM = GetTLM()
-    if TLM then
+
+    -- TLM custom loadouts must go through TLM API
+    if TLM and not is_blizzard then
         TLM.CharacterAPI:LoadLoadout(loadoutID, true)
     else
+        -- Native Blizzard loadout via PlayerSpellsFrame
         if not _G.PlayerSpellsFrame then
             if _G.PlayerSpellsFrame_LoadUI then
                 _G.PlayerSpellsFrame_LoadUI()
@@ -82,11 +98,7 @@ local function GetLoadoutName(specID)
         return "Starter Build"
     end
 
-    local activeInfo = GetActiveLoadoutInfo()
-    if activeInfo then
-        return activeInfo.displayName or activeInfo.name
-    end
-
+    -- Native Blizzard API first
     local configID = C_ClassTalents.GetLastSelectedSavedConfigID(specID)
     if configID then
         activeLoadoutID = configID
@@ -94,6 +106,12 @@ local function GetLoadoutName(specID)
         if configInfo and configInfo.name then
             return configInfo.name
         end
+    end
+
+    -- TLM may know the active loadout when native API doesn't (custom TLM builds)
+    local activeInfo = GetActiveLoadoutInfo()
+    if activeInfo then
+        return activeInfo.displayName or activeInfo.name
     end
 
     return nil
@@ -181,7 +199,14 @@ DataBar:RegisterDatatext("Player Spec", {
                 local loadouts = GetAllLoadouts(specID)
                 if #loadouts > 0 or C_ClassTalents.GetHasStarterBuild() then
                     GameTooltip:AddLine(" ")
-                    local headerText = GetTLM() and "Loadouts (TLM)" or "Loadouts"
+                    local has_tlm_builds = false
+                    for _, l in ipairs(loadouts) do
+                        if l.isBlizzardLoadout == false then
+                            has_tlm_builds = true
+                            break
+                        end
+                    end
+                    local headerText = has_tlm_builds and "Loadouts (+ TLM)" or "Loadouts"
                     GameTooltip:AddLine(headerText, 0.7, 0.7, 0.7)
 
                     if C_ClassTalents.GetHasStarterBuild() then
@@ -240,8 +265,7 @@ DataBar:RegisterDatatext("Player Spec", {
                 if not specID or not PlayerUtil.CanUseClassTalents() then return end
 
                 MenuUtil.CreateContextMenu(frame, function(_, root)
-                    local titleText = GetTLM() and "Switch Loadout (TLM)" or "Switch Loadout"
-                    root:CreateTitle(titleText)
+                    root:CreateTitle("Switch Loadout")
 
                     if C_ClassTalents.GetHasStarterBuild() then
                         local isActive = C_ClassTalents.GetStarterBuildActive()
@@ -271,9 +295,10 @@ DataBar:RegisterDatatext("Player Spec", {
                             name = "|cff00ff00[TLM]|r " .. name
                         end
                         local loadoutID = loadout.id
+                        local is_blizzard = loadout.isBlizzardLoadout
                         root:CreateButton(name .. (isActive and " |cff00ff00*|r" or ""), function()
                             if InCombatLockdown() then return end
-                            LoadLoadout(loadoutID)
+                            LoadLoadout(loadoutID, is_blizzard)
                         end)
                     end
                 end)
