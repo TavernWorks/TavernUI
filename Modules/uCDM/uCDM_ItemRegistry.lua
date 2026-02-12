@@ -135,12 +135,14 @@ function ItemRegistry.HookBlizzardViewers()
                     end
                     module:RefreshAllViewers()
                     ItemRegistry._hookPandemicWindow()
+                    ItemRegistry._hookProcGlow()
                 end)
                 self:UnregisterAllEvents()
             end
         end)
     else
         ItemRegistry._hookPandemicWindow()
+        ItemRegistry._hookProcGlow()
     end
 end
 
@@ -171,6 +173,22 @@ function ItemRegistry._hookPandemicWindow()
             if self.PandemicIcon then
                 self.PandemicIcon:Hide()
             end
+        end)
+    end
+end
+
+function ItemRegistry._hookProcGlow()
+    if not CooldownViewerCooldownItemMixin or not ActionButtonSpellAlertManager then
+        return
+    end
+    if CooldownViewerCooldownItemMixin.OnSpellActivationOverlayGlowShowEvent then
+        hooksecurefunc(CooldownViewerCooldownItemMixin, "OnSpellActivationOverlayGlowShowEvent", function(self)
+            ActionButtonSpellAlertManager:HideAlert(self)
+        end)
+    end
+    if CooldownViewerCooldownItemMixin.RefreshOverlayGlow then
+        hooksecurefunc(CooldownViewerCooldownItemMixin, "RefreshOverlayGlow", function(self)
+            ActionButtonSpellAlertManager:HideAlert(self)
         end)
     end
 end
@@ -207,8 +225,8 @@ end
 
 --------------------------------------------------------------------------------
 -- Blizzard Frame Collection
--- Blizzard item order is driven by C_CooldownViewer.GetCooldownViewerCategorySet.
--- Frames are matched by cooldownID only; custom items keep their own index and are merged/sorted with that.
+-- cooldownIDs from viewer:GetCooldownIDs() then GetCooldownViewerCategorySet.
+-- Frames matched by child.layoutIndex (when valid) and by child:GetCooldownID() vs API list; one frame per index.
 --------------------------------------------------------------------------------
 
 function ItemRegistry.CollectBlizzardItems(viewerKey)
@@ -226,17 +244,18 @@ function ItemRegistry.CollectBlizzardItems(viewerKey)
         return
     end
 
-    local cooldownIDs = C_CooldownViewer.GetCooldownViewerCategorySet(category, true)
+    local cooldownIDs = nil
+    if viewer.GetCooldownIDs then
+        cooldownIDs = viewer:GetCooldownIDs()
+    end
     if not cooldownIDs or #cooldownIDs == 0 then
-        if viewer.GetCooldownIDs then
-            cooldownIDs = viewer:GetCooldownIDs()
-        end
+        cooldownIDs = C_CooldownViewer.GetCooldownViewerCategorySet(category, true)
     end
     if not cooldownIDs or #cooldownIDs == 0 then
         return
     end
 
-    local framesByCooldownID = {}
+    local framesByIndex = {}
     local numChildren = viewer:GetNumChildren()
     for i = 1, numChildren do
         local child = select(i, viewer:GetChildren())
@@ -244,9 +263,18 @@ function ItemRegistry.CollectBlizzardItems(viewerKey)
             if viewerKey == "buff" and not child.__ucdmEventHooked then
                 ItemRegistry._hookBuffFrameEvents(child, viewer)
             end
-            local cooldownID = child.GetCooldownID and child:GetCooldownID() or child.cooldownID
-            if cooldownID and not framesByCooldownID[cooldownID] then
-                framesByCooldownID[cooldownID] = child
+            local layoutIndex = child.layoutIndex
+            if layoutIndex and layoutIndex > 0 and layoutIndex <= #cooldownIDs then
+                framesByIndex[layoutIndex] = child
+            end
+            if child.GetCooldownID then
+                local frameCooldownID = child:GetCooldownID()
+                for idx, cooldownID in ipairs(cooldownIDs) do
+                    if cooldownID == frameCooldownID then
+                        framesByIndex[idx] = child
+                        break
+                    end
+                end
             end
         end
     end
@@ -257,7 +285,7 @@ function ItemRegistry.CollectBlizzardItems(viewerKey)
     for index, cooldownID in ipairs(cooldownIDs) do
         local cooldownInfo = C_CooldownViewer.GetCooldownViewerCooldownInfo(cooldownID)
         if cooldownInfo then
-            local frame = framesByCooldownID[cooldownID]
+            local frame = framesByIndex[index]
             if frame then
                 seenFrames[frame] = true
 
@@ -270,7 +298,6 @@ function ItemRegistry.CollectBlizzardItems(viewerKey)
                     slotID = slotID or frame.cooldownData.slotID
                 end
 
-                -- Find or create item
                 local item = itemsByFrame[frame]
                 if not item then
                     local id = "blizz_" .. viewerKey .. "_" .. cooldownID
@@ -289,7 +316,6 @@ function ItemRegistry.CollectBlizzardItems(viewerKey)
                     itemsById[id] = item
                     itemsByFrame[frame] = item
                 else
-                    -- Update existing item
                     item.spellID = spellID
                     item.itemID = itemID
                     item.slotID = slotID
@@ -549,9 +575,10 @@ function ItemRegistry._acquireCustomFrame(id, parent)
         cooldown:SetAllPoints(frame)
         cooldown:SetDrawEdge(false)
         cooldown:SetDrawBling(false)
+        if cooldown.SetEdgeScale then cooldown:SetEdgeScale(0) end
         cooldown:SetDrawSwipe(true)
-        cooldown:SetSwipeTexture("Interface\\HUD\\UI-HUD-CoolDownManager-Icon-Swipe")
-        cooldown:SetSwipeColor(1, 1, 1, 1)
+        cooldown:SetSwipeTexture("")
+        cooldown:SetSwipeColor(0, 0, 0, 0.8)
         cooldown:SetHideCountdownNumbers(false)
         if cooldown.SetSnapToPixelGrid then cooldown:SetSnapToPixelGrid(true) end
         if cooldown.SetTexelSnappingBias then cooldown:SetTexelSnappingBias(0) end

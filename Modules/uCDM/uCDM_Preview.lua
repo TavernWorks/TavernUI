@@ -117,9 +117,10 @@ local function CreatePreviewFrame(viewer, index)
     cooldown:SetAllPoints(f)
     cooldown:SetDrawEdge(false)
     cooldown:SetDrawBling(false)
+    if cooldown.SetEdgeScale then cooldown:SetEdgeScale(0) end
     cooldown:SetDrawSwipe(true)
-    cooldown:SetSwipeTexture("Interface\\HUD\\UI-HUD-CoolDownManager-Icon-Swipe")
-    cooldown:SetSwipeColor(1, 1, 1, 1)
+    cooldown:SetSwipeTexture("")
+    cooldown:SetSwipeColor(0, 0, 0, 0.8)
     cooldown:SetHideCountdownNumbers(false)
     f.Cooldown = cooldown
 

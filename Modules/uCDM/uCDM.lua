@@ -87,6 +87,11 @@ local defaults = {
             borderColor = {r = 1, g = 0, b = 0, a = 1},
             borderWidth = 2,
         },
+        proc = {
+            enabled = true,
+            borderColor = {r = 1, g = 1, b = 0, a = 1},
+            borderWidth = 2,
+        },
     },
     viewers = {
         essential = {
@@ -558,6 +563,11 @@ function module:OnPlayerEnteringWorld()
         end
         self:RefreshAllViewers()
     end)
+
+    C_Timer.After(0.5, function()
+        if not self:IsEnabled() then return end
+        self:RefreshAllViewers()
+    end)
     
     C_Timer.After(1, function()
         if not self:IsEnabled() then return end
@@ -688,10 +698,6 @@ function module:RefreshViewer(viewerKey)
         
         if self.Keybinds then
             self.Keybinds.RefreshViewer(viewerKey)
-        end
-        
-        if self.Anchoring then
-            self.Anchoring.RefreshViewer(viewerKey)
         end
     end
     

@@ -75,14 +75,15 @@ local function EvaluateCooldownDesaturation(durationObj)
     return val  -- Can be a secret value - that's fine for SetDesaturation
 end
 
-local BLIZZARD_SWIPE_TEXTURE = "Interface\\HUD\\UI-HUD-CoolDownManager-Icon-Swipe"
+local SWIPE_TEXTURE = ""  -- solid fill, no texture padding
 
 local function ApplySwipeStyle(cooldown)
     if not cooldown then return end
     if cooldown.SetDrawEdge then cooldown:SetDrawEdge(false) end
     if cooldown.SetDrawBling then cooldown:SetDrawBling(false) end
-    if cooldown.SetSwipeTexture then cooldown:SetSwipeTexture(BLIZZARD_SWIPE_TEXTURE) end
-    if cooldown.SetSwipeColor then cooldown:SetSwipeColor(1, 1, 1, 1) end
+    if cooldown.SetEdgeScale then cooldown:SetEdgeScale(0) end
+    if cooldown.SetSwipeTexture then cooldown:SetSwipeTexture(SWIPE_TEXTURE) end
+    if cooldown.SetSwipeColor then cooldown:SetSwipeColor(0, 0, 0, 0.8) end
     if cooldown.SetDrawSwipe then cooldown:SetDrawSwipe(true) end
 end
 

@@ -186,10 +186,16 @@ local function ProviderRunes()
     local current = UnitPower("player", POWER_TYPE_RUNES)
     local segments = {}
     
+    local now = GetTime()
     for i = 1, max do
         local start, duration, ready = GetRuneCooldown(i)
-        local durationObj = NormalizeDurationObject(start, duration, ready)
-        segments[i] = durationObj
+        local seg = NormalizeDurationObject(start, duration, ready)
+        if seg.ready then
+            seg.fillPercent = 1.0
+        elseif seg.duration and seg.duration > 0 and seg.start then
+            seg.fillPercent = math.max(0, math.min(1, (now - seg.start) / seg.duration))
+        end
+        segments[i] = seg
     end
     
     return {

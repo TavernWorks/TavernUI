@@ -138,6 +138,15 @@ local function RefreshViewerComponents(viewerKey, property)
     end
 end
 
+local function RefreshOptions(rebuild)
+    if rebuild then
+        module.optionsBuilt = false
+        module:BuildOptions()
+        module.optionsBuilt = true
+    end
+    LibStub("AceConfigRegistry-3.0"):NotifyChange("TavernUI")
+end
+
 local function RefreshViewerAndOptions(viewerKey)
     RefreshViewerComponents(viewerKey, "rows")
     RefreshOptions(true)
@@ -187,15 +196,6 @@ local function CreateCustomEntry(trackingType, id, overrideViewer, configData)
         return true
     end
     return false
-end
-
-local function RefreshOptions(rebuild)
-    if rebuild then
-        module.optionsBuilt = false
-        module:BuildOptions()
-        module.optionsBuilt = true
-    end
-    LibStub("AceConfigRegistry-3.0"):NotifyChange("TavernUI")
 end
 
 local pickingActionSlot = false
@@ -1439,6 +1439,49 @@ local function BuildOverlaysOptions()
             end,
             set = function(_, value)
                 module:SetSetting("overlays.pandemic.borderWidth", value, {
+                    type = "number",
+                    min = 1,
+                    max = 10,
+                })
+            end,
+        },
+        procHeader = {
+            type = "header",
+            name = L["PROC"] or "Proc",
+            order = 10,
+        },
+        procEnabled = {
+            type = "toggle",
+            name = L["SHOW_PROC"] or "Show Proc",
+            desc = L["SHOW_PROC_DESC"] or "Show border color when spell proc is ready",
+            order = 11,
+            get = function()
+                return module:GetSetting("overlays.proc.enabled", true) ~= false
+            end,
+            set = function(_, value)
+                module:SetSetting("overlays.proc.enabled", value)
+            end,
+        },
+        procBorderColor = MakeColorOption("overlays.proc.borderColor", {
+            order = 12,
+            name = L["PROC_BORDER_COLOR"] or "Border Color",
+            desc = L["PROC_BORDER_COLOR_DESC"] or "Border color when spell proc is ready",
+            hasAlpha = false,
+            default = {r = 1, g = 1, b = 0, a = 1},
+        }),
+        procBorderWidth = {
+            type = "range",
+            name = L["PROC_BORDER_WIDTH"] or "Border Width",
+            desc = L["PROC_BORDER_WIDTH_DESC"] or "Border width in pixels when spell proc is ready",
+            order = 13,
+            min = 1,
+            max = 10,
+            step = 1,
+            get = function()
+                return module:GetSetting("overlays.proc.borderWidth", 2)
+            end,
+            set = function(_, value)
+                module:SetSetting("overlays.proc.borderWidth", value, {
                     type = "number",
                     min = 1,
                     max = 10,

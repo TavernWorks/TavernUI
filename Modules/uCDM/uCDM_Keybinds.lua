@@ -485,7 +485,6 @@ function Keybinds.UpdateItem(item)
 
     local settings = module:GetViewerSettings(item.viewerKey)
     item:setKeybind(keybind, settings)
-    item:refreshIcon()
 end
 
 function Keybinds.RefreshViewer(viewerKey)

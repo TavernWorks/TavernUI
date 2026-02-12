@@ -3,6 +3,7 @@ local module = TavernUI:NewModule("ResourceBars", "AceEvent-3.0")
 
 local CONSTANTS = {
     UPDATE_THROTTLE_INTERVAL = 0.1,
+    RUNE_FILL_UPDATE_INTERVAL = 0.05,
     BAR_ID_HEALTH = "HEALTH",
     BAR_ID_PRIMARY_POWER = "PRIMARY_POWER",
     BAR_ID_STAGGER = "STAGGER",
@@ -656,6 +657,26 @@ function module:UpdateBar(barId)
 
     if bars[barId].Update then
         bars[barId]:Update(result)
+    end
+
+    if barId == "RUNES" and result and result.segments then
+        if self._runeUpdateTimer then
+            C_Timer.Cancel(self._runeUpdateTimer)
+            self._runeUpdateTimer = nil
+        end
+        local anyRecharging = false
+        for i = 1, #result.segments do
+            if not result.segments[i].ready then
+                anyRecharging = true
+                break
+            end
+        end
+        if anyRecharging then
+            self._runeUpdateTimer = C_Timer.After(CONSTANTS.RUNE_FILL_UPDATE_INTERVAL, function()
+                self._runeUpdateTimer = nil
+                self:UpdateBar("RUNES")
+            end)
+        end
     end
 
     if self.Text and self.Text.Apply then

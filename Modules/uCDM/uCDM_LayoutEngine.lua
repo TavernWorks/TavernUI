@@ -23,6 +23,7 @@ local CONSTANTS = {
 
 local layoutRunning = {}
 local layoutSettingSize = {}
+local layoutLastNotifiedCount = {}
 
 local LAYOUT_DEBUG = false
 local function LayoutDebug(fmt, ...)
@@ -115,9 +116,6 @@ local function InstallRefreshLayoutHooks()
                             module.ItemRegistry.CollectBlizzardItems(viewerKey)
                         end
                         LayoutEngine.RefreshViewer(viewerKey)
-                        if module.Keybinds then
-                            module.Keybinds.RefreshViewer(viewerKey)
-                        end
                     end)
                 end
                 
@@ -573,16 +571,30 @@ local function ApplyLayout(viewer, rowAssignments, rows, viewerKey, inCombat)
     if not LayoutEngine.IsProtectedViewer(viewerKey) then
         effectiveWidth = (maxActualContentWidth > 0) and maxActualContentWidth or maxRowWidth
     end
+    local totalItems = 0
+    for _, rowItems in ipairs(rowAssignments) do
+        totalItems = totalItems + #rowItems
+    end
+    local structureUnchanged = (layoutLastNotifiedCount[viewerKey] == totalItems)
     if effectiveWidth > 0 and totalHeight > 0 then
-        SafeSetSize(viewer, effectiveWidth, totalHeight, viewerKey, inCombat)
-        local skipped = inCombat and LayoutEngine.IsProtectedViewer(viewerKey)
-        if not skipped then
-            layoutSettingSize[viewerKey] = true
-            local Anchor = LibStub("LibAnchorRegistry-1.0", true)
-            if Anchor and Anchor.NotifySizeChanged then
-                Anchor:NotifySizeChanged("TavernUI.uCDM." .. viewerKey)
+        local currentW, currentH = viewer:GetWidth(), viewer:GetHeight()
+        local sizeChanged = not currentW or not currentH
+            or math.abs(currentW - effectiveWidth) > 0.5
+            or math.abs(currentH - totalHeight) > 0.5
+        if sizeChanged then
+            SafeSetSize(viewer, effectiveWidth, totalHeight, viewerKey, inCombat)
+        end
+        if not structureUnchanged then
+            layoutLastNotifiedCount[viewerKey] = totalItems
+            local skipped = inCombat and LayoutEngine.IsProtectedViewer(viewerKey)
+            if not skipped then
+                layoutSettingSize[viewerKey] = true
+                local Anchor = LibStub("LibAnchorRegistry-1.0", true)
+                if Anchor and Anchor.NotifySizeChanged then
+                    Anchor:NotifySizeChanged("TavernUI.uCDM." .. viewerKey)
+                end
+                layoutSettingSize[viewerKey] = nil
             end
-            layoutSettingSize[viewerKey] = nil
         end
     end
     
@@ -680,11 +692,11 @@ function LayoutEngine.RefreshViewer(viewerKey)
     ApplyVisibilityState(viewer, false)
 
     local rows = GetActiveRows(settings, viewerKey)
-    local items = module.ItemRegistry.GetItemsForViewer(viewerKey) or {}
-    
-    if #rows > 0 and (#items > 0 or ShouldRunLayoutWithNoItems(viewerKey, settings)) then
-        local rowAssignments, visibleItems = GetRowAssignmentsWithPreview(viewer, viewerKey, settings, items, rows)
+    local items = (module.ItemRegistry and module.ItemRegistry.GetItemsForViewer(viewerKey)) or {}
+    local skipLayoutInCombat = inCombat and (viewerKey == "essential" or viewerKey == "utility")
 
+    if #rows > 0 and (#items > 0 or ShouldRunLayoutWithNoItems(viewerKey, settings)) and not skipLayoutInCombat then
+        local rowAssignments, visibleItems = GetRowAssignmentsWithPreview(viewer, viewerKey, settings, items, rows)
         local assignedItems = {}
         for _, entry in ipairs(visibleItems) do
             assignedItems[entry.item] = true
