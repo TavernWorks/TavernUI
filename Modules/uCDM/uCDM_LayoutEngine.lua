@@ -569,7 +569,10 @@ local function ApplyLayout(viewer, rowAssignments, rows, viewerKey, inCombat)
         maxRowWidth = math.max(maxRowWidth, currentGroupWidth)
     end
     
-    local effectiveWidth = (maxActualContentWidth > 0) and maxActualContentWidth or maxRowWidth
+    local effectiveWidth = maxRowWidth
+    if not LayoutEngine.IsProtectedViewer(viewerKey) then
+        effectiveWidth = (maxActualContentWidth > 0) and maxActualContentWidth or maxRowWidth
+    end
     if effectiveWidth > 0 and totalHeight > 0 then
         SafeSetSize(viewer, effectiveWidth, totalHeight, viewerKey, inCombat)
         local skipped = inCombat and LayoutEngine.IsProtectedViewer(viewerKey)

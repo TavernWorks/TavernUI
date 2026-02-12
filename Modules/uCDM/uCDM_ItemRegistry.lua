@@ -222,7 +222,7 @@ function ItemRegistry.CollectBlizzardItems(viewerKey)
     if not category then return end
 
     local LayoutEngine = module.LayoutEngine
-    if LayoutEngine and LayoutEngine.IsProtectedViewer and LayoutEngine.IsProtectedViewer(viewerKey) and InCombatLockdown() then
+    if LayoutEngine and InCombatLockdown() and (viewerKey == "essential" or viewerKey == "utility") then
         return
     end
 
@@ -245,7 +245,7 @@ function ItemRegistry.CollectBlizzardItems(viewerKey)
                 ItemRegistry._hookBuffFrameEvents(child, viewer)
             end
             local cooldownID = child.GetCooldownID and child:GetCooldownID() or child.cooldownID
-            if cooldownID then
+            if cooldownID and not framesByCooldownID[cooldownID] then
                 framesByCooldownID[cooldownID] = child
             end
         end
