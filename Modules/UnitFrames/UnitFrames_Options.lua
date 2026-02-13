@@ -156,6 +156,134 @@ local function BuildAuraGroup(unitType, auraType, headerName, orderBase, default
     }
 end
 
+local TAG_HINT = "See the Tag Reference tab for all available tags."
+
+local function BuildTagReference()
+    return {
+        type = "group",
+        name = "Tag Reference",
+        order = 100,
+        args = {
+            intro = {
+                type = "description",
+                name = "Tags are placeholders you can use in Name, Health, Power, and Info Bar tag strings. "
+                    .. "Combine multiple tags to build custom displays.\n\n"
+                    .. "Example:  |cff88bbdd[TUI:classcolor][TUI:name]|r|r  shows a class-colored name.\n",
+                order = 0,
+                fontSize = "medium",
+            },
+            identityHeader = {
+                type = "header",
+                name = "Identity",
+                order = 10,
+            },
+            identityTags = {
+                type = "description",
+                name = "|cffffd200[TUI:name]|r  Full unit name\n"
+                    .. "|cffffd200[TUI:name:short]|r  Name truncated to 10 characters\n"
+                    .. "|cffffd200[TUI:name:vshort]|r  Name truncated to 5 characters\n"
+                    .. "|cffffd200[TUI:race]|r  Unit race (Human, Orc, etc.)\n"
+                    .. "|cffffd200[TUI:class]|r  Unit class (Warrior, Mage, etc.)\n"
+                    .. "|cffffd200[TUI:level]|r  Unit level\n"
+                    .. "|cffffd200[TUI:smartlevel]|r  Level with classification suffix (62+, 60r, Boss)\n"
+                    .. "|cffffd200[TUI:classification]|r  Boss, Elite, Rare, Rare Elite, or blank\n"
+                    .. "|cffffd200[TUI:group]|r  Raid group number (1-8)\n",
+                order = 11,
+                fontSize = "medium",
+            },
+            healthHeader = {
+                type = "header",
+                name = "Health",
+                order = 20,
+            },
+            healthTags = {
+                type = "description",
+                name = "|cffffd200[TUI:curhp]|r  Current health (raw number)\n"
+                    .. "|cffffd200[TUI:curhp:short]|r  Current health (abbreviated: 1.2m, 45.3k)\n"
+                    .. "|cffffd200[TUI:maxhp]|r  Maximum health (raw number)\n"
+                    .. "|cffffd200[TUI:maxhp:short]|r  Maximum health (abbreviated)\n"
+                    .. "|cffffd200[TUI:perhp]|r  Health percentage (0-100)\n"
+                    .. "|cffffd200[TUI:deficit:hp]|r  Health deficit (-45.3k) or blank at full\n",
+                order = 21,
+                fontSize = "medium",
+            },
+            powerHeader = {
+                type = "header",
+                name = "Power",
+                order = 30,
+            },
+            powerTags = {
+                type = "description",
+                name = "|cffffd200[TUI:curpp]|r  Current power (raw number)\n"
+                    .. "|cffffd200[TUI:curpp:short]|r  Current power (abbreviated)\n"
+                    .. "|cffffd200[TUI:maxpp]|r  Maximum power (raw number)\n"
+                    .. "|cffffd200[TUI:perpp]|r  Power percentage (0-100)\n"
+                    .. "|cffffd200[TUI:curmana]|r  Current mana (abbreviated, always mana regardless of form)\n",
+                order = 31,
+                fontSize = "medium",
+            },
+            statusHeader = {
+                type = "header",
+                name = "Status",
+                order = 40,
+            },
+            statusTags = {
+                type = "description",
+                name = "|cffffd200[TUI:dead]|r  Dead or Ghost, blank if alive\n"
+                    .. "|cffffd200[TUI:offline]|r  Offline, blank if connected\n"
+                    .. "|cffffd200[TUI:status]|r  Combined: Offline, Ghost, Dead, or zzz (resting)\n"
+                    .. "|cffffd200[TUI:afk]|r  AFK, blank if not\n"
+                    .. "|cffffd200[TUI:resting]|r  zzz when in a rest area, blank otherwise\n",
+                order = 41,
+                fontSize = "medium",
+            },
+            colorHeader = {
+                type = "header",
+                name = "Color",
+                order = 50,
+            },
+            colorTags = {
+                type = "description",
+                name = "Color tags output |cff hex codes. Place before text and add |r after to end the color.\n\n"
+                    .. "|cffffd200[TUI:classcolor]|r  Class color (Warrior brown, Mage blue, etc.)\n"
+                    .. "|cffffd200[TUI:reactioncolor]|r  Reaction color (friendly green, hostile red)\n"
+                    .. "|cffffd200[TUI:diffcolor]|r  Difficulty color based on level difference\n",
+                order = 51,
+                fontSize = "medium",
+            },
+            classHeader = {
+                type = "header",
+                name = "Class Resources",
+                order = 60,
+            },
+            classTags = {
+                type = "description",
+                name = "|cffffd200[TUI:cpoints]|r  Combo points (blank if zero)\n",
+                order = 61,
+                fontSize = "medium",
+            },
+            examplesHeader = {
+                type = "header",
+                name = "Examples",
+                order = 70,
+            },
+            examples = {
+                type = "description",
+                name = "|cff88bbddClass-colored name:|r\n"
+                    .. "  [TUI:classcolor][TUI:name]|r\n\n"
+                    .. "|cff88bbddShort health with percentage:|r\n"
+                    .. "  [TUI:curhp:short] ([TUI:perhp]%)\n\n"
+                    .. "|cff88bbddLevel and classification:|r\n"
+                    .. "  [TUI:diffcolor][TUI:smartlevel]|r [TUI:classification]\n\n"
+                    .. "|cff88bbddFull info bar:|r\n"
+                    .. "  [TUI:classcolor][TUI:level] [TUI:name] [TUI:race]|r\n",
+                order = 71,
+                fontSize = "medium",
+            },
+        },
+    }
+end
+
 local function BuildUnitOptions(unitType, unitInfo)
     local isBossOrArena = unitType == "boss" or unitType == "arena"
 
@@ -314,7 +442,7 @@ local function BuildUnitOptions(unitType, unitInfo)
         nameTagString = {
             type = "input",
             name = "Name Tag String",
-            desc = "oUF tag string for the name. Example: [TUI:classcolor][TUI:name]|r",
+            desc = "oUF tag string for the name. Example: [TUI:classcolor][TUI:name]|r\n" .. TAG_HINT,
             order = 32,
             width = "full",
             hidden = function() return not GetUnitSetting(unitType, "nameTag.enabled", true) end,
@@ -342,7 +470,7 @@ local function BuildUnitOptions(unitType, unitInfo)
         healthTagString = {
             type = "input",
             name = "Health Tag String",
-            desc = "oUF tag string for health. Example: [TUI:curhp:short]/[TUI:maxhp:short]",
+            desc = "oUF tag string for health. Example: [TUI:curhp:short]/[TUI:maxhp:short]\n" .. TAG_HINT,
             order = 37,
             width = "full",
             hidden = function() return not GetUnitSetting(unitType, "healthTag.enabled", true) end,
@@ -371,7 +499,7 @@ local function BuildUnitOptions(unitType, unitInfo)
         powerTagString = {
             type = "input",
             name = "Power Tag String",
-            desc = "oUF tag string for power. Example: [TUI:curpp:short]",
+            desc = "oUF tag string for power. Example: [TUI:curpp:short]\n" .. TAG_HINT,
             order = 42,
             width = "full",
             hidden = function()
@@ -531,7 +659,7 @@ local function BuildUnitOptions(unitType, unitInfo)
         infoBarTagString = {
             type = "input",
             name = "Info Bar Tag String",
-            desc = "oUF tag string for the info bar. Example: [TUI:classcolor][TUI:level] [TUI:name] [TUI:race]",
+            desc = "oUF tag string for the info bar. Example: [TUI:classcolor][TUI:level] [TUI:name] [TUI:race]\n" .. TAG_HINT,
             order = 58,
             width = "full",
             hidden = function() return not GetUnitSetting(unitType, "showInfoBar", false) end,
@@ -887,6 +1015,8 @@ function module:RegisterOptions()
     for unitType, unitInfo in pairs(UNIT_CONFIG) do
         args[unitType] = BuildUnitOptions(unitType, unitInfo)
     end
+
+    args.tagReference = BuildTagReference()
 
     local options = {
         type = "group",
