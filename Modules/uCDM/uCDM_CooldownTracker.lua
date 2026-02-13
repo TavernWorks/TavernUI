@@ -120,7 +120,9 @@ end
 if CooldownFrame_Set and type(CooldownFrame_Set) == "function" then
     hooksecurefunc("CooldownFrame_Set", function(self)
         if self and IsCooldownUnderBuffViewer(self) then
-            ApplySwipeStyle(self)
+            C_Timer.After(0, function()
+                if self then ApplySwipeStyle(self) end
+            end)
         end
     end)
 end
