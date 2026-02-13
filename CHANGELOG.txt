@@ -1,5 +1,18 @@
 TavernUI Changelog
 ==================
+v1.0.0-beta-15 (2026-02-12)
+ - FIX: uCDM - Keybinds no longer cause taint errors in combat
+ - FIX: uCDM - Ace3 module lifecycle for enable/disable (#79)
+ - FIX: uCDM - Cooldown swipes now render correctly after icon load
+ - FIX: uCDM - Buff frame jitter reduced
+ - FIX: ResourceBars - DK runes now recharge correctly
+ - FIX: DataBar - Spec datatext shows all loadouts, not just TLM builds (#94)
+ - NEW: uCDM - ElvUI support for keybind scraping
+ - NEW: uCDM - Custom swipe texture override option
+ - NEW: Unit Frames - Tag reference tab in options panel (#72)
+ - ADJUSTMENT: uCDM - Layout engine performance and code cleanup
+ - KNOWN ISSUE: uCDM anchoring may be unstable (#55, #93, #96)
+
 v1.0.0-beta-14 (2026-02-11)
  - FIX: DataBar - System and Memory datatexts no longer cause "script ran too long" with many addons
  - FIX: DataBar - Currencies datatext updates immediately when backpack tracking changes
