@@ -283,7 +283,6 @@ function module:GetDefaultCustomViewerSettings()
 end
 
 function module:OnInitialize()
-    pcall(function() SetCVar("cooldownViewerEnabled", 1) end)
     self:RegisterMessage("TavernUI_ProfileChanged", "OnProfileChanged")
     self.CustomViewerFrames = {}
 
@@ -299,10 +298,6 @@ function module:OnInitialize()
     self:RegisterEvent("PLAYER_ENTERING_WORLD", "OnPlayerEnteringWorld")
 
     -- Watch for setting changes
-    self:WatchSetting("enabled", function(newValue, oldValue)
-        self:HandleEnabledChange(newValue, oldValue)
-    end)
-
     for _, rate in ipairs({"initial", "normal", "combat"}) do
         self:WatchSetting("general.updateRates." .. rate, function()
             if self:IsEnabled() then
@@ -315,6 +310,8 @@ end
 function module:OnEnable()
     if self.__onEnableCalled then return end
     self.__onEnableCalled = true
+
+    pcall(function() SetCVar("cooldownViewerEnabled", 1) end)
 
     _G.cdm = function(viewer, slot, duration)
         local m = TavernUI:GetModule("uCDM")
@@ -395,6 +392,20 @@ function module:OnDisable()
     self._lastVisibilityState = nil
     self:UnregisterAllEvents()
     self:StopUpdateLoop()
+    pcall(function() SetCVar("cooldownViewerEnabled", 0) end)
+
+    for _, viewerKey in ipairs(CONSTANTS.VIEWER_KEYS) do
+        local viewer = self:GetViewerFrame(viewerKey)
+        if viewer then
+            viewer:Hide()
+        end
+    end
+    for _, id in ipairs(self:GetCustomViewerIds()) do
+        local viewer = self:GetViewerFrame(id)
+        if viewer then
+            viewer:Hide()
+        end
+    end
 
     if self.ItemRegistry then
         self.ItemRegistry.Reset()
@@ -560,29 +571,6 @@ function module:OnProfileChanged()
     end)
 end
 
-function module:HandleEnabledChange(newValue, oldValue)
-    if newValue then
-        if self:IsEnabled() then
-            self:StartUpdateLoop()
-            self:RefreshAllViewers()
-        end
-    else
-        self:StopUpdateLoop()
-        for _, viewerKey in ipairs(CONSTANTS.VIEWER_KEYS) do
-            local viewer = self:GetViewerFrame(viewerKey)
-            if viewer then
-                viewer:Hide()
-            end
-        end
-        for _, id in ipairs(self:GetCustomViewerIds()) do
-            local viewer = self:GetViewerFrame(id)
-            if viewer then
-                viewer:Hide()
-            end
-        end
-    end
-end
-
 local refreshTimers = {}
 local contentRefreshTimers = {}
 local REFRESH_DEBOUNCE_SEC = 0.15
@@ -708,10 +696,6 @@ function module:GetCustomViewerDisplayName(viewerKey)
         return self.CustomViewerManager.GetCustomViewerDisplayName(self, viewerKey)
     end
     return viewerKey
-end
-
-function module:IsEnabled()
-    return self:GetSetting("enabled", true) ~= false
 end
 
 function module:LogError(msg, ...)
