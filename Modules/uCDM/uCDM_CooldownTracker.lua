@@ -104,6 +104,27 @@ end
 CooldownTracker.ApplySwipeStyle = ApplySwipeStyle
 CooldownTracker.EnsureSwipeStyleAndHooks = EnsureSwipeStyleAndHooks
 
+local buffViewerName = module.CONSTANTS and module.CONSTANTS.VIEWER_NAMES and module.CONSTANTS.VIEWER_NAMES.buff
+local function IsCooldownUnderBuffViewer(cooldown)
+    if not cooldown or not buffViewerName then return false end
+    local viewer = _G[buffViewerName]
+    if not viewer then return false end
+    local p = cooldown.GetParent and cooldown:GetParent()
+    while p do
+        if p == viewer then return true end
+        p = p.GetParent and p:GetParent()
+    end
+    return false
+end
+
+if CooldownFrame_Set and type(CooldownFrame_Set) == "function" then
+    hooksecurefunc("CooldownFrame_Set", function(self)
+        if self and IsCooldownUnderBuffViewer(self) then
+            ApplySwipeStyle(self)
+        end
+    end)
+end
+
 function CooldownTracker.UpdateTrinket(slotID)
     local itemID = GetInventoryItemID("player", slotID)
     if not itemID then return nil end
