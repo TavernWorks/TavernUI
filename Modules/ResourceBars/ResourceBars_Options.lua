@@ -982,9 +982,12 @@ local function BuildBarOptions(barId)
             current = L["BAR_TEXT_CURRENT"],
             current_max = L["BAR_TEXT_CURRENT_MAX"],
             percent = L["BAR_TEXT_PERCENT"],
+            percent_full = L["BAR_TEXT_PERCENT_FULL"],
             name = L["BAR_TEXT_NAME"],
             current_percent = L["BAR_TEXT_CURRENT_PERCENT"],
             percent_current = L["BAR_TEXT_PERCENT_CURRENT"],
+            current_percent_full = L["BAR_TEXT_CURRENT_PERCENT_FULL"],
+            percent_full_current = L["BAR_TEXT_PERCENT_FULL_CURRENT"],
         },
         get = function()
             return GetBarSetting(barId, "barText", "none") or "none"
@@ -1346,6 +1349,41 @@ local function BuildResourceColoursOptions()
         end
         order = order + 20
     end
+    order = order + 1
+    args.superchargerHeader = { type = "header", name = L["SUPERCHARGER"], order = order }
+    order = order + 1
+    args.useSuperchargerColorOnPrimaryPower = {
+        type = "toggle",
+        name = L["USE_SUPERCHARGER_COLOR_ON_PRIMARY_POWER"],
+        desc = L["USE_SUPERCHARGER_COLOR_ON_PRIMARY_POWER_DESC"],
+        order = order,
+        get = function() return module:GetSetting("useSuperchargerColorOnPrimaryPower", false) end,
+        set = function(_, val)
+            module:SetSetting("useSuperchargerColorOnPrimaryPower", val)
+            RefreshBar("PRIMARY_POWER")
+        end,
+    }
+    order = order + 1
+    args.SUPERCHARGER = {
+        type = "color",
+        name = L["SUPERCHARGER_COLOR"],
+        desc = string.format(L["BASE_COLOUR_FOR_S"], L["SUPERCHARGER"]),
+        order = order,
+        hasAlpha = true,
+        get = function()
+            local res = module:GetSetting("resourceColours", {}) or {}
+            local c = res.SUPERCHARGER or module:GetEffectiveResourceColor("SUPERCHARGER", res)
+            return c.r or 0.2, c.g or 0.6, c.b or 1, (type(c.a) == "number") and c.a or 1
+        end,
+        set = function(_, r, g, b, a)
+            local res = module:GetSetting("resourceColours", {}) or {}
+            res.SUPERCHARGER = { r = r, g = g, b = b, a = (a ~= nil) and a or 1 }
+            module:SetSetting("resourceColours", res)
+            RefreshBar("PRIMARY_POWER")
+            RefreshBar("COMBO_POINTS")
+        end,
+    }
+    order = order + 1
     args.otherResourcesHeader = { type = "header", name = L["OTHER_RESOURCES"], order = order }
     order = order + 1
     for i, barId in ipairs(module:GetResourceBarIds()) do

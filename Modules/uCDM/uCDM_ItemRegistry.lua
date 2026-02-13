@@ -99,9 +99,10 @@ function ItemRegistry.HookBlizzardViewers()
             end)
         end
 
-        -- Buff viewer needs extra event handling
+        -- Buff: Blizzard updates frames in place on UNIT_AURA/UNIT_TARGET but does not call RefreshLayout.
+        -- Hook the viewer's OnEvent so we run our refresh once after Blizzard's handler.
         if viewerKey == "buff" then
-            ItemRegistry._hookBuffViewerEvents(viewer, viewerKey)
+            ItemRegistry._hookBuffViewerOnEvent(viewer, viewerKey)
         else
             ItemRegistry._hookCooldownEvents(viewer, viewerKey)
         end
@@ -134,99 +135,87 @@ function ItemRegistry.HookBlizzardViewers()
                     end
                     module:RefreshAllViewers()
                     ItemRegistry._hookPandemicWindow()
+                    ItemRegistry._hookProcGlow()
                 end)
                 self:UnregisterAllEvents()
             end
         end)
     else
         ItemRegistry._hookPandemicWindow()
+        ItemRegistry._hookProcGlow()
     end
 end
 
 function ItemRegistry._hookPandemicWindow()
-    print("|cFF00FF00[uCDM]|r _hookPandemicWindow called")
-    
     if not CooldownViewerItemMixin then
-        print("|cFFFF0000[uCDM]|r CooldownViewerItemMixin not found")
         return
     end
     
-    print("|cFF00FF00[uCDM]|r CooldownViewerItemMixin found, checking methods...")
-    print("|cFF00FF00[uCDM]|r ShowPandemicStateFrame =", CooldownViewerItemMixin.ShowPandemicStateFrame)
-    print("|cFF00FF00[uCDM]|r HidePandemicStateFrame =", CooldownViewerItemMixin.HidePandemicStateFrame)
-    print("|cFF00FF00[uCDM]|r CheckPandemicTimeDisplay =", CooldownViewerItemMixin.CheckPandemicTimeDisplay)
-    print("|cFF00FF00[uCDM]|r IsInPandemicTime =", CooldownViewerItemMixin.IsInPandemicTime)
-    
     if CooldownViewerItemMixin.CheckPandemicTimeDisplay then
         hooksecurefunc(CooldownViewerItemMixin, "CheckPandemicTimeDisplay", function(self, timeNow)
-            print("|cFFFF00FF[uCDM]|r CheckPandemicTimeDisplay called, timeNow =", timeNow)
             local inPandemic = self:IsInPandemicTime(timeNow)
-            print("|cFFFF00FF[uCDM]|r IsInPandemicTime =", inPandemic)
-            if inPandemic then
-                print("|cFFFF00FF[uCDM]|r In pandemic window, checking for PandemicIcon...")
-                print("|cFFFF00FF[uCDM]|r self.PandemicIcon =", self.PandemicIcon)
-                if self.PandemicIcon then
-                    print("|cFFFF00FF[uCDM]|r Hiding PandemicIcon")
-                    self.PandemicIcon:Hide()
-                else
-                    print("|cFFFF00FF[uCDM]|r PandemicIcon is nil, checking all regions...")
-                    for _, region in ipairs({self:GetRegions()}) do
-                        if region and region.GetName then
-                            local name = region:GetName()
-                            if name and (name:lower():find("pandemic") or name:lower():find("icon")) then
-                                print("|cFFFF00FF[uCDM]|r Found region:", name)
-                            end
-                        end
-                    end
-                end
+            if inPandemic and self.PandemicIcon then
+                self.PandemicIcon:Hide()
             end
         end)
     end
     
     if CooldownViewerItemMixin.ShowPandemicStateFrame then
         hooksecurefunc(CooldownViewerItemMixin, "ShowPandemicStateFrame", function(self)
-            print("|cFFFF00FF[uCDM]|r ShowPandemicStateFrame called")
-            print("|cFFFF00FF[uCDM]|r self.PandemicIcon =", self.PandemicIcon)
             if self.PandemicIcon then
-                print("|cFFFF00FF[uCDM]|r Hiding PandemicIcon")
                 self.PandemicIcon:Hide()
-            else
-                print("|cFFFF00FF[uCDM]|r PandemicIcon is nil, checking for alternatives...")
-                for k, v in pairs(self) do
-                    if type(k) == "string" and (k:lower():find("pandemic") or k:lower():find("icon")) then
-                        print("|cFFFF00FF[uCDM]|r Found:", k, "=", v)
-                    end
-                end
             end
         end)
     end
 
     if CooldownViewerItemMixin.HidePandemicStateFrame then
         hooksecurefunc(CooldownViewerItemMixin, "HidePandemicStateFrame", function(self)
-            print("|cFFFF00FF[uCDM]|r HidePandemicStateFrame called")
-            print("|cFFFF00FF[uCDM]|r self.PandemicIcon =", self.PandemicIcon)
             if self.PandemicIcon then
-                print("|cFFFF00FF[uCDM]|r Hiding PandemicIcon")
                 self.PandemicIcon:Hide()
             end
         end)
     end
-
-    print("|cFF00FF00[uCDM]|r Pandemic window hooks installed")
 end
 
-function ItemRegistry._hookBuffViewerEvents(viewer, viewerKey)
-    local eventFrame = CreateFrame("Frame")
-    eventFrame:RegisterUnitEvent("UNIT_TARGET", "player")
-    eventFrame:RegisterUnitEvent("UNIT_AURA", "player")
-    eventFrame:SetScript("OnEvent", function(self, event, unit)
-        if not module:IsEnabled() then return end
-        if viewer:IsShown() then
-            C_Timer.After(0.1, function()
-                if module:IsEnabled() and viewer:IsShown() then
-                    module:RefreshViewer(viewerKey)
-                end
-            end)
+local function hideProcGlow(frame)
+    if ActionButtonSpellAlertManager then
+        ActionButtonSpellAlertManager:HideAlert(frame)
+    end
+    if frame.SpellActivationAlert then
+        frame.SpellActivationAlert:Hide()
+    end
+end
+
+function ItemRegistry._hookProcGlow()
+    if not ActionButtonSpellAlertManager then
+        return
+    end
+    local mixins = {
+        CooldownViewerCooldownItemMixin,
+        CooldownViewerEssentialItemMixin,
+        CooldownViewerUtilityItemMixin,
+    }
+    for _, mixin in ipairs(mixins) do
+        if mixin then
+            if mixin.OnSpellActivationOverlayGlowShowEvent then
+                hooksecurefunc(mixin, "OnSpellActivationOverlayGlowShowEvent", function(self)
+                    hideProcGlow(self)
+                end)
+            end
+            if mixin.RefreshOverlayGlow then
+                hooksecurefunc(mixin, "RefreshOverlayGlow", function(self)
+                    hideProcGlow(self)
+                end)
+            end
+        end
+    end
+end
+
+function ItemRegistry._hookBuffViewerOnEvent(viewer, viewerKey)
+    viewer:HookScript("OnEvent", function(self, event)
+        if not module:IsEnabled() or not self:IsShown() then return end
+        if event == "UNIT_AURA" or event == "UNIT_TARGET" then
+            module:RefreshViewer(viewerKey)
         end
     end)
 end
@@ -254,6 +243,8 @@ end
 
 --------------------------------------------------------------------------------
 -- Blizzard Frame Collection
+-- cooldownIDs from viewer:GetCooldownIDs() then GetCooldownViewerCategorySet.
+-- Frames matched by child.layoutIndex (when valid) and by child:GetCooldownID() vs API list; one frame per index.
 --------------------------------------------------------------------------------
 
 function ItemRegistry.CollectBlizzardItems(viewerKey)
@@ -279,20 +270,16 @@ function ItemRegistry.CollectBlizzardItems(viewerKey)
 
     local framesByIndex = {}
     local numChildren = viewer:GetNumChildren()
-
     for i = 1, numChildren do
         local child = select(i, viewer:GetChildren())
         if child and child ~= viewer.Selection and not child._ucdmItemId and ItemRegistry._isIconFrame(child) then
-            -- Hook buff frame events if needed
             if viewerKey == "buff" and not child.__ucdmEventHooked then
                 ItemRegistry._hookBuffFrameEvents(child, viewer)
             end
-
             local layoutIndex = child.layoutIndex
             if layoutIndex and layoutIndex > 0 and layoutIndex <= #cooldownIDs then
                 framesByIndex[layoutIndex] = child
             end
-
             if child.GetCooldownID then
                 local frameCooldownID = child:GetCooldownID()
                 for idx, cooldownID in ipairs(cooldownIDs) do
@@ -315,7 +302,7 @@ function ItemRegistry.CollectBlizzardItems(viewerKey)
             if frame then
                 seenFrames[frame] = true
 
-                local spellID = cooldownInfo.spellID
+                local spellID = cooldownInfo.overrideSpellID or cooldownInfo.spellID
                 local itemID = frame.GetItemID and frame:GetItemID() or frame.itemID
                 local slotID = frame.GetSlotID and frame:GetSlotID() or frame.slotID
 
@@ -324,7 +311,6 @@ function ItemRegistry.CollectBlizzardItems(viewerKey)
                     slotID = slotID or frame.cooldownData.slotID
                 end
 
-                -- Find or create item
                 local item = itemsByFrame[frame]
                 if not item then
                     local id = "blizz_" .. viewerKey .. "_" .. cooldownID
@@ -343,7 +329,6 @@ function ItemRegistry.CollectBlizzardItems(viewerKey)
                     itemsById[id] = item
                     itemsByFrame[frame] = item
                 else
-                    -- Update existing item
                     item.spellID = spellID
                     item.itemID = itemID
                     item.slotID = slotID
@@ -393,35 +378,8 @@ function ItemRegistry._isIconFrame(frame)
     return (frame.Icon or frame.icon) and (frame.Cooldown or frame.cooldown)
 end
 
-function ItemRegistry._hookBuffFrameEvents(frame, viewer)
+function ItemRegistry._hookBuffFrameEvents(frame, _viewer)
     frame.__ucdmEventHooked = true
-
-    local function TriggerLayout(delayed)
-        if module:IsEnabled() and viewer:IsShown() and module.LayoutEngine then
-            if delayed then
-                C_Timer.After(0.1, function()
-                    if module:IsEnabled() and viewer:IsShown() then
-                        module.LayoutEngine.RefreshViewer("buff")
-                    end
-                end)
-            else
-                module.LayoutEngine.RefreshViewer("buff")
-            end
-        end
-    end
-
-    if frame.OnActiveStateChanged then
-        hooksecurefunc(frame, "OnActiveStateChanged", function() TriggerLayout(true) end)
-    end
-    if frame.OnUnitAuraAddedEvent then
-        hooksecurefunc(frame, "OnUnitAuraAddedEvent", function() TriggerLayout(true) end)
-    end
-    if frame.OnUnitAuraRemovedEvent then
-        hooksecurefunc(frame, "OnUnitAuraRemovedEvent", function() TriggerLayout(true) end)
-    end
-
-    frame:HookScript("OnShow", function() TriggerLayout(false) end)
-    frame:HookScript("OnHide", function() TriggerLayout(false) end)
 end
 
 --------------------------------------------------------------------------------
@@ -619,7 +577,6 @@ function ItemRegistry._acquireCustomFrame(id, parent)
         frame = CreateFrame("Button", "uCDMCustomFrame_" .. id, parent or UIParent)
         frame:SetSize(40, 40)
 
-        -- Apply pixel-perfect settings to frame
         if frame.SetSnapToPixelGrid then frame:SetSnapToPixelGrid(true) end
         if frame.SetTexelSnappingBias then frame:SetTexelSnappingBias(0) end
 
@@ -627,20 +584,13 @@ function ItemRegistry._acquireCustomFrame(id, parent)
         icon:SetAllPoints(frame)
         frame.Icon = icon
 
-        local mask = frame:CreateMaskTexture()
-        mask:SetAtlas("UI-HUD-CoolDownManager-Mask")
-        mask:SetAllPoints(icon)
-        if mask.SetSnapToPixelGrid then mask:SetSnapToPixelGrid(true) end
-        icon:AddMaskTexture(mask)
-        frame.IconMask = mask
-
-        -- Create cooldown WITHOUT template to avoid circular mask
         local cooldown = CreateFrame("Cooldown", nil, frame)
         cooldown:SetAllPoints(frame)
         cooldown:SetDrawEdge(false)
         cooldown:SetDrawBling(false)
+        if cooldown.SetEdgeScale then cooldown:SetEdgeScale(0) end
         cooldown:SetDrawSwipe(true)
-        cooldown:SetSwipeTexture("Interface\\Buttons\\WHITE8X8")
+        cooldown:SetSwipeTexture("")
         cooldown:SetSwipeColor(0, 0, 0, 0.8)
         cooldown:SetHideCountdownNumbers(false)
         if cooldown.SetSnapToPixelGrid then cooldown:SetSnapToPixelGrid(true) end

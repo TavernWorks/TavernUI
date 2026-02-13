@@ -20,6 +20,13 @@ local anchorTimers = {}
 local editModeSavePending = false
 local editModeHooked = false
 
+local function SafeShowFrame(frame)
+    if not frame then return end
+    if frame:IsShown() then return end
+    if InCombatLockdown() then return end
+    frame:Show()
+end
+
 --------------------------------------------------------------------------------
 -- Helpers
 --------------------------------------------------------------------------------
@@ -200,7 +207,7 @@ local function OnEditModeEnter()
             local viewer = module:GetViewerFrame(entry.id)
             if viewer then
                 Anchoring.RegisterViewer(entry.id, viewer)
-                viewer:Show()
+                SafeShowFrame(viewer)
             end
         end
     end

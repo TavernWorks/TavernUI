@@ -14,9 +14,12 @@ local TAG_NONE = "none"
 local TAG_CURRENT = "current"
 local TAG_CURRENT_MAX = "current_max"
 local TAG_PERCENT = "percent"
+local TAG_PERCENT_FULL = "percent_full"
 local TAG_NAME = "name"
 local TAG_CURRENT_PERCENT = "current_percent"
 local TAG_PERCENT_CURRENT = "percent_current"
+local TAG_CURRENT_PERCENT_FULL = "current_percent_full"
+local TAG_PERCENT_FULL_CURRENT = "percent_full_current"
 
 local POINTS = {
     "TOPLEFT", "TOP", "TOPRIGHT",
@@ -79,6 +82,13 @@ local function FormatOneTag(barId, tag, result)
         end
         return ""
     end
+    if tag == TAG_PERCENT_FULL then
+        local pct = GetPercentFromCurve(barId, result)
+        if pct ~= nil then
+            return string.format("%d%%", math.floor(pct + 0.5))
+        end
+        return ""
+    end
     return ""
 end
 
@@ -89,6 +99,12 @@ local function FormatTag(barId, tag, result)
     end
     if tag == TAG_PERCENT_CURRENT then
         return FormatOneTag(barId, TAG_PERCENT, result) .. " | " .. FormatOneTag(barId, TAG_CURRENT, result)
+    end
+    if tag == TAG_CURRENT_PERCENT_FULL then
+        return FormatOneTag(barId, TAG_CURRENT, result) .. " | " .. FormatOneTag(barId, TAG_PERCENT_FULL, result)
+    end
+    if tag == TAG_PERCENT_FULL_CURRENT then
+        return FormatOneTag(barId, TAG_PERCENT_FULL, result) .. " | " .. FormatOneTag(barId, TAG_CURRENT, result)
     end
     return FormatOneTag(barId, tag, result)
 end
@@ -154,9 +170,12 @@ Text.TAG_NONE = TAG_NONE
 Text.TAG_CURRENT = TAG_CURRENT
 Text.TAG_CURRENT_MAX = TAG_CURRENT_MAX
 Text.TAG_PERCENT = TAG_PERCENT
+Text.TAG_PERCENT_FULL = TAG_PERCENT_FULL
 Text.TAG_NAME = TAG_NAME
 Text.TAG_CURRENT_PERCENT = TAG_CURRENT_PERCENT
 Text.TAG_PERCENT_CURRENT = TAG_PERCENT_CURRENT
+Text.TAG_CURRENT_PERCENT_FULL = TAG_CURRENT_PERCENT_FULL
+Text.TAG_PERCENT_FULL_CURRENT = TAG_PERCENT_FULL_CURRENT
 Text.POINTS = POINTS
 
 module.Text = Text

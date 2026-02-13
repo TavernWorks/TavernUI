@@ -23,7 +23,7 @@ local CONSTANTS = {
 
 local layoutRunning = {}
 local layoutSettingSize = {}
-local refreshDebounceTimers = {}
+local layoutLastNotifiedCount = {}
 
 local LAYOUT_DEBUG = false
 local function LayoutDebug(fmt, ...)
@@ -32,9 +32,76 @@ local function LayoutDebug(fmt, ...)
     end
 end
 
---------------------------------------------------------------------------------
--- Initialization
---------------------------------------------------------------------------------
+local function SafeShowFrame(frame)
+    if not frame then return end
+    if frame:IsShown() then return end
+    if InCombatLockdown() then return end
+    frame:Show()
+end
+
+function LayoutEngine.IsProtectedViewer(viewerKey)
+    return viewerKey == "essential" or viewerKey == "utility" or viewerKey == "buff"
+end
+
+local function SafeHideFrame(frame, viewerKey, inCombat)
+    if not frame then return end
+    local combat = inCombat
+    if combat == nil then combat = InCombatLockdown() end
+    if combat and LayoutEngine.IsProtectedViewer(viewerKey) then return end
+    frame:Hide()
+end
+
+local function SafeSetSize(frame, w, h, viewerKey, inCombat)
+    if not frame then return end
+    local combat = inCombat
+    if combat == nil then combat = InCombatLockdown() end
+    if combat and LayoutEngine.IsProtectedViewer(viewerKey) then return end
+    frame:SetSize(w, h)
+end
+
+local function SafeSetParent(child, parent, viewerKey, inCombat)
+    if not child or not parent then return end
+    local combat = inCombat
+    if combat == nil then combat = InCombatLockdown() end
+    if combat and LayoutEngine.IsProtectedViewer(viewerKey) then return end
+    child:SetParent(parent)
+end
+
+local function ApplyVisibilityState(viewer, withHoverScripts)
+    local Visibility = TavernUI and TavernUI.Visibility
+    local show = not Visibility or Visibility:ShouldShow()
+    local hiddenAlpha = Visibility and Visibility:GetHiddenOpacity() or 0
+
+    if show then
+        SafeShowFrame(viewer)
+        viewer:SetAlpha(1)
+        if withHoverScripts then
+            viewer:SetScript("OnEnter", nil)
+            viewer:SetScript("OnLeave", nil)
+        end
+    else
+        local visibleOnHover = withHoverScripts and Visibility and Visibility:GetVisibleOnHover()
+        local alpha = (hiddenAlpha and hiddenAlpha > 0) and hiddenAlpha or 0
+
+        if visibleOnHover and viewer:IsMouseOver() then
+            viewer:SetAlpha(1)
+        else
+            viewer:SetAlpha(alpha)
+        end
+        
+        if withHoverScripts and visibleOnHover then
+            viewer:SetScript("OnEnter", function()
+                viewer:SetAlpha(1)
+            end)
+            viewer:SetScript("OnLeave", function()
+                viewer:SetAlpha(alpha)
+            end)
+        elseif withHoverScripts then
+            viewer:SetScript("OnEnter", nil)
+            viewer:SetScript("OnLeave", nil)
+        end
+    end
+end
 
 local function InstallRefreshLayoutHooks()
     local names = module.CONSTANTS.VIEWER_NAMES
@@ -49,9 +116,6 @@ local function InstallRefreshLayoutHooks()
                             module.ItemRegistry.CollectBlizzardItems(viewerKey)
                         end
                         LayoutEngine.RefreshViewer(viewerKey)
-                        if module.Keybinds then
-                            module.Keybinds.RefreshViewer(viewerKey)
-                        end
                     end)
                 end
                 
@@ -76,7 +140,7 @@ function LayoutEngine.Initialize()
                 if newValue then
                     LayoutEngine.RefreshViewer(viewerKey)
                 else
-                    viewer:Hide()
+                    SafeHideFrame(viewer, viewerKey)
                 end
             end
         end)
@@ -105,26 +169,22 @@ function LayoutEngine.Initialize()
     end)
 end
 
---------------------------------------------------------------------------------
--- Viewer Access
---------------------------------------------------------------------------------
-
-
 function LayoutEngine.IsLayoutDrivenByBlizzardHook(viewerKey)
-    return viewerKey == "essential" or viewerKey == "utility"
+    return viewerKey == "essential" or viewerKey == "utility" or viewerKey == "buff"
 end
 
 function LayoutEngine.IsSettingViewerSize(viewerKey)
     return layoutSettingSize[viewerKey] == true
 end
 
---------------------------------------------------------------------------------
--- Row Configuration
---------------------------------------------------------------------------------
-
-local function GetActiveRows(settings)
+local function GetActiveRows(settings, viewerKey)
     local rows = {}
-    if not settings or not settings.rows then return rows end
+    if not settings or not settings.rows then
+        if viewerKey == "buff" and settings and settings.enabled then
+            return { GetDefaultBuffRow(settings.scale or 1.0) }
+        end
+        return rows
+    end
 
     -- Scale multiplier for icon dimensions (borders remain pixel-perfect)
     local scale = settings.scale or 1.0
@@ -158,7 +218,38 @@ local function GetActiveRows(settings)
         end
     end
 
+    if viewerKey == "buff" and settings.enabled and #rows == 0 then
+        return { GetDefaultBuffRow(settings.scale or 1.0) }
+    end
     return rows
+end
+
+local function GetDefaultBuffRow(scale)
+    scale = scale or 1.0
+    return {
+        orientation = "horizontal",
+        positionAtSide = "left",
+        iconCount = 6,
+        iconSize = 40 * scale,
+        padding = 4 * scale,
+        yOffset = 0,
+        aspectRatioCrop = 1.0,
+        zoom = 0.08,
+        iconStyle = "square",
+        iconBorderSize = 1,
+        iconBorderColor = CONSTANTS.DEFAULT_ICON_BORDER_COLOR,
+        rowBorderSize = 0,
+        rowBorderColor = CONSTANTS.DEFAULT_ROW_BORDER_COLOR,
+        durationSize = 18 * scale,
+        durationPoint = "CENTER",
+        durationOffsetX = 0,
+        durationOffsetY = 0,
+        stackSize = 16 * scale,
+        stackPoint = "BOTTOMRIGHT",
+        stackOffsetX = 0,
+        stackOffsetY = 0,
+        keepRowHeightWhenEmpty = true,
+    }
 end
 
 local function GetTotalCapacity(rows)
@@ -168,10 +259,6 @@ local function GetTotalCapacity(rows)
     end
     return total
 end
-
---------------------------------------------------------------------------------
--- Row Assignment
---------------------------------------------------------------------------------
 
 local function AssignItemsToRows(items, rows, viewerKey)
     local rowAssignments = {}
@@ -258,10 +345,6 @@ local function GetRowAssignmentsWithPreview(viewer, viewerKey, settings, items, 
 
     return rowAssignments, visibleItems
 end
-
---------------------------------------------------------------------------------
--- Layout Application
---------------------------------------------------------------------------------
 
 local function ApplyRowBorder(viewer, rowNum, rowConfig, rowWidth, rowHeight, rowCenterY, rowCenterX)
     local rawBorderSize = rowConfig.rowBorderSize or 0
@@ -371,7 +454,7 @@ local function BuildRowMetrics(viewer, viewerKey, rowConfig, rowItems)
     }
 end
 
-local function LayoutRowItems(viewer, rowItems, rowConfig, metrics, rowCenterY, rowCenterX)
+local function LayoutRowItems(viewer, rowItems, rowConfig, metrics, rowCenterY, rowCenterX, viewerKey, inCombat)
     if metrics.actualIcons <= 0 then
         return
     end
@@ -385,7 +468,7 @@ local function LayoutRowItems(viewer, rowItems, rowConfig, metrics, rowCenterY, 
     for col, item in ipairs(rowItems) do
         local frame = item.frame
         if frame then
-            frame:SetParent(viewer)
+            SafeSetParent(frame, viewer, viewerKey, inCombat)
             frame:SetFrameLevel(viewer:GetFrameLevel() + 3)
             PP.ClearPoints(frame)
 
@@ -438,7 +521,7 @@ local function ComputeRowPosition(growDirection, rowNum, metrics, currentX, prev
     return rowCenterX, rowCenterY, currentX, previousActualRowWidth, currentGroupHeight, currentY
 end
 
-local function ApplyLayout(viewer, rowAssignments, rows, viewerKey)
+local function ApplyLayout(viewer, rowAssignments, rows, viewerKey, inCombat)
     local settings = module:GetViewerSettings(viewerKey)
     local growDirection = (settings and settings.rowGrowDirection) or "down"
     local scale = (settings and settings.scale) or 1.0
@@ -484,16 +567,34 @@ local function ApplyLayout(viewer, rowAssignments, rows, viewerKey)
         maxRowWidth = math.max(maxRowWidth, currentGroupWidth)
     end
     
-    local effectiveWidth = (maxActualContentWidth > 0) and maxActualContentWidth or maxRowWidth
+    local effectiveWidth = maxRowWidth
+    if not LayoutEngine.IsProtectedViewer(viewerKey) then
+        effectiveWidth = (maxActualContentWidth > 0) and maxActualContentWidth or maxRowWidth
+    end
+    local totalItems = 0
+    for _, rowItems in ipairs(rowAssignments) do
+        totalItems = totalItems + #rowItems
+    end
+    local structureUnchanged = (layoutLastNotifiedCount[viewerKey] == totalItems)
     if effectiveWidth > 0 and totalHeight > 0 then
-        layoutSettingSize[viewerKey] = true
-        pcall(function()
-            viewer:SetSize(effectiveWidth, totalHeight)
-        end)
-        layoutSettingSize[viewerKey] = nil
-        local Anchor = LibStub("LibAnchorRegistry-1.0", true)
-        if Anchor and Anchor.NotifySizeChanged then
-            Anchor:NotifySizeChanged("TavernUI.uCDM." .. viewerKey)
+        local currentW, currentH = viewer:GetWidth(), viewer:GetHeight()
+        local sizeChanged = not currentW or not currentH
+            or math.abs(currentW - effectiveWidth) > 0.5
+            or math.abs(currentH - totalHeight) > 0.5
+        if sizeChanged then
+            SafeSetSize(viewer, effectiveWidth, totalHeight, viewerKey, inCombat)
+        end
+        if not structureUnchanged then
+            layoutLastNotifiedCount[viewerKey] = totalItems
+            local skipped = inCombat and LayoutEngine.IsProtectedViewer(viewerKey)
+            if not skipped then
+                layoutSettingSize[viewerKey] = true
+                local Anchor = LibStub("LibAnchorRegistry-1.0", true)
+                if Anchor and Anchor.NotifySizeChanged then
+                    Anchor:NotifySizeChanged("TavernUI.uCDM." .. viewerKey)
+                end
+                layoutSettingSize[viewerKey] = nil
+            end
         end
     end
     
@@ -512,7 +613,7 @@ local function ApplyLayout(viewer, rowAssignments, rows, viewerKey)
         rowCenterX, rowCenterY, currentX, previousActualRowWidth, currentGroupHeight, currentY =
             ComputeRowPosition(growDirection, rowNum, metrics, currentX, previousActualRowWidth, currentY, currentGroupHeight, pxRowGap, pxYOffset)
 
-        LayoutRowItems(viewer, rowItems, rowConfig, metrics, rowCenterY, rowCenterX)
+        LayoutRowItems(viewer, rowItems, rowConfig, metrics, rowCenterY, rowCenterX, viewerKey, inCombat)
         ApplyRowBorder(viewer, rowNum, rowConfig, metrics.rowWidth, metrics.rowHeight, rowCenterY, rowCenterX)
 
         previousActualRowWidth = metrics.actualRowWidth
@@ -524,11 +625,11 @@ local function StyleViewerCooldowns(viewerKey)
     if not viewerName then return end
     local blizzViewer = _G[viewerName]
     if not blizzViewer or not blizzViewer.GetChildren then return end
-    local applySwipe = module.CooldownTracker and module.CooldownTracker.ApplySwipeStyle
+    local ensureSwipe = module.CooldownTracker and module.CooldownTracker.EnsureSwipeStyleAndHooks
     for _, child in ipairs({ blizzViewer:GetChildren() }) do
         local cooldown = child.Cooldown or child.cooldown
-        if cooldown and applySwipe then
-            applySwipe(cooldown)
+        if cooldown and ensureSwipe then
+            ensureSwipe(cooldown)
         end
     end
 end
@@ -538,41 +639,12 @@ function LayoutEngine.ApplyVisibilityToViewer(viewerKey, deferInHookContext)
     if not viewer then return end
     local settings = module:GetViewerSettings(viewerKey)
     if not settings or settings.enabled == false then
-        viewer:Hide()
+        SafeHideFrame(viewer, viewerKey)
         return
     end
     
     local function apply()
-        local Visibility = TavernUI and TavernUI.Visibility
-        local show = not Visibility or Visibility:ShouldShow()
-        local hiddenAlpha = Visibility and Visibility:GetHiddenOpacity() or 0
-
-        if show then
-            viewer:Show()
-            viewer:SetAlpha(1)
-            viewer:SetScript("OnEnter", nil)
-            viewer:SetScript("OnLeave", nil)
-        else
-            local visibleOnHover = Visibility and Visibility:GetVisibleOnHover()
-            local alpha = (hiddenAlpha and hiddenAlpha > 0) and hiddenAlpha or 0
-
-            if visibleOnHover and viewer:IsMouseOver() then
-                viewer:SetAlpha(1)
-            else
-                viewer:SetAlpha(alpha)
-            end
-            if visibleOnHover then
-                viewer:SetScript("OnEnter", function()
-                    viewer:SetAlpha(1)
-                end)
-                viewer:SetScript("OnLeave", function()
-                    viewer:SetAlpha(alpha)
-                end)
-            else
-                viewer:SetScript("OnEnter", nil)
-                viewer:SetScript("OnLeave", nil)
-            end
-        end
+        ApplyVisibilityState(viewer, true)
     end
     
     if deferInHookContext then
@@ -582,22 +654,9 @@ function LayoutEngine.ApplyVisibilityToViewer(viewerKey, deferInHookContext)
     end
 end
 
---------------------------------------------------------------------------------
--- Main Refresh
---------------------------------------------------------------------------------
-
-function LayoutEngine.RefreshViewer(viewerKey, skipDebounce)
+function LayoutEngine.RefreshViewer(viewerKey)
     if layoutRunning[viewerKey] then return end
-    
-    if viewerKey == "buff" and not skipDebounce then
-        if refreshDebounceTimers[viewerKey] then
-            return
-        end
-        refreshDebounceTimers[viewerKey] = C_Timer.After(0.1, function()
-            refreshDebounceTimers[viewerKey] = nil
-        end)
-    end
-    
+
     layoutRunning[viewerKey] = true
     local function done()
         layoutRunning[viewerKey] = nil
@@ -609,37 +668,34 @@ function LayoutEngine.RefreshViewer(viewerKey, skipDebounce)
         return
     end
 
+    if module.ItemRegistry then
+        module.ItemRegistry.CollectBlizzardItems(viewerKey)
+    end
+
+    local inCombat = InCombatLockdown()
     local settings = module:GetViewerSettings(viewerKey)
     if not settings or settings.enabled == false then
-        viewer:Hide()
+        if viewerKey == "buff" then StyleViewerCooldowns(viewerKey) end
+        SafeHideFrame(viewer, viewerKey, inCombat)
         done()
         return
     end
 
     if ShouldHideBeforeLayout(viewerKey, viewer, settings) then
-        viewer:Hide()
+        if viewerKey == "buff" then StyleViewerCooldowns(viewerKey) end
+        SafeHideFrame(viewer, viewerKey, inCombat)
         HidePreviewIfBuff(viewerKey, viewer)
         done()
         return
     end
 
-    local Visibility = TavernUI and TavernUI.Visibility
-    local shouldShow = not Visibility or Visibility:ShouldShow()
-    local hiddenAlpha = Visibility and Visibility:GetHiddenOpacity() or 0
+    ApplyVisibilityState(viewer, false)
 
-    if shouldShow then
-        viewer:SetAlpha(1)
-    else
-        viewer:SetAlpha((hiddenAlpha > 0) and hiddenAlpha or 0)
-    end
-    viewer:Show()
+    local rows = GetActiveRows(settings, viewerKey)
+    local items = (module.ItemRegistry and module.ItemRegistry.GetItemsForViewer(viewerKey)) or {}
 
-    local rows = GetActiveRows(settings)
-    local items = module.ItemRegistry.GetItemsForViewer(viewerKey) or {}
-    
     if #rows > 0 and (#items > 0 or ShouldRunLayoutWithNoItems(viewerKey, settings)) then
         local rowAssignments, visibleItems = GetRowAssignmentsWithPreview(viewer, viewerKey, settings, items, rows)
-
         local assignedItems = {}
         for _, entry in ipairs(visibleItems) do
             assignedItems[entry.item] = true
@@ -654,25 +710,19 @@ function LayoutEngine.RefreshViewer(viewerKey, skipDebounce)
             item:setInLayout(assignedItems[item] == true)
         end
 
-        ApplyLayout(viewer, rowAssignments, rows, viewerKey)
+        ApplyLayout(viewer, rowAssignments, rows, viewerKey, inCombat)
         ApplyPostLayout(viewerKey, viewer, visibleItems)
     else
         HidePreviewIfBuff(viewerKey, viewer)
     end
 
     StyleViewerCooldowns(viewerKey)
-    if LayoutEngine.IsLayoutDrivenByBlizzardHook(viewerKey) then
-        LayoutEngine.ApplyVisibilityToViewer(viewerKey, false)
-    end
     done()
 end
-
---------------------------------------------------------------------------------
--- Export
---------------------------------------------------------------------------------
 
 function LayoutEngine.EnsureHooksInstalled()
     InstallRefreshLayoutHooks()
 end
 
 module.LayoutEngine = LayoutEngine
+

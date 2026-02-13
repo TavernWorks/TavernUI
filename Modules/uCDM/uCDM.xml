@@ -9,6 +9,7 @@
 
     <!-- CooldownItem class (can now reference CooldownTracker) -->
     <Script file="uCDM_CooldownItem.lua"/>
+    <Script file="uCDM_CooldownItem_Styling.lua"/>
 
     <!-- Item management (uses CooldownItem) -->
     <Script file="uCDM_ItemRegistry.lua"/>

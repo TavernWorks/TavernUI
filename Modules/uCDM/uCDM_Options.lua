@@ -138,6 +138,15 @@ local function RefreshViewerComponents(viewerKey, property)
     end
 end
 
+local function RefreshOptions(rebuild)
+    if rebuild then
+        module.optionsBuilt = false
+        module:BuildOptions()
+        module.optionsBuilt = true
+    end
+    LibStub("AceConfigRegistry-3.0"):NotifyChange("TavernUI")
+end
+
 local function RefreshViewerAndOptions(viewerKey)
     RefreshViewerComponents(viewerKey, "rows")
     RefreshOptions(true)
@@ -187,15 +196,6 @@ local function CreateCustomEntry(trackingType, id, overrideViewer, configData)
         return true
     end
     return false
-end
-
-local function RefreshOptions(rebuild)
-    if rebuild then
-        module.optionsBuilt = false
-        module:BuildOptions()
-        module.optionsBuilt = true
-    end
-    LibStub("AceConfigRegistry-3.0"):NotifyChange("TavernUI")
 end
 
 local pickingActionSlot = false
@@ -276,6 +276,123 @@ local ANCHOR_POINTS = {
     BOTTOM = "BOTTOM",
     BOTTOMRIGHT = "BOTTOMRIGHT",
 }
+
+local DEFAULT_TEXT_COLOR = {r = 1, g = 1, b = 1, a = 1}
+
+local function MakeViewerColorOption(viewerKey, optionKey, config)
+    local path = string.format("viewers.%s.%s", viewerKey, optionKey)
+    local default = config.default or DEFAULT_TEXT_COLOR
+    local hasAlpha = config.hasAlpha ~= false
+
+    local option = {
+        type = "color",
+        name = config.name,
+        desc = config.desc,
+        order = config.order,
+        hasAlpha = hasAlpha,
+        disabled = config.disabled,
+    }
+
+    option.get = function()
+        local color = module:GetSetting(path, default)
+        if type(color) ~= "table" then
+            color = default
+        end
+
+        local r = color.r or default.r or 1
+        local g = color.g or default.g or 1
+        local b = color.b or default.b or 1
+        local a = hasAlpha and (color.a ~= nil and color.a or default.a or 1) or nil
+
+        if hasAlpha then
+            return r, g, b, a
+        end
+
+        return r, g, b
+    end
+
+    option.set = function(_, r, g, b, a)
+        local color = module:GetSetting(path, default)
+        if type(color) ~= "table" then
+            color = {
+                r = default.r or 1,
+                g = default.g or 1,
+                b = default.b or 1,
+                a = default.a or 1,
+            }
+        end
+
+        color.r = r
+        color.g = g
+        color.b = b
+        if hasAlpha and a ~= nil then
+            color.a = a
+        end
+
+        module:SetSetting(path, color)
+        RefreshViewerComponents(viewerKey, optionKey)
+    end
+
+    return option
+end
+
+local function MakeColorOption(path, config)
+    local default = config.default or DEFAULT_TEXT_COLOR
+    local hasAlpha = config.hasAlpha ~= false
+
+    local option = {
+        type = "color",
+        name = config.name,
+        desc = config.desc,
+        order = config.order,
+        hasAlpha = hasAlpha,
+    }
+
+    option.get = function()
+        local color = module:GetSetting(path, default)
+        if type(color) ~= "table" then
+            color = default
+        end
+
+        local r = color.r or default.r or 1
+        local g = color.g or default.g or 1
+        local b = color.b or default.b or 1
+        local a = hasAlpha and (color.a ~= nil and color.a or default.a or 1) or nil
+
+        if hasAlpha then
+            return r, g, b, a
+        end
+
+        return r, g, b
+    end
+
+    option.set = function(_, r, g, b, a)
+        local color = module:GetSetting(path, default)
+        if type(color) ~= "table" then
+            color = {
+                r = default.r or 1,
+                g = default.g or 1,
+                b = default.b or 1,
+                a = default.a or 1,
+            }
+        end
+
+        color.r = r
+        color.g = g
+        color.b = b
+        if hasAlpha and a ~= nil then
+            color.a = a
+        end
+
+        module:SetSetting(path, color)
+
+        if config.onSet then
+            config.onSet()
+        end
+    end
+
+    return option
+end
 
 local function MakeRowOption(viewerKey, rowIndex, optionKey, optionType, config)
     local order = config.order
@@ -1192,26 +1309,35 @@ local function BuildViewerOptions(viewerKey, viewerName, orderBase)
         end,
     }
     order = order + 1
-
-    args.keybindColor = {
-        type = "color",
+    args.keybindColor = MakeViewerColorOption(viewerKey, "keybindColor", {
+        order = order,
         name = L["KEYBIND_TEXT_COLOR"],
         desc = L["COLOR_OF_KEYBIND_DESC"],
-        order = order,
         hasAlpha = true,
+        default = {r = 1, g = 1, b = 1, a = 1},
         disabled = function()
             return not module:GetSetting(string.format("viewers.%s.showKeybinds", viewerKey), false)
         end,
-        get = function()
-            local color = module:GetSetting(string.format("viewers.%s.keybindColor", viewerKey), {r = 1, g = 1, b = 1, a = 1})
-            return color.r or 1, color.g or 1, color.b or 1, color.a or 1
-        end,
-        set = function(_, r, g, b, a)
-            local path = string.format("viewers.%s.keybindColor", viewerKey)
-            module:SetSetting(path, {r = r, g = g, b = b, a = a})
-            RefreshViewerComponents(viewerKey, "keybindColor")
-        end,
-    }
+    })
+    order = order + 1
+
+    args.textColorsHeader = {type = "header", name = L["TEXT_COLORS"], order = order}
+    order = order + 1
+    args.durationTextColor = MakeViewerColorOption(viewerKey, "durationTextColor", {
+        order = order,
+        name = L["DURATION_TEXT_COLOR"],
+        desc = L["DURATION_TEXT_COLOR_DESC"],
+        hasAlpha = true,
+        default = {r = 1, g = 1, b = 1, a = 1},
+    })
+    order = order + 1
+    args.stackTextColor = MakeViewerColorOption(viewerKey, "stackTextColor", {
+        order = order,
+        name = L["STACK_TEXT_COLOR"],
+        desc = L["STACK_TEXT_COLOR_DESC"],
+        hasAlpha = true,
+        default = {r = 1, g = 1, b = 1, a = 1},
+    })
     order = order + 1
 
     args.rowsHeader = {type = "header", name = L["Rows"], order = order}
@@ -1293,30 +1419,13 @@ local function BuildOverlaysOptions()
                 module:SetSetting("overlays.pandemic.enabled", value)
             end,
         },
-        pandemicBorderColor = {
-            type = "color",
+        pandemicBorderColor = MakeColorOption("overlays.pandemic.borderColor", {
+            order = 2,
             name = L["PANDEMIC_BORDER_COLOR"] or "Border Color",
             desc = L["PANDEMIC_BORDER_COLOR_DESC"] or "Border color when aura is in pandemic window",
-            order = 2,
             hasAlpha = false,
-            get = function()
-                local color = module:GetSetting("overlays.pandemic.borderColor", {r = 1, g = 0, b = 0, a = 1})
-                if color and type(color) == "table" then
-                    return color.r or 1, color.g or 0, color.b or 0
-                end
-                return 1, 0, 0
-            end,
-            set = function(_, r, g, b)
-                local color = module:GetSetting("overlays.pandemic.borderColor", {r = 1, g = 0, b = 0, a = 1})
-                if type(color) ~= "table" then
-                    color = {r = 1, g = 0, b = 0, a = 1}
-                end
-                color.r = r
-                color.g = g
-                color.b = b
-                module:SetSetting("overlays.pandemic.borderColor", color)
-            end,
-        },
+            default = {r = 1, g = 0, b = 0, a = 1},
+        }),
         pandemicBorderWidth = {
             type = "range",
             name = L["PANDEMIC_BORDER_WIDTH"] or "Border Width",
@@ -1330,6 +1439,49 @@ local function BuildOverlaysOptions()
             end,
             set = function(_, value)
                 module:SetSetting("overlays.pandemic.borderWidth", value, {
+                    type = "number",
+                    min = 1,
+                    max = 10,
+                })
+            end,
+        },
+        procHeader = {
+            type = "header",
+            name = L["PROC"] or "Proc",
+            order = 10,
+        },
+        procEnabled = {
+            type = "toggle",
+            name = L["SHOW_PROC"] or "Show Proc",
+            desc = L["SHOW_PROC_DESC"] or "Show border color when spell proc is ready",
+            order = 11,
+            get = function()
+                return module:GetSetting("overlays.proc.enabled", true) ~= false
+            end,
+            set = function(_, value)
+                module:SetSetting("overlays.proc.enabled", value)
+            end,
+        },
+        procBorderColor = MakeColorOption("overlays.proc.borderColor", {
+            order = 12,
+            name = L["PROC_BORDER_COLOR"] or "Border Color",
+            desc = L["PROC_BORDER_COLOR_DESC"] or "Border color when spell proc is ready",
+            hasAlpha = false,
+            default = {r = 1, g = 1, b = 0, a = 1},
+        }),
+        procBorderWidth = {
+            type = "range",
+            name = L["PROC_BORDER_WIDTH"] or "Border Width",
+            desc = L["PROC_BORDER_WIDTH_DESC"] or "Border width in pixels when spell proc is ready",
+            order = 13,
+            min = 1,
+            max = 10,
+            step = 1,
+            get = function()
+                return module:GetSetting("overlays.proc.borderWidth", 2)
+            end,
+            set = function(_, value)
+                module:SetSetting("overlays.proc.borderWidth", value, {
                     type = "number",
                     min = 1,
                     max = 10,

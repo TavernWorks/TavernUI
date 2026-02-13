@@ -147,14 +147,32 @@ local function ApplyThresholdBarColor(frame, a)
     return true
 end
 
+local POWER_TYPE_ENERGY = Enum.PowerType.Energy
+
+local function IsSuperchargerActive()
+    local powerType, _, altR = UnitPowerType("player")
+    return powerType == POWER_TYPE_ENERGY and altR ~= nil
+end
+
 local function ApplyPowerBarColor(frame)
     if not module.ColorModes then return end
+
     local colorMode = frame.config.colorMode or module.CONSTANTS.COLOR_MODE_SOLID
     local a = (frame.config.color and type(frame.config.color.a) == "number") and frame.config.color.a or 1
+
     if colorMode == module.CONSTANTS.COLOR_MODE_THRESHOLD and ApplyThresholdBarColor(frame, a) then
         return
     end
+
     local r, g, b = module.ColorModes:GetColorForPercentage(0, colorMode, frame.config)
+
+    if frame.barId == module.CONSTANTS.BAR_ID_PRIMARY_POWER and module:GetSetting("useSuperchargerColorOnPrimaryPower", false) and IsSuperchargerActive() then
+        local c = module:GetEffectiveResourceColor("SUPERCHARGER", module:GetSetting("resourceColours", {}) or {})
+        if c and (c.r or c.g or c.b) then
+            r, g, b = c.r or 1, c.g or 1, c.b or 1
+        end
+    end
+
     frame.bar:SetStatusBarColor(r, g, b, a)
 end
 
@@ -379,14 +397,20 @@ local function CreateSegmentedBar(barId, config)
 
             segment.bar:SetMinMaxValues(0, 1)
             segment.bar:SetValue(fillPercent)
-            
+
             if module.ColorModes then
-                local percentage = 0
-                local r, g, b = module.ColorModes:GetColorForPercentage(percentage, config.colorMode or module.CONSTANTS.COLOR_MODE_SOLID, config)
                 local a = (config.color and type(config.color.a) == "number") and config.color.a or 1
+                local r, g, b = module.ColorModes:GetColorForPercentage(0, config.colorMode or module.CONSTANTS.COLOR_MODE_SOLID, config)
+                local seg = data.segments and data.segments[i]
+                if self.barId == "COMBO_POINTS" and seg and seg.charged then
+                    local c = module:GetEffectiveResourceColor("SUPERCHARGER", module:GetSetting("resourceColours", {}) or {})
+                    if c and (c.r or c.g or c.b) then
+                        r, g, b = c.r or 1, c.g or 1, c.b or 1
+                    end
+                end
                 segment.bar:SetStatusBarColor(r, g, b, a)
             end
-            
+
             segment:Show()
         end
 

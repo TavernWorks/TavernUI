@@ -60,8 +60,7 @@ function Preview.ApplyPreviewFakeData(viewer, visibleItems)
                 frame._ucdmKeybindText:SetText(RandomKeybindText())
                 local size = settings.keybindSize or 10
                 TavernUI:ApplyFont(frame._ucdmKeybindText, frame, size)
-                local color = settings.keybindColor or { r = 1, g = 1, b = 1, a = 1 }
-                frame._ucdmKeybindText:SetTextColor(color.r, color.g, color.b, color.a)
+                module:ApplyTextColor(frame._ucdmKeybindText, settings, "keybindColor")
                 frame._ucdmKeybindText:ClearAllPoints()
                 local bindPoint = frame.Icon or frame
                 local pt = settings.keybindPoint or "TOPLEFT"
@@ -118,8 +117,9 @@ local function CreatePreviewFrame(viewer, index)
     cooldown:SetAllPoints(f)
     cooldown:SetDrawEdge(false)
     cooldown:SetDrawBling(false)
+    if cooldown.SetEdgeScale then cooldown:SetEdgeScale(0) end
     cooldown:SetDrawSwipe(true)
-    cooldown:SetSwipeTexture("Interface\\Buttons\\WHITE8X8")
+    cooldown:SetSwipeTexture("")
     cooldown:SetSwipeColor(0, 0, 0, 0.8)
     cooldown:SetHideCountdownNumbers(false)
     f.Cooldown = cooldown
