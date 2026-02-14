@@ -38,8 +38,13 @@ local DISPLAY_NAMES = {
 }
 
 local function GetBarFrame(unitKey)
-    local bar = module:GetCastbar(unitKey)
-    return bar and bar.frame or nil
+    local oufFrame = module:GetOufFrame(unitKey)
+    if not oufFrame then return nil end
+    local factory = TavernUI.oUFFactory
+    if factory and factory.GetSpawnMode and factory.GetSpawnMode(unitKey) == "full" then
+        return oufFrame.TUI_Castbar or nil
+    end
+    return oufFrame
 end
 
 local function GetBarPosition(unitKey)
