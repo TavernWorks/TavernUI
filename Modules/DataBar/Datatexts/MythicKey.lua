@@ -101,11 +101,7 @@ local function GetKeyColor(level)
 end
 
 local function GetShortDungeonName(mapID)
-    local name = C_ChallengeMode.GetMapUIInfo(mapID)
-    if name then
-        return name:match("^(%S+)") or name
-    end
-    return "?"
+    return DataBar:GetShortDungeonName(mapID)
 end
 
 local function UpdateSecureAttributes(secureButton)
