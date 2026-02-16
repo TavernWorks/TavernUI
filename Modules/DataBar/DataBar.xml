@@ -11,11 +11,13 @@
     <Script file="Datatexts\Durability.lua"/>
     <Script file="Datatexts\FriendsOnline.lua"/>
     <Script file="Datatexts\GuildOnline.lua"/>
+    <Script file="Datatexts\MemoryCache.lua"/>
     <Script file="Datatexts\MemoryUsage.lua"/>
     <Script file="Datatexts\System.lua"/>
     <Script file="Datatexts\Coords.lua"/>
     <Script file="Datatexts\Bags.lua"/>
     <Script file="Datatexts\Currencies.lua"/>
+    <Script file="Datatexts\Dungeons.lua"/>
     <Script file="Datatexts\MythicKey.lua"/>
     <Script file="Datatexts\Volume.lua"/>
     <Script file="Datatexts\PlayerSpec.lua"/>
