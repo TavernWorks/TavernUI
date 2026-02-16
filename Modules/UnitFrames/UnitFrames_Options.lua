@@ -7,8 +7,17 @@ local Anchor = LibStub("LibAnchorRegistry-1.0", true)
 local UNIT_CONFIG = module.UNIT_CONFIG
 
 local function RefreshCastbarModule(unitType)
+    local frame = module.frames and module.frames[unitType]
+    -- If UF has the frame and Castbar module is NOT owning it, refresh directly
+    if frame and frame.TUI_Castbar and frame.TUI_CastbarOwner ~= "CB" then
+        if module.CastbarShared then
+            module.CastbarShared:RefreshCastbar(frame.TUI_Castbar, unitType)
+        end
+        return
+    end
+    -- Otherwise (Castbar module owns it, or castbar_only frame), route to Castbar module
     local cbModule = TavernUI:GetModule("Castbar", true)
-    if cbModule and TavernUI:IsModuleEnabled("Castbar") then
+    if cbModule and cbModule.RefreshCastbar then
         cbModule:RefreshCastbar(unitType)
     end
 end
@@ -340,17 +349,6 @@ local function BuildUnitOptions(unitType, unitInfo)
                 module:RefreshUnitType(unitType)
             end,
         },
-        showCastbar = {
-            type = "toggle",
-            name = "Show Castbar",
-            order = 22,
-            hidden = function() return unitType == "targettarget" or unitType == "focustarget" end,
-            get = function() return GetUnitSetting(unitType, "showCastbar", true) end,
-            set = function(_, value)
-                SetUnitSetting(unitType, "showCastbar", value)
-                module:RefreshUnitType(unitType)
-            end,
-        },
         showPortrait = {
             type = "toggle",
             name = "Show Portrait",
@@ -560,12 +558,32 @@ local function BuildUnitOptions(unitType, unitInfo)
                 module:RefreshUnitType(unitType)
             end,
         },
+        castbarHeader = {
+            type = "header",
+            name = "Castbar",
+            order = 52,
+            hidden = function() return unitType == "targettarget" or unitType == "focustarget" end,
+        },
+        showCastbar = {
+            type = "toggle",
+            name = "Show Castbar",
+            order = 52.1,
+            hidden = function() return unitType == "targettarget" or unitType == "focustarget" end,
+            get = function() return GetUnitSetting(unitType, "showCastbar", true) end,
+            set = function(_, value)
+                SetUnitSetting(unitType, "showCastbar", value)
+                module:RefreshUnitType(unitType)
+            end,
+        },
         castbarHeight = {
             type = "range",
-            name = "Castbar Height",
-            order = 52,
+            name = "Height",
+            order = 52.2,
             min = 8, max = 40, step = 1,
-            hidden = function() return not GetUnitSetting(unitType, "showCastbar", true) end,
+            hidden = function()
+                return unitType == "targettarget" or unitType == "focustarget"
+                    or not GetUnitSetting(unitType, "showCastbar", true)
+            end,
             get = function() return TavernUI:GetCastbarSetting(unitType, "height", 20) end,
             set = function(_, value)
                 TavernUI:SetCastbarSetting(unitType, "height", value)
@@ -575,9 +593,9 @@ local function BuildUnitOptions(unitType, unitInfo)
         },
         castbarAnchor = {
             type = "select",
-            name = "Castbar Position",
+            name = "Position",
             desc = "Where the castbar attaches to the unit frame.",
-            order = 52.1,
+            order = 52.3,
             values = { below = "Below Frame", above = "Above Frame" },
             hidden = function()
                 return unitType == "targettarget" or unitType == "focustarget"
@@ -592,8 +610,8 @@ local function BuildUnitOptions(unitType, unitInfo)
         },
         castbarColor = {
             type = "color",
-            name = "Castbar Color",
-            order = 52.2,
+            name = "Color",
+            order = 52.4,
             hasAlpha = true,
             hidden = function()
                 return unitType == "targettarget" or unitType == "focustarget"
@@ -612,9 +630,9 @@ local function BuildUnitOptions(unitType, unitInfo)
         },
         castbarUseClassColor = {
             type = "toggle",
-            name = "Castbar Class Color",
+            name = "Use Class Color",
             desc = "Color the castbar by the unit's class.",
-            order = 52.3,
+            order = 52.5,
             hidden = function()
                 return unitType == "targettarget" or unitType == "focustarget"
                     or not GetUnitSetting(unitType, "showCastbar", true)

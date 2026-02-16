@@ -38,25 +38,9 @@ end
 local function SetUnitEnabled(unitKey, value)
     SetUnitSetting(unitKey, CONSTANTS.KEY_ENABLED, value)
     if value then
-        local bar = module:GetCastbar(unitKey)
-        if not bar then
-            bar = module:CreateCastbar(unitKey)
-            if module.Cast then
-                module.Cast:SetupEvents(bar, unitKey)
-            end
-        end
-        if module.Anchoring then
-            module.Anchoring:RegisterBar(unitKey, bar.frame)
-            module.Anchoring:ApplyAnchor(unitKey)
-        end
-        module.HideBlizzardCastbar(unitKey)
+        module:EnableUnitCastbar(unitKey)
     else
-        local bar = module:GetCastbar(unitKey)
-        if bar and module.Anchoring then
-            module.Anchoring:UnregisterBar(unitKey, bar.frame)
-        end
-        module:DestroyCastbar(unitKey)
-        module.ShowBlizzardCastbar(unitKey)
+        module:DisableUnitCastbar(unitKey)
     end
 end
 

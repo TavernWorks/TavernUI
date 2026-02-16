@@ -83,10 +83,6 @@ module.STAGE_COLORS = STAGE_COLORS
 module.STAGE_FILL_COLORS = STAGE_FILL_COLORS
 
 local DEFAULT_BAR_COLOR = { r = 0.82, g = 0.82, b = 0.82, a = 1 }
-local DEFAULT_BG_COLOR = { r = 0, g = 0, b = 0, a = 0.5 }
-local DEFAULT_BORDER_COLOR = { r = 0.169, g = 0.169, b = 0.169, a = 1 }
-local DEFAULT_ICON_BORDER_COLOR = { r = 0.169, g = 0.169, b = 0.169, a = 1 }
-local DEFAULT_NOT_INTERRUPTIBLE_COLOR = { r = 0.65, g = 0.25, b = 0.25, a = 1 }
 
 local function CopyColor(c)
     return { r = c.r, g = c.g, b = c.b, a = c.a }
@@ -99,10 +95,10 @@ local function MakeUnitDefaults(isPlayer)
         height = 20,
         barTexture = nil,
         barColor = CopyColor(DEFAULT_BAR_COLOR),
-        bgColor = CopyColor(DEFAULT_BG_COLOR),
+        bgColor = { r = 0, g = 0, b = 0, a = 0.5 },
         borderSize = 1,
-        borderColor = CopyColor(DEFAULT_BORDER_COLOR),
-        notInterruptibleColor = CopyColor(DEFAULT_NOT_INTERRUPTIBLE_COLOR),
+        borderColor = { r = 0.169, g = 0.169, b = 0.169, a = 1 },
+        notInterruptibleColor = { r = 0.65, g = 0.25, b = 0.25, a = 1 },
         useClassColor = false,
         channelFillForward = false,
 
@@ -112,7 +108,7 @@ local function MakeUnitDefaults(isPlayer)
         iconAnchor = "LEFT",
         iconSpacing = 0,
         iconBorderSize = 2,
-        iconBorderColor = CopyColor(DEFAULT_ICON_BORDER_COLOR),
+        iconBorderColor = { r = 0.169, g = 0.169, b = 0.169, a = 1 },
 
         fontSize = 12,
         maxTextLength = 0,
@@ -154,9 +150,6 @@ local defaults = {
 
 TavernUI:RegisterModuleDefaults("Castbar", defaults, true)
 
-local castbars = {}
-module.castbars = castbars
-
 local UNITS = { CONSTANTS.UNIT_PLAYER, CONSTANTS.UNIT_TARGET, CONSTANTS.UNIT_FOCUS }
 
 local function GetUnitSettings(unitKey)
@@ -185,294 +178,22 @@ end
 
 module.TruncateName = TruncateName
 
-local function CreateIcon(anchorFrame, settings)
-    local iconSize = settings.iconSize or 20
-    local borderSize = settings.iconBorderSize or 2
+-- ============================================================================
+-- Castbar Access (oUF-based)
+-- ============================================================================
 
-    local icon = CreateFrame("Frame", nil, anchorFrame)
-    icon:SetSize(iconSize, iconSize)
-
-    local border = icon:CreateTexture(nil, "BACKGROUND", nil, -8)
-    border:SetAllPoints(icon)
-    border:SetColorTexture(
-        settings.iconBorderColor and settings.iconBorderColor.r or 0,
-        settings.iconBorderColor and settings.iconBorderColor.g or 0,
-        settings.iconBorderColor and settings.iconBorderColor.b or 0,
-        settings.iconBorderColor and settings.iconBorderColor.a or 1
-    )
-    icon.border = border
-
-    local texture = icon:CreateTexture(nil, "ARTWORK")
-    texture:SetPoint("TOPLEFT", icon, "TOPLEFT", borderSize, -borderSize)
-    texture:SetPoint("BOTTOMRIGHT", icon, "BOTTOMRIGHT", -borderSize, borderSize)
-    texture:SetTexCoord(0.08, 0.92, 0.08, 0.92)
-    icon.texture = texture
-
-    return icon
+function module:GetOufFrame(unitKey)
+    return self.oufFrames and self.oufFrames[unitKey] or nil
 end
 
-local function CreateStatusBar(anchorFrame, settings)
-    local statusBar = CreateFrame("StatusBar", nil, anchorFrame)
-    statusBar:SetStatusBarTexture(GetTexturePath(settings.barTexture))
-    statusBar:SetStatusBarColor(
-        settings.barColor and settings.barColor.r or 0.82,
-        settings.barColor and settings.barColor.g or 0.82,
-        settings.barColor and settings.barColor.b or 0.82,
-        settings.barColor and settings.barColor.a or 1
-    )
-    statusBar:SetMinMaxValues(0, 1)
-    statusBar:SetValue(0)
-    statusBar:SetReverseFill(false)
-
-    local bgBar = statusBar:CreateTexture(nil, "BACKGROUND")
-    bgBar:SetAllPoints(statusBar)
-    bgBar:SetTexture(GetTexturePath(settings.barTexture))
-    bgBar:SetVertexColor(
-        settings.bgColor and settings.bgColor.r or 0,
-        settings.bgColor and settings.bgColor.g or 0,
-        settings.bgColor and settings.bgColor.b or 0,
-        settings.bgColor and settings.bgColor.a or 0.5
-    )
-    statusBar.bgBar = bgBar
-
-    local borderSize = settings.borderSize or 1
-    if borderSize > 0 then
-        local borderFrame = CreateFrame("Frame", nil, statusBar, "BackdropTemplate")
-        borderFrame:SetPoint("TOPLEFT", anchorFrame, "TOPLEFT", -borderSize, borderSize)
-        borderFrame:SetPoint("BOTTOMRIGHT", anchorFrame, "BOTTOMRIGHT", borderSize, -borderSize)
-        borderFrame:SetFrameLevel(math.max(1, statusBar:GetFrameLevel() - 1))
-        borderFrame:SetBackdrop({
-            edgeFile = "Interface\\Buttons\\WHITE8X8",
-            edgeSize = borderSize,
-        })
-        borderFrame:SetBackdropBorderColor(
-            settings.borderColor and settings.borderColor.r or 0,
-            settings.borderColor and settings.borderColor.g or 0,
-            settings.borderColor and settings.borderColor.b or 0,
-            settings.borderColor and settings.borderColor.a or 1
-        )
-        statusBar.borderFrame = borderFrame
-    end
-
-    return statusBar
+function module:GetCastbar(unitKey)
+    local oufFrame = self:GetOufFrame(unitKey)
+    return oufFrame and oufFrame.TUI_Castbar or nil
 end
 
-local function PositionIcon(castbar, settings)
-    local icon = castbar.icon
-    if not icon then return end
-
-    local anchor = settings.iconAnchor or "LEFT"
-    local spacing = settings.iconSpacing or 0
-    local iconSize = (settings.iconSize or 20) * (settings.iconScale or 1.0)
-
-    icon:ClearAllPoints()
-    icon:SetSize(iconSize, iconSize)
-
-    if anchor == "LEFT" then
-        icon:SetPoint("RIGHT", castbar.statusBar, "LEFT", -spacing, 0)
-    elseif anchor == "RIGHT" then
-        icon:SetPoint("LEFT", castbar.statusBar, "RIGHT", spacing, 0)
-    end
-end
-
-local function PositionStatusBar(castbar, settings)
-    local statusBar = castbar.statusBar
-    local anchorFrame = castbar.frame
-    if not statusBar or not anchorFrame then return end
-
-    local showIcon = settings.showIcon ~= false
-    local iconAnchor = settings.iconAnchor or "LEFT"
-    local iconSize = showIcon and ((settings.iconSize or 20) * (settings.iconScale or 1.0)) or 0
-    local iconSpacing = showIcon and (settings.iconSpacing or 0) or 0
-
-    statusBar:ClearAllPoints()
-
-    if showIcon and iconAnchor == "LEFT" then
-        statusBar:SetPoint("TOPLEFT", anchorFrame, "TOPLEFT", iconSize + iconSpacing, 0)
-        statusBar:SetPoint("BOTTOMRIGHT", anchorFrame, "BOTTOMRIGHT", 0, 0)
-    elseif showIcon and iconAnchor == "RIGHT" then
-        statusBar:SetPoint("TOPLEFT", anchorFrame, "TOPLEFT", 0, 0)
-        statusBar:SetPoint("BOTTOMRIGHT", anchorFrame, "BOTTOMRIGHT", -(iconSize + iconSpacing), 0)
-    else
-        statusBar:SetPoint("TOPLEFT", anchorFrame, "TOPLEFT", 0, 0)
-        statusBar:SetPoint("BOTTOMRIGHT", anchorFrame, "BOTTOMRIGHT", 0, 0)
-    end
-end
-
-local function PositionText(fontString, statusBar, anchor, offsetX, offsetY)
-    if not fontString or not statusBar then return end
-    fontString:ClearAllPoints()
-
-    local point, relPoint
-    if anchor == "LEFT" then
-        point, relPoint = "LEFT", "LEFT"
-    elseif anchor == "RIGHT" then
-        point, relPoint = "RIGHT", "RIGHT"
-    elseif anchor == "CENTER" then
-        point, relPoint = "CENTER", "CENTER"
-    else
-        point, relPoint = "LEFT", "LEFT"
-    end
-
-    fontString:SetPoint(point, statusBar, relPoint, offsetX or 0, offsetY or 0)
-end
-
-function module:CreateCastbar(unitKey)
-    if castbars[unitKey] then return castbars[unitKey] end
-
-    local settings = GetUnitSettings(unitKey) or {}
-    local isPlayer = (unitKey == CONSTANTS.UNIT_PLAYER)
-    local frameName = "TavernUI_Castbar_" .. unitKey
-
-    local frame = CreateFrame("Frame", frameName, UIParent)
-    frame:SetSize(settings.width or 220, settings.height or 20)
-    frame:SetPoint("CENTER", UIParent, "CENTER", 0, isPlayer and -150 or (unitKey == "target" and 150 or 100))
-    frame:SetFrameStrata("MEDIUM")
-    frame:SetFrameLevel(200)
-    frame:Hide()
-
-    local castbar = {
-        frame = frame,
-        unitKey = unitKey,
-        isPlayer = isPlayer,
-    }
-
-    castbar.statusBar = CreateStatusBar(frame, settings)
-    castbar.icon = CreateIcon(frame, settings)
-
-    local fontSize = settings.fontSize or 12
-    castbar.spellText = TavernUI:CreateFontString(castbar.statusBar, fontSize, nil, "OVERLAY", castbar.statusBar)
-    castbar.timeText = TavernUI:CreateFontString(castbar.statusBar, fontSize, nil, "OVERLAY", castbar.statusBar)
-
-    if isPlayer then
-        castbar.empoweredLevelText = TavernUI:CreateFontString(castbar.statusBar, fontSize, nil, "OVERLAY", castbar.statusBar)
-        castbar.empoweredLevelText:Hide()
-    end
-
-    PositionStatusBar(castbar, settings)
-    PositionIcon(castbar, settings)
-    PositionText(castbar.spellText, castbar.statusBar, settings.spellTextAnchor or "LEFT", settings.spellTextOffsetX or 4, settings.spellTextOffsetY or 0)
-    PositionText(castbar.timeText, castbar.statusBar, settings.timeTextAnchor or "RIGHT", settings.timeTextOffsetX or -4, settings.timeTextOffsetY or 0)
-
-    if settings.showSpellText == false then castbar.spellText:Hide() else castbar.spellText:Show() end
-    if settings.showTimeText == false then castbar.timeText:Hide() else castbar.timeText:Show() end
-    if not settings.showIcon then castbar.icon:Hide() else castbar.icon:Show() end
-
-    castbar.isChanneled = false
-    castbar.isEmpowered = false
-    castbar.notInterruptible = false
-    castbar.timerDriven = false
-    castbar.startTime = 0
-    castbar.endTime = 0
-    castbar.textThrottle = 0
-    castbar.numStages = 0
-    castbar.stageOverlays = {}
-    castbar.empoweredStages = {}
-    castbar.stagePositions = {}
-    castbar.isPreviewSimulation = false
-
-    castbars[unitKey] = castbar
-    return castbar
-end
-
-function module:DestroyCastbar(unitKey)
-    local castbar = castbars[unitKey]
-    if not castbar then return end
-
-    if castbar.frame then
-        castbar.frame:SetScript("OnUpdate", nil)
-        castbar.frame:SetScript("OnEvent", nil)
-        castbar.frame:UnregisterAllEvents()
-        castbar.frame:Hide()
-        castbar.frame:SetParent(nil)
-    end
-
-    castbars[unitKey] = nil
-end
-
-function module:RefreshCastbar(unitKey)
-    local castbar = castbars[unitKey]
-    if not castbar then return end
-
-    local settings = GetUnitSettings(unitKey) or {}
-    local frame = castbar.frame
-
-    frame:SetSize(settings.width or 220, settings.height or 20)
-
-    local statusBar = castbar.statusBar
-    statusBar:SetStatusBarTexture(GetTexturePath(settings.barTexture))
-    statusBar.bgBar:SetTexture(GetTexturePath(settings.barTexture))
-    statusBar.bgBar:SetVertexColor(
-        settings.bgColor and settings.bgColor.r or 0,
-        settings.bgColor and settings.bgColor.g or 0,
-        settings.bgColor and settings.bgColor.b or 0,
-        settings.bgColor and settings.bgColor.a or 0.5
-    )
-
-    if statusBar.borderFrame then
-        local borderSize = settings.borderSize or 1
-        statusBar.borderFrame:ClearAllPoints()
-        statusBar.borderFrame:SetPoint("TOPLEFT", frame, "TOPLEFT", -borderSize, borderSize)
-        statusBar.borderFrame:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", borderSize, -borderSize)
-        statusBar.borderFrame:SetBackdropBorderColor(
-            settings.borderColor and settings.borderColor.r or 0,
-            settings.borderColor and settings.borderColor.g or 0,
-            settings.borderColor and settings.borderColor.b or 0,
-            settings.borderColor and settings.borderColor.a or 1
-        )
-    end
-
-    local iconBorderColor = settings.iconBorderColor or DEFAULT_ICON_BORDER_COLOR
-    castbar.icon.border:SetColorTexture(iconBorderColor.r, iconBorderColor.g, iconBorderColor.b, iconBorderColor.a or 1)
-    local borderSize = settings.iconBorderSize or 2
-    castbar.icon.texture:ClearAllPoints()
-    castbar.icon.texture:SetPoint("TOPLEFT", castbar.icon, "TOPLEFT", borderSize, -borderSize)
-    castbar.icon.texture:SetPoint("BOTTOMRIGHT", castbar.icon, "BOTTOMRIGHT", -borderSize, borderSize)
-
-    local r, g, b, a = self:GetBarColor(unitKey)
-    statusBar:SetStatusBarColor(r, g, b, a)
-
-    PositionStatusBar(castbar, settings)
-    PositionIcon(castbar, settings)
-    PositionText(castbar.spellText, statusBar, settings.spellTextAnchor or "LEFT", settings.spellTextOffsetX or 4, settings.spellTextOffsetY or 0)
-    PositionText(castbar.timeText, statusBar, settings.timeTextAnchor or "RIGHT", settings.timeTextOffsetX or -4, settings.timeTextOffsetY or 0)
-
-    local fontSize = settings.fontSize or 12
-    TavernUI:ApplyFont(castbar.spellText, castbar.statusBar, fontSize)
-    TavernUI:ApplyFont(castbar.timeText, castbar.statusBar, fontSize)
-    if castbar.empoweredLevelText then
-        TavernUI:ApplyFont(castbar.empoweredLevelText, castbar.statusBar, fontSize)
-    end
-
-    if settings.showSpellText == false then castbar.spellText:Hide() else castbar.spellText:Show() end
-    if settings.showTimeText == false then castbar.timeText:Hide() else castbar.timeText:Show() end
-    if not settings.showIcon then castbar.icon:Hide() else castbar.icon:Show() end
-
-    if self.Anchoring and self.Anchoring.ApplyAnchor then
-        self.Anchoring:ApplyAnchor(unitKey)
-    end
-end
-
-function module:OnInitialize()
-    self:RegisterMessage("TavernUI_ProfileChanged", "OnProfileChanged")
-    self:RegisterEvent("PLAYER_ENTERING_WORLD", "OnPlayerEnteringWorld")
-
-    if self.Anchoring then
-        self.Anchoring:Initialize()
-    end
-
-    if self.Options then
-        self.Options:Initialize()
-    end
-
-    self:WatchSetting("enabled", function(newValue)
-        if newValue then
-            self:Enable()
-        else
-            self:Disable()
-        end
-    end)
-end
+-- ============================================================================
+-- Blizzard Castbar Management
+-- ============================================================================
 
 local BLIZZARD_CASTBARS = {
     player = "PlayerCastingBarFrame",
@@ -514,68 +235,9 @@ end
 module.HideBlizzardCastbar = HideBlizzardCastbar
 module.ShowBlizzardCastbar = ShowBlizzardCastbar
 
-function module:OnEnable()
-    for _, unitKey in ipairs(UNITS) do
-        local settings = GetUnitSettings(unitKey)
-        if settings and settings.enabled ~= false then
-            local castbar = self:CreateCastbar(unitKey)
-            if self.Cast then
-                self.Cast:SetupEvents(castbar, unitKey)
-            end
-            if self.Anchoring then
-                self.Anchoring:RegisterBar(unitKey, castbar.frame)
-                self.Anchoring:ApplyAnchor(unitKey)
-            end
-            HideBlizzardCastbar(unitKey)
-        end
-    end
-
-    local ufModule = TavernUI:GetModule("UnitFrames", true)
-    if ufModule and ufModule:IsEnabled() then
-        for _, unitKey in ipairs(UNITS) do
-            if castbars[unitKey] then
-                ufModule:UpdateFrame(unitKey)
-            end
-        end
-    end
-end
-
-function module:OnDisable()
-    for _, unitKey in ipairs(UNITS) do
-        self:DestroyCastbar(unitKey)
-        ShowBlizzardCastbar(unitKey)
-    end
-    if self.Anchoring and self.Anchoring.Cleanup then
-        self.Anchoring:Cleanup()
-    end
-end
-
-function module:OnProfileChanged()
-    for _, unitKey in ipairs(UNITS) do
-        self:DestroyCastbar(unitKey)
-    end
-    if self:IsEnabled() then
-        self:OnEnable()
-    end
-end
-
-function module:OnPlayerEnteringWorld()
-    if not self:IsEnabled() then return end
-    for _, unitKey in ipairs(UNITS) do
-        if castbars[unitKey] then
-            self:RefreshCastbar(unitKey)
-            HideBlizzardCastbar(unitKey)
-        end
-    end
-end
-
-function module:GetCastbar(unitKey)
-    return castbars[unitKey]
-end
-
-function module:GetUnitSettings(unitKey)
-    return GetUnitSettings(unitKey)
-end
+-- ============================================================================
+-- Bar Color
+-- ============================================================================
 
 function module:GetBarColor(unitKey)
     local settings = GetUnitSettings(unitKey) or {}
@@ -588,4 +250,203 @@ function module:GetBarColor(unitKey)
     end
     local c = settings.barColor or DEFAULT_BAR_COLOR
     return c.r, c.g, c.b, c.a or 1
+end
+
+-- ============================================================================
+-- Enable/Disable Unit Castbar on oUF Frame
+-- ============================================================================
+
+local function GetCastbarShared()
+    local ufModule = TavernUI:GetModule("UnitFrames", true)
+    return ufModule and ufModule.CastbarShared or nil
+end
+
+local function IsFullMode(unitKey)
+    local factory = TavernUI.oUFFactory
+    return factory and factory.GetSpawnMode and factory.GetSpawnMode(unitKey) == "full"
+end
+
+function module:EnableUnitCastbar(unitKey)
+    local oufFrame = self:GetOufFrame(unitKey)
+    if not oufFrame then return end
+
+    local castbar = oufFrame.TUI_Castbar
+    if not castbar then return end
+
+    local fullMode = IsFullMode(unitKey)
+
+    -- In full mode, defer to UF if it's managing the castbar
+    if fullMode and oufFrame.TUI_CastbarOwner == "UF" then
+        return
+    end
+
+    if not oufFrame.Castbar then
+        oufFrame.Castbar = castbar
+        oufFrame:EnableElement("Castbar")
+    end
+
+    local shared = GetCastbarShared()
+    if shared then
+        shared:RefreshCastbar(castbar, unitKey)
+    end
+
+    if fullMode then
+        -- Mark Castbar module as owner
+        oufFrame.TUI_CastbarOwner = "CB"
+        -- Size and position castbar independently of UF frame
+        local settings = GetUnitSettings(unitKey) or {}
+        castbar:ClearAllPoints()
+        castbar:SetSize(settings.width or 220, settings.height or 20)
+        -- Default position below UF frame if no custom anchor saved
+        if not settings.anchorConfig or not settings.anchorConfig.target or settings.anchorConfig.target == "" then
+            castbar:SetPoint("TOPLEFT", oufFrame, "BOTTOMLEFT", 0, -4)
+            castbar:SetPoint("TOPRIGHT", oufFrame, "BOTTOMRIGHT", 0, -4)
+        end
+    else
+        -- For castbar_only, show the oUF frame
+        oufFrame:SetAlpha(1)
+        oufFrame:Show()
+    end
+
+    if self.Anchoring then
+        local anchorTarget = fullMode and castbar or oufFrame
+        self.Anchoring:RegisterBar(unitKey, anchorTarget)
+        self.Anchoring:ApplyAnchor(unitKey)
+    end
+
+    HideBlizzardCastbar(unitKey)
+end
+
+function module:DisableUnitCastbar(unitKey)
+    local oufFrame = self:GetOufFrame(unitKey)
+    if not oufFrame then return end
+
+    local fullMode = IsFullMode(unitKey)
+    local anchorTarget = fullMode and oufFrame.TUI_Castbar or oufFrame
+
+    if self.Anchoring then
+        self.Anchoring:UnregisterBar(unitKey, anchorTarget)
+    end
+
+    if oufFrame.Castbar then
+        oufFrame:DisableElement("Castbar")
+        oufFrame.Castbar = nil
+    end
+
+    if fullMode then
+        oufFrame.TUI_CastbarOwner = nil
+        if oufFrame.TUI_Castbar then
+            oufFrame.TUI_Castbar:Hide()
+        end
+    else
+        oufFrame:Hide()
+    end
+
+    ShowBlizzardCastbar(unitKey)
+end
+
+-- ============================================================================
+-- Refresh
+-- ============================================================================
+
+function module:RefreshCastbar(unitKey)
+    local oufFrame = self:GetOufFrame(unitKey)
+    if not oufFrame then return end
+
+    local castbar = oufFrame.TUI_Castbar
+    if not castbar then return end
+
+    local fullMode = IsFullMode(unitKey)
+    local ufOwns = fullMode and oufFrame.TUI_CastbarOwner == "UF"
+
+    -- Always refresh visuals (settings are shared, UF options may change them too)
+    local shared = GetCastbarShared()
+    if shared then
+        shared:RefreshCastbar(castbar, unitKey)
+    end
+
+    -- Only size and anchor when Castbar module owns
+    if not ufOwns then
+        local settings = GetUnitSettings(unitKey) or {}
+        if fullMode then
+            castbar:SetSize(settings.width or 220, settings.height or 20)
+        else
+            oufFrame:SetSize(settings.width or 220, settings.height or 20)
+        end
+
+        if self.Anchoring and self.Anchoring.ApplyAnchor then
+            self.Anchoring:ApplyAnchor(unitKey)
+        end
+    end
+end
+
+-- ============================================================================
+-- Module Lifecycle
+-- ============================================================================
+
+function module:OnInitialize()
+    self:RegisterMessage("TavernUI_ProfileChanged", "OnProfileChanged")
+    self:RegisterEvent("PLAYER_ENTERING_WORLD", "OnPlayerEnteringWorld")
+
+    if self.Anchoring then
+        self.Anchoring:Initialize()
+    end
+
+    if self.Options then
+        self.Options:Initialize()
+    end
+
+    self:WatchSetting("enabled", function(newValue)
+        if newValue then
+            self:Enable()
+        else
+            self:Disable()
+        end
+    end)
+end
+
+function module:OnEnable()
+    for _, unitKey in ipairs(UNITS) do
+        local settings = GetUnitSettings(unitKey)
+        if settings and settings.enabled ~= false then
+            HideBlizzardCastbar(unitKey)
+        end
+    end
+end
+
+function module:InitializeCastbars()
+    if not self.oufFrames then return end
+
+    for _, unitKey in ipairs(UNITS) do
+        local settings = GetUnitSettings(unitKey)
+        if settings and settings.enabled ~= false then
+            self:EnableUnitCastbar(unitKey)
+        else
+            self:DisableUnitCastbar(unitKey)
+        end
+    end
+end
+
+function module:OnDisable()
+    for _, unitKey in ipairs(UNITS) do
+        self:DisableUnitCastbar(unitKey)
+    end
+    if self.Anchoring and self.Anchoring.Cleanup then
+        self.Anchoring:Cleanup()
+    end
+end
+
+function module:OnProfileChanged()
+    if self:IsEnabled() then
+        self:InitializeCastbars()
+    end
+end
+
+function module:OnPlayerEnteringWorld()
+    if not self:IsEnabled() then return end
+    self:InitializeCastbars()
+end
+
+function module:GetUnitSettings(unitKey)
+    return GetUnitSettings(unitKey)
 end

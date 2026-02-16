@@ -705,7 +705,20 @@ function module:UpdateFrame(unit)
 
     local cbModuleHandling = TavernUI.oUFFactory.IsCastbarModuleHandling(unitType)
     if frame.TUI_Castbar then
-        if db.showCastbar and not cbModuleHandling then
+        if db.showCastbar then
+            -- UF manages castbar (takes priority)
+            if frame.TUI_CastbarOwner == "CB" then
+                local cbModule = TavernUI:GetModule("Castbar", true)
+                if cbModule then
+                    if cbModule.DisableUnitCastbar then
+                        cbModule:DisableUnitCastbar(unitType)
+                    end
+                    if cbModule.HideBlizzardCastbar then
+                        cbModule.HideBlizzardCastbar(unitType)
+                    end
+                end
+            end
+            frame.TUI_CastbarOwner = "UF"
             if not frame.Castbar then
                 frame.Castbar = frame.TUI_Castbar
                 frame:EnableElement("Castbar")
@@ -715,8 +728,8 @@ function module:UpdateFrame(unit)
             if frame.TUI_Castbar.Spark then
                 frame.TUI_Castbar.Spark:SetSize(2, cbHeight)
             end
-            if frame.TUI_Castbar.Icon then
-                frame.TUI_Castbar.Icon:SetSize(cbHeight, cbHeight)
+            if frame.TUI_Castbar.TUI_IconContainer then
+                frame.TUI_Castbar.TUI_IconContainer:SetSize(cbHeight, cbHeight)
             end
 
             frame.TUI_Castbar:ClearAllPoints()
@@ -732,7 +745,28 @@ function module:UpdateFrame(unit)
             frame.TUI_Castbar.TUI_castColor = TavernUI:GetCastbarSetting(unitType, "barColor")
             frame.TUI_Castbar.TUI_useClassColor = TavernUI:GetCastbarSetting(unitType, "useClassColor", false)
             frame.TUI_Castbar.TUI_notInterruptibleColor = TavernUI:GetCastbarSetting(unitType, "notInterruptibleColor")
+        elseif cbModuleHandling then
+            -- Castbar module handles — hand off if UF was managing
+            if frame.TUI_CastbarOwner == "UF" then
+                frame.TUI_CastbarOwner = nil
+                if frame.Castbar then
+                    frame:DisableElement("Castbar")
+                    frame.Castbar = nil
+                end
+                local cbModule = TavernUI:GetModule("Castbar", true)
+                if cbModule and cbModule:IsEnabled() and cbModule.EnableUnitCastbar then
+                    cbModule:EnableUnitCastbar(unitType)
+                end
+            end
         else
+            -- Nobody wants it, disable + hide
+            if frame.TUI_CastbarOwner == "CB" then
+                local cbModule = TavernUI:GetModule("Castbar", true)
+                if cbModule and cbModule.DisableUnitCastbar then
+                    cbModule:DisableUnitCastbar(unitType)
+                end
+            end
+            frame.TUI_CastbarOwner = nil
             if frame.Castbar then
                 frame:DisableElement("Castbar")
                 frame.Castbar = nil

@@ -34,8 +34,8 @@ local function GetSpawnMode(unit)
     if cbModule and TavernUI:IsModuleEnabled("Castbar") then
         for _, cbUnit in ipairs(CASTBAR_UNITS) do
             if cbUnit == unit then
-                local settings = cbModule:GetSetting("units." .. unit)
-                if settings and settings.enabled ~= false then
+                local unitEnabled = TavernUI:GetCastbarSetting(unit, "enabled", true)
+                if unitEnabled ~= false then
                     return "castbar_only"
                 end
             end
@@ -47,11 +47,14 @@ end
 
 local function IsCastbarModuleHandling(unit)
     local cbModule = TavernUI:GetModule("Castbar", true)
-    if not cbModule or not TavernUI:IsModuleEnabled("Castbar") then
-        return false
+    if not cbModule or not TavernUI:IsModuleEnabled("Castbar") then return false end
+    for _, cbUnit in ipairs(CASTBAR_UNITS) do
+        if cbUnit == unit then
+            local unitEnabled = TavernUI:GetCastbarSetting(unit, "enabled", true)
+            return unitEnabled ~= false
+        end
     end
-    local settings = cbModule:GetSetting("units." .. unit)
-    return settings and settings.enabled ~= false
+    return false
 end
 
 Factory.GetSpawnMode = GetSpawnMode
@@ -72,30 +75,16 @@ local function AdaptiveStyle(frame, unit)
 
         local ufModule = TavernUI:GetModule("UnitFrames", true)
         if ufModule and ufModule.CastbarShared then
-            local barColor = TavernUI:GetCastbarSetting(unit, "barColor")
             local cbDb = {
+                showCastbar = true,
                 castbar = {
-                    height = height,
-                    showIcon = TavernUI:GetCastbarSetting(unit, "showIcon", true),
-                    showTime = TavernUI:GetCastbarSetting(unit, "showTimeText", true),
-                    showText = TavernUI:GetCastbarSetting(unit, "showSpellText", true),
                     anchor = {
                         point = "TOPLEFT", relPoint = "TOPLEFT", offX = 0, offY = 0,
                         point2 = "BOTTOMRIGHT", relPoint2 = "BOTTOMRIGHT",
                     },
-                    color = barColor,
-                    useCustomColor = barColor ~= nil,
-                    useClassColor = TavernUI:GetCastbarSetting(unit, "useClassColor", false),
                 },
-                showCastbar = true,
             }
-
-            local castbar = ufModule.CastbarShared:CreateCastbar(frame, unit, cbDb)
-            if castbar then
-                castbar.TUI_castColor = barColor
-                castbar.TUI_useClassColor = cbDb.castbar.useClassColor
-                castbar.TUI_notInterruptibleColor = TavernUI:GetCastbarSetting(unit, "notInterruptibleColor")
-            end
+            ufModule.CastbarShared:CreateCastbar(frame, unit, cbDb)
         end
     end
 end
@@ -132,6 +121,11 @@ function Factory:SpawnFrames()
                 local frame = oufSelf:Spawn(unit, globalName)
                 frame:SetPoint("CENTER", UIParent, "CENTER", 0, 0)
                 self.frames[unit] = frame
+
+                if mode == "castbar_only" then
+                    frame:SetAlpha(0)
+                    frame:Hide()
+                end
             end
         end
 
@@ -165,9 +159,9 @@ function Factory:SpawnFrames()
                 end
             end
         end
-    end)
 
-    self:DistributeFrames()
+        self:DistributeFrames()
+    end)
 end
 
 function Factory:DistributeFrames()
@@ -178,6 +172,10 @@ function Factory:DistributeFrames()
         local mode = GetSpawnMode(unit)
         if mode == "full" and ufModule then
             ufModule.frames[unit] = frame
+            if cbModule and IsCastbarModuleHandling(unit) then
+                if not cbModule.oufFrames then cbModule.oufFrames = {} end
+                cbModule.oufFrames[unit] = frame
+            end
         elseif mode == "castbar_only" and cbModule then
             if not cbModule.oufFrames then cbModule.oufFrames = {} end
             cbModule.oufFrames[unit] = frame
