@@ -247,16 +247,13 @@ function module:ApplyFrameHiderDeferred()
 end
 
 function module:OnMerchantShow()
-    if not CanMerchantRepair() then
-        return
-    end
-    if self:GetSetting("autoRepair", true) then
+    if self:GetSetting("autoRepair", true) and CanMerchantRepair() then
         self:DoAutoRepair()
     end
     if self:GetSetting("autoSellJunk", true) then
         self:SellJunk()
+        self:RegisterEvent("BAG_UPDATE_DELAYED", "OnBagUpdateDelayed")
     end
-    self:RegisterEvent("BAG_UPDATE_DELAYED", "OnBagUpdateDelayed")
 end
 
 function module:OnMerchantClosed()
