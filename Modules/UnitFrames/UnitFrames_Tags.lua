@@ -9,7 +9,6 @@ local sub = string.sub
 local UnitName = UnitName
 local UnitHealth = UnitHealth
 local UnitHealthMax = UnitHealthMax
-local UnitHealthPercent = UnitHealthPercent
 local UnitPower = UnitPower
 local UnitPowerMax = UnitPowerMax
 local UnitClass = UnitClass
@@ -32,15 +31,8 @@ local issecretvalue = issecretvalue
 
 local RAID_CLASS_COLORS = RAID_CLASS_COLORS
 
---- Abbreviate large numbers: 1234567 -> "1.2m", 12345 -> "12.3k"
 local function ShortValue(val)
-    if not canaccessvalue(val) then return val end
-    if val >= 1000000 then
-        return format("%.1fm", val / 1000000)
-    elseif val >= 1000 then
-        return format("%.1fk", val / 1000)
-    end
-    return tostring(floor(val))
+    return AbbreviateLargeNumbers(val)
 end
 
 -- ============================================================================
@@ -154,14 +146,13 @@ end
 oUF.Tags.Events["TUI:maxhp"] = "UNIT_HEALTH UNIT_MAXHEALTH"
 
 oUF.Tags.Methods["TUI:perhp"] = function(unit)
-    local percent = UnitHealthPercent(unit, true)
-    if issecretvalue and issecretvalue(percent) then
-        return percent
+    local cur = UnitHealth(unit)
+    local max = UnitHealthMax(unit)
+    if not canaccessvalue(cur) or not canaccessvalue(max) then
+        return nil
     end
-    if percent then
-        return format("%d", percent)
-    end
-    return nil
+    if max == 0 then return "0" end
+    return format("%d", (cur / max) * 100)
 end
 oUF.Tags.Events["TUI:perhp"] = "UNIT_HEALTH UNIT_MAXHEALTH"
 
