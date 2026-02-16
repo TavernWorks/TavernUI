@@ -13,7 +13,7 @@ A modern UI addon for World of Warcraft built with AbstractFramework and oUF.
 
 ### Manual Installation
 
-1. Download the latest release from [GitHub](https://github.com/TavernWorks/TavernUI/releases) or [CurseForge](https://www.curseforge.com/wow/addons/tavernui)
+1. Download the latest release from [GitHub](https://github.com/TavernWorks/TavernUI/releases) or [CurseForge](https://www.curseforge.com/wow/addons/tavern-ui)
 2. Extract the zip file
 3. Copy the TavernUI folder to your World of Warcraft\_retail_\Interface\AddOns\ directory
 4. Restart World of Warcraft or use /reload
@@ -55,7 +55,7 @@ This project is licensed under the GNU General Public License v3.0 - see the [LI
 
 - [GitHub Repository](https://github.com/TavernWorks/TavernUI)
 - [Issue Tracker](https://github.com/TavernWorks/TavernUI/issues)
-- [CurseForge](https://www.curseforge.com/wow/addons/tavernui) (coming soon)
+- [CurseForge](https://www.curseforge.com/wow/addons/tavern-ui) (coming soon)
 - [Discord](https://discord.gg/R5YTcBJYHt)
 
 ## Acknowledgments
