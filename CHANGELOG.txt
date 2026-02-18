@@ -1,5 +1,20 @@
 TavernUI Changelog
 ==================
+v1.0.0-beta-17 (2026-02-18)
+ - NEW: uCDM - Searchable spell/item picker UI replaces raw ID text input (#143, #144)
+ - NEW: uCDM - Rotation assist highlight: mirrors Blizzard's spell suggestion onto CDM icons, native (animated ants) or border style (#154)
+ - FIX: uCDM - Keybinds now shown on ElvUI action bar buttons (#124)
+ - FIX: uCDM - Viewer anchor no longer jumps on spell procs (#163)
+ - FIX: uCDM - Charge/stack count no longer hidden during scanner cooldown (#139, #141)
+ - FIX: uCDM - Charge frame text broken by SetParent reparenting (#141)
+ - FIX: uCDM - Castbar conflict with PetCastingBarFrame on player unit resolved
+ - FIX: Unit Frames - percent_full tag displays integers without taint (secret value arithmetic removed) (#100)
+ - FIX: Unit Frames - perhp, perpp, and deficit tags delegated to oUF built-ins; crash on secret values fixed (#174)
+ - FIX: CastBar - Icon constrained to bar height; container frame used for correct edit mode drag (#170, #173)
+ - FIX: CastBar - Standalone mode works when UnitFrames module is disabled (#173)
+ - NEW: CastBar - Per-unit frame strata setting (Low/Medium/High) (#171)
+ - FIX: Options - Blizzard settings panel replaced with simple button launcher for 12.0+ compatibility (#138)
+
 v1.0.0-beta-16 (2026-02-17)
  - FIX: Unit Frames - Per-hp tag, short value abbreviation, and tag truncation (#108, #112, #118)
  - FIX: QoL - Sell junk no longer blocked by repair guard (#113)
