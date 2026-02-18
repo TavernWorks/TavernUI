@@ -85,7 +85,7 @@ local function FormatOneTag(barId, tag, result)
     if tag == TAG_PERCENT_FULL then
         local pct = GetPercentFromCurve(barId, result)
         if pct ~= nil then
-            return string.format("%d%%", math.floor(pct + 0.5))
+            return string.format("%.0f%%", pct)
         end
         return ""
     end
