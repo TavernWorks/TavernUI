@@ -453,8 +453,6 @@ function CastbarShared:CreateCastbar(frame, unit, db)
     local notInterruptibleColor = GetSettingColor(unitType, "notInterruptibleColor", DEFAULT_NOT_INTERRUPTIBLE_COLOR)
 
     local showIcon = TavernUI:GetCastbarSetting(unitType, "showIcon", true)
-    local iconSize = TavernUI:GetCastbarSetting(unitType, "iconSize", 20)
-    local iconScale = TavernUI:GetCastbarSetting(unitType, "iconScale", 1.0)
     local iconAnchor = TavernUI:GetCastbarSetting(unitType, "iconAnchor", "LEFT")
     local iconSpacing = TavernUI:GetCastbarSetting(unitType, "iconSpacing", 0)
     local iconBorderSize = TavernUI:GetCastbarSetting(unitType, "iconBorderSize", 2)
@@ -533,10 +531,23 @@ function CastbarShared:CreateCastbar(frame, unit, db)
     -- Icon (Frame container with border texture + inner spell texture)
     -- ====================================================================
 
-    local scaledIconSize = iconSize * iconScale
+    local iconOffset = showIcon and (height + iconSpacing) or 0
+    castbar.TUI_iconOffset = iconOffset
+    castbar.TUI_iconAnchorSide = iconAnchor
+
+    if iconOffset > 0 then
+        castbar:ClearAllPoints()
+        if iconAnchor == "LEFT" then
+            castbar:SetPoint(p1, frame, rp1, offX + iconOffset, offY)
+            castbar:SetPoint(p2, frame, rp2, offX, offY)
+        else
+            castbar:SetPoint(p1, frame, rp1, offX, offY)
+            castbar:SetPoint(p2, frame, rp2, offX - iconOffset, offY)
+        end
+    end
 
     local iconContainer = CreateFrame("Frame", nil, castbar)
-    iconContainer:SetSize(scaledIconSize, scaledIconSize)
+    iconContainer:SetSize(height, height)
     iconContainer:SetFrameLevel(castbar:GetFrameLevel() + 1)
 
     local iconBorderTex = iconContainer:CreateTexture(nil, "BACKGROUND", nil, -8)
@@ -725,17 +736,18 @@ function CastbarShared:RefreshCastbar(castbar, unit)
 
     -- Icon
     local showIcon = TavernUI:GetCastbarSetting(unitType, "showIcon", true)
-    local iconSize = TavernUI:GetCastbarSetting(unitType, "iconSize", 20)
-    local iconScale = TavernUI:GetCastbarSetting(unitType, "iconScale", 1.0)
     local iconAnchor = TavernUI:GetCastbarSetting(unitType, "iconAnchor", "LEFT")
     local iconSpacing = TavernUI:GetCastbarSetting(unitType, "iconSpacing", 0)
     local iconBorderSize = TavernUI:GetCastbarSetting(unitType, "iconBorderSize", 2)
     local iconBorderColor = GetSettingColor(unitType, "iconBorderColor", DEFAULT_ICON_BORDER_COLOR)
 
+    local iconOffset = showIcon and (height + iconSpacing) or 0
+    castbar.TUI_iconOffset = iconOffset
+    castbar.TUI_iconAnchorSide = iconAnchor
     castbar.TUI_showIcon = showIcon
+
     if castbar.TUI_IconContainer then
-        local scaledSize = iconSize * iconScale
-        castbar.TUI_IconContainer:SetSize(scaledSize, scaledSize)
+        castbar.TUI_IconContainer:SetSize(height, height)
         castbar.TUI_IconContainer:ClearAllPoints()
         if iconAnchor == "RIGHT" then
             castbar.TUI_IconContainer:SetPoint("LEFT", castbar, "RIGHT", iconSpacing, 0)
