@@ -42,6 +42,7 @@ local CONSTANTS = {
     KEY_TIME_TEXT_ANCHOR     = "timeTextAnchor",
     KEY_TIME_TEXT_OFFSET_X   = "timeTextOffsetX",
     KEY_TIME_TEXT_OFFSET_Y   = "timeTextOffsetY",
+    KEY_FRAME_STRATA         = "frameStrata",
     KEY_ANCHOR_CONFIG        = "anchorConfig",
     KEY_PREVIEW_MODE         = "previewMode",
     KEY_SHOW_EMPOWERED_LEVEL          = "showEmpoweredLevel",
@@ -121,6 +122,7 @@ local function MakeUnitDefaults(isPlayer)
         timeTextOffsetX = -4,
         timeTextOffsetY = 0,
 
+        frameStrata = "MEDIUM",
         anchorConfig = nil,
         previewMode = false,
     }
@@ -290,26 +292,48 @@ function module:EnableUnitCastbar(unitKey)
         shared:RefreshCastbar(castbar, unitKey)
     end
 
+    local settings = GetUnitSettings(unitKey) or {}
+
     if fullMode then
-        -- Mark Castbar module as owner
         oufFrame.TUI_CastbarOwner = "CB"
-        -- Size and position castbar independently of UF frame
-        local settings = GetUnitSettings(unitKey) or {}
-        castbar:ClearAllPoints()
-        castbar:SetSize(settings.width or 220, settings.height or 20)
-        -- Default position below UF frame if no custom anchor saved
+        local totalWidth = settings.width or 220
+        local barHeight = settings.height or 20
+        local iconOffset = castbar.TUI_iconOffset or 0
+        local iconSide = castbar.TUI_iconAnchorSide or "LEFT"
+
+        local container = oufFrame.TUI_CastbarContainer
+        if not container then
+            container = CreateFrame("Frame", nil, UIParent)
+            oufFrame.TUI_CastbarContainer = container
+            castbar:SetParent(container)
+        end
+        container:SetFrameStrata(settings.frameStrata or "MEDIUM")
+
+        container:SetSize(totalWidth, barHeight)
+        container:ClearAllPoints()
         if not settings.anchorConfig or not settings.anchorConfig.target or settings.anchorConfig.target == "" then
-            castbar:SetPoint("TOPLEFT", oufFrame, "BOTTOMLEFT", 0, -4)
-            castbar:SetPoint("TOPRIGHT", oufFrame, "BOTTOMRIGHT", 0, -4)
+            container:SetPoint("TOPLEFT", oufFrame, "BOTTOMLEFT", 0, -4)
+        end
+        container:Show()
+
+        castbar:ClearAllPoints()
+        castbar:SetSize(totalWidth - iconOffset, barHeight)
+        if iconSide == "LEFT" then
+            castbar:SetPoint("RIGHT", container, "RIGHT", 0, 0)
+        else
+            castbar:SetPoint("LEFT", container, "LEFT", 0, 0)
         end
     else
-        -- For castbar_only, show the oUF frame
+        if castbar:GetParent() ~= oufFrame then
+            castbar:SetParent(oufFrame)
+        end
+        oufFrame:SetFrameStrata(settings.frameStrata or "MEDIUM")
         oufFrame:SetAlpha(1)
         oufFrame:Show()
     end
 
     if self.Anchoring then
-        local anchorTarget = fullMode and castbar or oufFrame
+        local anchorTarget = fullMode and (oufFrame.TUI_CastbarContainer or castbar) or oufFrame
         self.Anchoring:RegisterBar(unitKey, anchorTarget)
         self.Anchoring:ApplyAnchor(unitKey)
     end
@@ -322,7 +346,7 @@ function module:DisableUnitCastbar(unitKey)
     if not oufFrame then return end
 
     local fullMode = IsFullMode(unitKey)
-    local anchorTarget = fullMode and oufFrame.TUI_Castbar or oufFrame
+    local anchorTarget = fullMode and (oufFrame.TUI_CastbarContainer or oufFrame.TUI_Castbar) or oufFrame
 
     if self.Anchoring then
         self.Anchoring:UnregisterBar(unitKey, anchorTarget)
@@ -335,6 +359,9 @@ function module:DisableUnitCastbar(unitKey)
 
     if fullMode then
         oufFrame.TUI_CastbarOwner = nil
+        if oufFrame.TUI_CastbarContainer then
+            oufFrame.TUI_CastbarContainer:Hide()
+        end
         if oufFrame.TUI_Castbar then
             oufFrame.TUI_Castbar:Hide()
         end
@@ -368,10 +395,32 @@ function module:RefreshCastbar(unitKey)
     -- Only size and anchor when Castbar module owns
     if not ufOwns then
         local settings = GetUnitSettings(unitKey) or {}
+        local totalWidth = settings.width or 220
+        local barHeight = settings.height or 20
+        local iconOffset = castbar.TUI_iconOffset or 0
+        local iconSide = castbar.TUI_iconAnchorSide or "LEFT"
+
         if fullMode then
-            castbar:SetSize(settings.width or 220, settings.height or 20)
+            local container = oufFrame.TUI_CastbarContainer
+            if container then
+                container:SetFrameStrata(settings.frameStrata or "MEDIUM")
+                container:SetSize(totalWidth, barHeight)
+                if not settings.anchorConfig or not settings.anchorConfig.target or settings.anchorConfig.target == "" then
+                    container:ClearAllPoints()
+                    container:SetPoint("TOPLEFT", oufFrame, "BOTTOMLEFT", 0, -4)
+                end
+
+                castbar:ClearAllPoints()
+                castbar:SetSize(totalWidth - iconOffset, barHeight)
+                if iconSide == "LEFT" then
+                    castbar:SetPoint("RIGHT", container, "RIGHT", 0, 0)
+                else
+                    castbar:SetPoint("LEFT", container, "LEFT", 0, 0)
+                end
+            end
         else
-            oufFrame:SetSize(settings.width or 220, settings.height or 20)
+            oufFrame:SetFrameStrata(settings.frameStrata or "MEDIUM")
+            oufFrame:SetSize(totalWidth, barHeight)
         end
 
         if self.Anchoring and self.Anchoring.ApplyAnchor then
@@ -406,6 +455,11 @@ function module:OnInitialize()
 end
 
 function module:OnEnable()
+    -- Ensure oUF frames are spawned when UnitFrames module is disabled
+    if TavernUI.oUFFactory then
+        TavernUI.oUFFactory:SpawnFrames()
+    end
+
     for _, unitKey in ipairs(UNITS) do
         local settings = GetUnitSettings(unitKey)
         if settings and settings.enabled ~= false then

@@ -418,6 +418,26 @@ local function BuildUnitOptions(unitKey)
     }
     order = order + 1
 
+    args.frameStrata = {
+        type = "select",
+        name = L["FRAME_STRATA"],
+        desc = L["CASTBAR_FRAME_STRATA_DESC"],
+        order = order,
+        values = {
+            LOW    = L["STRATA_LOW"],
+            MEDIUM = L["STRATA_MEDIUM"],
+            HIGH   = L["STRATA_HIGH"],
+        },
+        get = function()
+            return GetUnitSetting(unitKey, CONSTANTS.KEY_FRAME_STRATA, "MEDIUM")
+        end,
+        set = function(_, value)
+            SetUnitSetting(unitKey, CONSTANTS.KEY_FRAME_STRATA, value)
+            RefreshUnit(unitKey)
+        end,
+    }
+    order = order + 1
+
     args.iconHeader = { type = "header", name = L["ICON"], order = order }
     order = order + 1
 
