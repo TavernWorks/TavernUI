@@ -3,22 +3,23 @@ local module = TavernUI:GetModule("uCDM", true)
 
 if not module then return end
 
+-- Upvalue frequently-used globals to avoid repeated global table lookups in the update loop
+local C_Spell = C_Spell
+local C_Container = C_Container
+local C_Item = C_Item
+local C_CurveUtil = C_CurveUtil
+local GetInventoryItemID = GetInventoryItemID
+local GetItemSpell = GetItemSpell
+local GetActionInfo = GetActionInfo
+local GetActionCooldown = GetActionCooldown
+
 local Helpers = module.CooldownTrackerHelpers
 
 local CooldownTracker = {}
 
--- Normalize frame element access (Blizzard uses inconsistent casing)
-local function GetIcon(frame)
-    return frame and (frame.Icon or frame.icon)
-end
-
-local function GetCooldown(frame)
-    return frame and (frame.Cooldown or frame.cooldown)
-end
-
-local function GetCount(frame)
-    return frame and (frame.Count or frame.count)
-end
+local GetIcon = module.GetIcon
+local GetCooldown = module.GetCooldown
+local GetCount = module.GetCount
 
 local function SetStackDisplayOnFrame(frame, stackDisplay)
     local countText = GetCount(frame)
@@ -68,11 +69,11 @@ local function SetupCooldownCurves()
 end
 
 -- Evaluate remaining percent using curves - returns a value usable by SetDesaturation
+-- All duration objects from C_DurationUtil.CreateDuration() have EvaluateRemainingPercent;
+-- no pcall needed. The return value can be a Blizzard secure value, which is fine for SetDesaturation.
 local function EvaluateCooldownDesaturation(durationObj)
     if not durationObj or not SetupCooldownCurves() then return 0 end
-    local ok, val = pcall(durationObj.EvaluateRemainingPercent, durationObj, CooldownCurves.Binary)
-    if not ok then return 0 end
-    return val  -- Can be a secret value - that's fine for SetDesaturation
+    return durationObj:EvaluateRemainingPercent(CooldownCurves.Binary)
 end
 
 local SWIPE_TEXTURE = ""  -- solid fill, no texture padding
@@ -188,15 +189,12 @@ function CooldownTracker.UpdateActionSlot(slot)
     elseif actionType == "item" and id then
         return CooldownTracker.UpdateItem(id)
     end
-    local startTime, duration, enable = GetActionCooldown(slot)
+    local startTime, duration = GetActionCooldown(slot)
     local durationObj
-    local ok = pcall(function()
-        if type(startTime) ~= "number" or type(duration) ~= "number" or duration <= 0 then
-            return
-        end
+    if type(startTime) == "number" and type(duration) == "number" and duration > 0 then
         durationObj = Helpers.CreateCooldownDuration(startTime, duration)
-    end)
-    if not ok or not durationObj then
+    end
+    if not durationObj then
         return { duration = nil, desaturation = 0, stackDisplay = nil }
     end
     return {
@@ -235,9 +233,17 @@ function CooldownTracker.UpdateOverride(entry)
     return data
 end
 
+-- Cached SpellScanner reference — resolved once on first use (module order is stable post-init)
+local _scanner = nil
+local _scannerResolved = false
+
 -- Try to get cooldown from SpellScanner if available (provides more accurate tracking)
 local function TryGetScannerCooldown(entry)
-    local scanner = TavernUI.SpellScanner or TavernUI:GetModule("SpellScanner", true)
+    if not _scannerResolved then
+        _scanner = TavernUI.SpellScanner or TavernUI:GetModule("SpellScanner", true)
+        _scannerResolved = true
+    end
+    local scanner = _scanner
     if not scanner then return nil end
 
     local startTime, duration
@@ -270,10 +276,18 @@ local function TryGetScannerCooldown(entry)
     if startTime and duration then
         local durationObj = Helpers.CreateCooldownDuration(startTime, duration)
         if durationObj then
+            -- Scanner provides cooldown timing only; compute stacks separately so charge
+            -- counts and buff-application counts are not suppressed while on cooldown.
+            local stackDisplay = nil
+            if entry.spellID then
+                local stacks, charges, hasCharges = Helpers.GetSpellStackAndChargeInfo(
+                    entry.spellID, CooldownTracker._hasChargesCache, entry.auraSpellID)
+                stackDisplay = Helpers.GetStackDisplay(nil, nil, nil, stacks, hasCharges, charges)
+            end
             return {
                 buffRemaining = durationObj,
                 desaturation = EvaluateCooldownDesaturation(durationObj),
-                stackDisplay = nil
+                stackDisplay = stackDisplay,
             }
         end
     end

@@ -284,7 +284,12 @@ function module:EnableUnitCastbar(unitKey)
 
     if not oufFrame.Castbar then
         oufFrame.Castbar = castbar
+        if unitKey == "player" then oufFrame.isChild = true end
         oufFrame:EnableElement("Castbar")
+        if unitKey == "player" then
+            oufFrame.isChild = nil
+            PetCastingBarFrame:UnregisterEvent("UNIT_PET")
+        end
     end
 
     local shared = GetCastbarShared()

@@ -5,15 +5,9 @@ if not module or not module.CooldownItem then return end
 local CooldownItem = module.CooldownItem
 local PP = TavernUI.PixelPerfect
 
-local function GetIcon(frame)
-    return frame and (frame.Icon or frame.icon)
-end
-local function GetCooldown(frame)
-    return frame and (frame.Cooldown or frame.cooldown)
-end
-local function GetCount(frame)
-    return frame and (frame.Count or frame.count)
-end
+local GetIcon = module.GetIcon
+local GetCooldown = module.GetCooldown
+local GetCount = module.GetCount
 
 local TEXT_OVERLAY_LEVEL = 600
 local SWIPE_TEXTURE = ""
@@ -206,9 +200,6 @@ function CooldownItem:_applyDurationTextStyle(textOverlay, scaleRef, config)
     end
     if not cooldown._ucdmDurationVisibilityHooked then
         cooldown._ucdmDurationVisibilityHooked = true
-        hooksecurefunc(cooldown, "Hide", function(self) SyncDurationTexts(self, false) end)
-        hooksecurefunc(cooldown, "Show", function(self) SyncDurationTexts(self, true) end)
-        hooksecurefunc(cooldown, "SetShown", function(self, shown) SyncDurationTexts(self, shown) end)
         cooldown:HookScript("OnHide", function(self) SyncDurationTexts(self, false) end)
         cooldown:HookScript("OnShow", function(self) SyncDurationTexts(self, true) end)
     end
@@ -224,8 +215,10 @@ function CooldownItem:_applyStackTextStyle(textOverlay, scaleRef, config)
     if chargeFrame then
         local fs = chargeFrame.Current or chargeFrame.Count or chargeFrame.count
         if fs then
+            -- Raise chargeFrame's level so the text renders above cooldown swipes.
+            -- Do NOT reparent fs to textOverlay: chargeFrame:SetShown() is Blizzard's
+            -- visibility gate (used when cast-count drops to 0), and reparenting breaks it.
             SetTextLevel(fs)
-            fs:SetParent(textOverlay)
             TavernUI:ApplyFont(fs, scaleRef, size)
             fs:ClearAllPoints()
             fs:SetPoint(point, frame, point, offsetX, offsetY)

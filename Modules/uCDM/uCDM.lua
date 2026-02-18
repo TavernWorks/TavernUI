@@ -35,6 +35,11 @@ module.CONSTANTS = CONSTANTS
 local DEFAULT_TEXT_COLOR = {r = 1, g = 1, b = 1, a = 1}
 module.DEFAULT_TEXT_COLOR = DEFAULT_TEXT_COLOR
 
+-- Shared frame element accessors (Blizzard uses inconsistent casing across viewer item types)
+function module.GetIcon(frame) return frame and (frame.Icon or frame.icon) end
+function module.GetCooldown(frame) return frame and (frame.Cooldown or frame.cooldown) end
+function module.GetCount(frame) return frame and (frame.Count or frame.count) end
+
 function module:GetTextColor(settings, key, default)
     local color
     if settings and key then
@@ -71,6 +76,53 @@ function module:ApplyTextColor(fontString, settings, key, default)
     fontString:SetTextColor(r, g, b, a)
 end
 
+-- Factory for viewer default settings — only icon size/count and anchor differ per viewer
+local function MakeViewerDefaults(iconCount, iconSize, anchorConfig, extras)
+    local d = {
+        enabled = true,
+        scale = 1.0,
+        anchorConfig = anchorConfig,
+        rowGrowDirection = "down",
+        rowSpacing = 5,
+        showKeybinds = false,
+        keybindSize = 10,
+        keybindPoint = "TOPLEFT",
+        keybindOffsetX = 2,
+        keybindOffsetY = -2,
+        keybindColor = {r = 1, g = 1, b = 1, a = 1},
+        durationTextColor = {r = 1, g = 1, b = 1, a = 1},
+        stackTextColor = {r = 1, g = 1, b = 1, a = 1},
+        disableTooltips = false,
+        rows = {
+            {
+                name = "Default",
+                iconCount = iconCount,
+                iconSize = iconSize,
+                padding = 4,
+                yOffset = 0,
+                aspectRatioCrop = 1.0,
+                zoom = 0.08,
+                iconBorderSize = 1,
+                iconBorderColor = {r = 0, g = 0, b = 0, a = 1},
+                rowBorderSize = 0,
+                rowBorderColor = {r = 0, g = 0, b = 0, a = 1},
+                durationSize = 18,
+                durationPoint = "CENTER",
+                durationOffsetX = 0,
+                durationOffsetY = 0,
+                stackSize = 16,
+                stackPoint = "BOTTOMRIGHT",
+                stackOffsetX = 0,
+                stackOffsetY = 0,
+            },
+        },
+    }
+    if extras then
+        for k, v in pairs(extras) do d[k] = v end
+    end
+    return d
+end
+
 local defaults = {
     enabled = true,
     general = {
@@ -94,186 +146,49 @@ local defaults = {
         },
     },
     viewers = {
-        essential = {
-            enabled = true,
-            scale = 1.0,
-            anchorConfig = {
-                target = "UIParent",
-                point = "CENTER",
-                relativePoint = "CENTER",
-                offsetX = 0,
-                offsetY = -150,
-            },
-            rowGrowDirection = "down",
-            rowSpacing = 5,
-            showKeybinds = false,
-            keybindSize = 10,
-            keybindPoint = "TOPLEFT",
-            keybindOffsetX = 2,
-            keybindOffsetY = -2,
-            keybindColor = {r = 1, g = 1, b = 1, a = 1},
-            durationTextColor = {r = 1, g = 1, b = 1, a = 1},
-            stackTextColor = {r = 1, g = 1, b = 1, a = 1},
-            disableTooltips = false,
-            rows = {
-                {
-                    name = "Default",
-                    iconCount = 8,
-                    iconSize = 38,
-                    padding = 4,
-                    yOffset = 0,
-                    aspectRatioCrop = 1.0,
-                    zoom = 0.08,
-                    iconBorderSize = 1,
-                    iconBorderColor = CONSTANTS.DEFAULT_ICON_BORDER_COLOR,
-                    rowBorderSize = 0,
-                    rowBorderColor = CONSTANTS.DEFAULT_ROW_BORDER_COLOR,
-                    durationSize = 18,
-                    durationPoint = "CENTER",
-                    durationOffsetX = 0,
-                    durationOffsetY = 0,
-                    stackSize = 16,
-                    stackPoint = "BOTTOMRIGHT",
-                    stackOffsetX = 0,
-                    stackOffsetY = 0,
-                },
-            },
-        },
-        utility = {
-            enabled = true,
-            scale = 1.0,
+        essential = MakeViewerDefaults(8, 38, {
+            target = "UIParent",
+            point = "CENTER",
+            relativePoint = "CENTER",
+            offsetX = 0,
+            offsetY = -150,
+        }),
+        utility = MakeViewerDefaults(6, 30, {
+            target = "TavernUI.uCDM.essential",
+            point = "TOP",
+            relativePoint = "BOTTOM",
+            offsetX = 0,
+            offsetY = -5,
+        }, {
             anchorBelowEssential = true,
             anchorPoint = "TOP",
             anchorRelativePoint = "BOTTOM",
             anchorOffsetX = 0,
             anchorGap = 5,
-            anchorConfig = {
-                target = "TavernUI.uCDM.essential",
-                point = "TOP",
-                relativePoint = "BOTTOM",
-                offsetX = 0,
-                offsetY = -5,
-            },
-            rowGrowDirection = "down",
-            rowSpacing = 5,
-            showKeybinds = false,
-            keybindSize = 10,
-            keybindPoint = "TOPLEFT",
-            keybindOffsetX = 2,
-            keybindOffsetY = -2,
-            keybindColor = {r = 1, g = 1, b = 1, a = 1},
-            durationTextColor = {r = 1, g = 1, b = 1, a = 1},
-            stackTextColor = {r = 1, g = 1, b = 1, a = 1},
-            disableTooltips = false,
-            rows = {
-                {
-                    name = "Default",
-                    iconCount = 6,
-                    iconSize = 30,
-                    padding = 4,
-                    yOffset = 0,
-                    aspectRatioCrop = 1.0,
-                    zoom = 0.08,
-                    iconBorderSize = 1,
-                    iconBorderColor = CONSTANTS.DEFAULT_ICON_BORDER_COLOR,
-                    rowBorderSize = 0,
-                    rowBorderColor = CONSTANTS.DEFAULT_ROW_BORDER_COLOR,
-                    durationSize = 18,
-                    durationPoint = "CENTER",
-                    durationOffsetX = 0,
-                    durationOffsetY = 0,
-                    stackSize = 16,
-                    stackPoint = "BOTTOMRIGHT",
-                    stackOffsetX = 0,
-                    stackOffsetY = 0,
-                },
-            },
-        },
-        buff = {
-            enabled = true,
-            scale = 1.0,
+        }),
+        buff = MakeViewerDefaults(6, 40, {
+            target = "TavernUI.uCDM.essential",
+            point = "BOTTOM",
+            relativePoint = "TOP",
+            offsetX = 0,
+            offsetY = 5,
+        }, {
             showPreview = false,
             previewIconCount = 6,
-            anchorConfig = {
-                target = "TavernUI.uCDM.essential",
-                point = "BOTTOM",
-                relativePoint = "TOP",
-                offsetX = 0,
-                offsetY = 5,
-            },
-            rowGrowDirection = "down",
-            rowSpacing = 5,
-            showKeybinds = false,
-            keybindSize = 10,
-            keybindPoint = "TOPLEFT",
-            keybindOffsetX = 2,
-            keybindOffsetY = -2,
-            keybindColor = {r = 1, g = 1, b = 1, a = 1},
-            durationTextColor = {r = 1, g = 1, b = 1, a = 1},
-            stackTextColor = {r = 1, g = 1, b = 1, a = 1},
-            disableTooltips = false,
-            rows = {
-                {
-                    name = "Default",
-                    iconCount = 6,
-                    iconSize = 40,
-                    padding = 4,
-                    yOffset = 0,
-                    aspectRatioCrop = 1.0,
-                    zoom = 0.08,
-                    iconBorderSize = 1,
-                    iconBorderColor = CONSTANTS.DEFAULT_ICON_BORDER_COLOR,
-                    rowBorderSize = 0,
-                    rowBorderColor = CONSTANTS.DEFAULT_ROW_BORDER_COLOR,
-                    durationSize = 18,
-                    durationPoint = "CENTER",
-                    durationOffsetX = 0,
-                    durationOffsetY = 0,
-                    stackSize = 16,
-                    stackPoint = "BOTTOMRIGHT",
-                    stackOffsetX = 0,
-                    stackOffsetY = 0,
-                },
-            },
-        },
-        custom = {
-            enabled = true,
-            scale = 1.0,
-            anchorConfig = nil,
-            rowGrowDirection = "down",
-            rowSpacing = 5,
-            showKeybinds = false,
-            keybindSize = 10,
-            keybindPoint = "TOPLEFT",
-            keybindOffsetX = 2,
-            keybindOffsetY = -2,
-            keybindColor = {r = 1, g = 1, b = 1, a = 1},
-            durationTextColor = {r = 1, g = 1, b = 1, a = 1},
-            stackTextColor = {r = 1, g = 1, b = 1, a = 1},
-            disableTooltips = false,
-            rows = {
-                {
-                    name = "Default",
-                    iconCount = 8,
-                    iconSize = 38,
-                    padding = 4,
-                    yOffset = 0,
-                    aspectRatioCrop = 1.0,
-                    zoom = 0.08,
-                    iconBorderSize = 1,
-                    iconBorderColor = CONSTANTS.DEFAULT_ICON_BORDER_COLOR,
-                    rowBorderSize = 0,
-                    rowBorderColor = CONSTANTS.DEFAULT_ROW_BORDER_COLOR,
-                    durationSize = 18,
-                    durationPoint = "CENTER",
-                    durationOffsetX = 0,
-                    durationOffsetY = 0,
-                    stackSize = 16,
-                    stackPoint = "BOTTOMRIGHT",
-                    stackOffsetX = 0,
-                    stackOffsetY = 0,
-                },
-            },
+        }),
+        custom = MakeViewerDefaults(8, 38, nil),
+    },
+    rotationAssist = {
+        enabled      = false,
+        style        = "native",   -- "native" | "border"
+        animDuration = 2.5,        -- seconds per full ants cycle (native style)
+        color        = {r = 0, g = 1, b = 0.84, a = 0.9},
+        thickness    = 2,
+        viewers = {
+            essential = true,
+            utility   = true,
+            buff      = false,
+            custom    = false,
         },
     },
     customEntries = {},
@@ -283,57 +198,8 @@ local defaults = {
 
 TavernUI:RegisterModuleDefaults("uCDM", defaults, true)
 
-local function CopyTableShallow(src)
-    if type(src) ~= "table" then return src end
-    local t = {}
-    for k, v in pairs(src) do
-        t[k] = (type(v) == "table" and v ~= src) and CopyTableShallow(v) or v
-    end
-    return t
-end
-
-local DEFAULT_CUSTOM_VIEWER_SETTINGS = {
-    enabled = true,
-    scale = 1.0,
-    anchorConfig = nil,
-    rowGrowDirection = "down",
-    rowSpacing = 5,
-    showKeybinds = false,
-    keybindSize = 10,
-    keybindPoint = "TOPLEFT",
-    keybindOffsetX = 2,
-    keybindOffsetY = -2,
-    keybindColor = {r = 1, g = 1, b = 1, a = 1},
-    durationTextColor = {r = 1, g = 1, b = 1, a = 1},
-    stackTextColor = {r = 1, g = 1, b = 1, a = 1},
-    disableTooltips = false,
-    rows = {
-        {
-            name = "Default",
-            iconCount = 8,
-            iconSize = 38,
-            padding = 4,
-            yOffset = 0,
-            aspectRatioCrop = 1.0,
-            zoom = 0.08,
-            iconBorderSize = 1,
-            iconBorderColor = {r = 0, g = 0, b = 0, a = 1},
-            rowBorderSize = 0,
-            rowBorderColor = {r = 0, g = 0, b = 0, a = 1},
-            durationSize = 18,
-            durationPoint = "CENTER",
-            durationOffsetX = 0,
-            durationOffsetY = 0,
-            stackSize = 16,
-            stackPoint = "BOTTOMRIGHT",
-            stackOffsetX = 0,
-            stackOffsetY = 0,
-        },
-    },
-}
-
 function module:GetDefaultCustomViewerSettings()
-    return CopyTableShallow(DEFAULT_CUSTOM_VIEWER_SETTINGS)
+    return MakeViewerDefaults(8, 38, nil)
 end
 
 function module:OnInitialize()
@@ -345,6 +211,7 @@ function module:OnInitialize()
     if self.LayoutEngine then self.LayoutEngine.Initialize() end
     if self.Keybinds then self.Keybinds.Initialize() end
     if self.Anchoring then self.Anchoring.Initialize() end
+    if self.RotationAssist then self.RotationAssist.Initialize() end
 
     -- Register events
     self:RegisterEvent("PLAYER_EQUIPMENT_CHANGED", "OnEquipmentChanged")

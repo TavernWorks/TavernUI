@@ -244,7 +244,9 @@ end
 --------------------------------------------------------------------------------
 -- Blizzard Frame Collection
 -- cooldownIDs from viewer:GetCooldownIDs() then GetCooldownViewerCategorySet.
--- Frames matched by child.layoutIndex (when valid) and by child:GetCooldownID() vs API list; one frame per index.
+-- Frames matched by GetCooldownID() against a cooldownID→index lookup table.
+-- Uses GetChildren() because the viewer's item frames are pool-created (not WoW layout-system children),
+-- so GetItemFrames()/GetLayoutChildren() would return nothing for them.
 --------------------------------------------------------------------------------
 
 function ItemRegistry.CollectBlizzardItems(viewerKey)
@@ -268,25 +270,25 @@ function ItemRegistry.CollectBlizzardItems(viewerKey)
         return
     end
 
-    local framesByIndex = {}
+    -- Build cooldownID → index lookup for O(1) matching (replaces the old O(n×m) linear search)
+    local cooldownIDToIndex = {}
+    for idx, cooldownID in ipairs(cooldownIDs) do
+        cooldownIDToIndex[cooldownID] = idx
+    end
+
+    -- Collect frames: iterate children, skip custom frames (_ucdmItemId set) and
+    -- non-item children (Blizzard item frames all have GetCooldownID; Selection and
+    -- pool-inactive frames do not)
+    local framesByCooldownID = {}
     local numChildren = viewer:GetNumChildren()
     for i = 1, numChildren do
         local child = select(i, viewer:GetChildren())
-        if child and child ~= viewer.Selection and not child._ucdmItemId and ItemRegistry._isIconFrame(child) then
-            if viewerKey == "buff" and not child.__ucdmEventHooked then
-                ItemRegistry._hookBuffFrameEvents(child, viewer)
-            end
-            local layoutIndex = child.layoutIndex
-            if layoutIndex and layoutIndex > 0 and layoutIndex <= #cooldownIDs then
-                framesByIndex[layoutIndex] = child
-            end
-            if child.GetCooldownID then
-                local frameCooldownID = child:GetCooldownID()
-                for idx, cooldownID in ipairs(cooldownIDs) do
-                    if cooldownID == frameCooldownID then
-                        framesByIndex[idx] = child
-                        break
-                    end
+        if child and child.GetCooldownID and not child._ucdmItemId then
+            local cooldownID = child:GetCooldownID()
+            if cooldownID and cooldownIDToIndex[cooldownID] then
+                framesByCooldownID[cooldownID] = child
+                if viewerKey == "buff" and not child.__ucdmEventHooked then
+                    ItemRegistry._hookBuffFrameEvents(child, viewer)
                 end
             end
         end
@@ -298,7 +300,7 @@ function ItemRegistry.CollectBlizzardItems(viewerKey)
     for index, cooldownID in ipairs(cooldownIDs) do
         local cooldownInfo = C_CooldownViewer.GetCooldownViewerCooldownInfo(cooldownID)
         if cooldownInfo then
-            local frame = framesByIndex[index]
+            local frame = framesByCooldownID[cooldownID]
             if frame then
                 seenFrames[frame] = true
 
@@ -371,11 +373,6 @@ function ItemRegistry.CollectBlizzardItems(viewerKey)
     end
 
     itemsByViewer[viewerKey] = allItems
-end
-
-function ItemRegistry._isIconFrame(frame)
-    if not frame then return false end
-    return (frame.Icon or frame.icon) and (frame.Cooldown or frame.cooldown)
 end
 
 function ItemRegistry._hookBuffFrameEvents(frame, _viewer)

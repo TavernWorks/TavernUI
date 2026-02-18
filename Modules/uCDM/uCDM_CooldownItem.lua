@@ -20,18 +20,8 @@ local KEYBIND_OVERLAY_LEVEL = 500
 local TEXT_OVERLAY_LEVEL = 600
 local DEFAULT_KEYBIND_SIZE = 10
 
--- Normalize frame element access (Blizzard uses inconsistent casing)
-local function GetIcon(frame)
-    return frame and (frame.Icon or frame.icon)
-end
-
-local function GetCooldown(frame)
-    return frame and (frame.Cooldown or frame.cooldown)
-end
-
-local function GetCount(frame)
-    return frame and (frame.Count or frame.count)
-end
+local GetIcon = module.GetIcon
+local GetCooldown = module.GetCooldown
 
 local function AreTooltipsDisabledInEditMode(viewerKey)
     if not viewerKey then return false end
