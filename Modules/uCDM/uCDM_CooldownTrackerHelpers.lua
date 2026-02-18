@@ -11,6 +11,7 @@ local UnitExists = UnitExists
 local GetTime = GetTime
 local GetItemCount = GetItemCount
 local GetWeaponEnchantInfo = GetWeaponEnchantInfo
+local issecretvalue = issecretvalue
 
 local function CreateCooldownDuration(startTime, duration)
     if not startTime or not duration or duration <= 0 then
@@ -88,7 +89,7 @@ local function GetSpellStackAndChargeInfo(spellID, chargesCache, auraSpellID)
         -- Covers limited-use spells that don't use the charge system (e.g. Midnight-era use count mechanics)
         if C_Spell.GetSpellCastCount then
             local castCount = C_Spell.GetSpellCastCount(spellID)
-            if castCount and castCount > 0 then
+            if castCount and not (issecretvalue and issecretvalue(castCount)) and castCount > 0 then
                 charges = castCount
                 hasCharges = true
             end
