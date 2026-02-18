@@ -255,7 +255,6 @@ local function BuildTagReference()
                 type = "description",
                 name = "Color tags output |cff hex codes. Place before text and add |r after to end the color.\n\n"
                     .. "|cffffd200[TUI:classcolor]|r  Class color (Warrior brown, Mage blue, etc.)\n"
-                    .. "|cffffd200[TUI:reactioncolor]|r  Reaction color (friendly green, hostile red)\n"
                     .. "|cffffd200[TUI:diffcolor]|r  Difficulty color based on level difference\n",
                 order = 51,
                 fontSize = "medium",
