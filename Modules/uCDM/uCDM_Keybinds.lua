@@ -76,9 +76,15 @@ local function IsValidActionButton(button)
     local hasAction = false
     if type(button.action) == "number" and button.action > 0 then
         hasAction = true
+    elseif type(button._state_action) == "number" and button._state_action > 0 then
+        -- LAB (ElvUI, BT4) sets _state_action in UpdateAction(); button.action may still be 0 at cache time
+        hasAction = true
     elseif button.GetAction and type(button.GetAction) == "function" then
-        local action = button:GetAction()
-        if type(action) == "number" and action > 0 then
+        local retA, retB = button:GetAction()
+        -- LAB returns (type_string, slot_number); Blizzard returns a single number
+        local action = (type(retB) == "number" and retB > 0 and retB) or
+                       (type(retA) == "number" and retA > 0 and retA)
+        if action then
             hasAction = true
         end
     end
@@ -168,7 +174,7 @@ local function GetActionSlot(button)
     local action
     local buttonName = button.GetName and button:GetName()
 
-    if buttonName and buttonName:match("^BT4Button") then
+    if buttonName and (buttonName:match("^BT4Button") or buttonName:match("^ElvUI_Bar")) then
         if type(button._state_action) == "number" and button._state_action > 0 then
             action = button._state_action
         end
@@ -181,8 +187,13 @@ local function GetActionSlot(button)
     end
 
     if (not action or action == 0) and button.GetAction and type(button.GetAction) == "function" then
-        action = button:GetAction()
-        if type(action) ~= "number" or action <= 0 then
+        local retA, retB = button:GetAction()
+        -- LAB returns (type_string, slot_number); Blizzard returns a single number
+        if type(retB) == "number" and retB > 0 then
+            action = retB
+        elseif type(retA) == "number" and retA > 0 then
+            action = retA
+        else
             action = nil
         end
     end
@@ -531,6 +542,7 @@ function Keybinds.Initialize()
         end
 
         if event == "UPDATE_BINDINGS" then
+            actionButtonsCached = false  -- Force rediscovery; third-party bars (e.g. ElvUI) may not be ready at PLAYER_ENTERING_WORLD+0.5s
             ThrottledRebuild()
             return
         end
