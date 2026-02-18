@@ -23,8 +23,14 @@
     <!-- Keybind display (uses ItemRegistry) -->
     <Script file="uCDM_Keybinds.lua"/>
 
+    <!-- Rotation assist highlight (uses ItemRegistry) -->
+    <Script file="uCDM_RotationAssist.lua"/>
+
     <!-- Viewer anchoring -->
     <Script file="uCDM_Anchoring.lua"/>
+
+    <!-- Spell/item picker popup (used by Options) -->
+    <Script file="uCDM_Picker.lua"/>
 
     <!-- Options panel (uses everything) -->
     <Script file="uCDM_Options.lua"/>

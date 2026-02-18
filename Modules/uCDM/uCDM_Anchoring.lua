@@ -220,16 +220,10 @@ local function FlushEditModeSave()
     if not module:IsEnabled() then return end
 
     for _, viewerKey in ipairs(GetAllViewerKeys()) do
-        -- Only apply anchor if config exists
-        -- Don't release existing anchors if there's no config - that would break frames
-        -- that were positioned by other means (e.g., default positioning)
+        -- Only apply anchor if config exists; don't release if no config — keep current position
         if ShouldApplyAnchor(viewerKey) then
             ApplyAnchorWithSizeHook(viewerKey)
         end
-        -- Note: We intentionally don't call ReleaseAnchor here if no config exists
-        -- The frame should keep its current position/anchor
-    end
-    for _, viewerKey in ipairs(GetAllViewerKeys()) do
         if module.LayoutEngine then
             module.LayoutEngine.RefreshViewer(viewerKey)
         end

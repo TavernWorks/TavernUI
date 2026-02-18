@@ -3,6 +3,15 @@ local module = TavernUI:GetModule("uCDM", true)
 
 if not module then return end
 
+-- Upvalue frequently-used globals to avoid repeated global table lookups in the update loop
+local C_DurationUtil = C_DurationUtil
+local C_UnitAuras = C_UnitAuras
+local C_Spell = C_Spell
+local UnitExists = UnitExists
+local GetTime = GetTime
+local GetItemCount = GetItemCount
+local GetWeaponEnchantInfo = GetWeaponEnchantInfo
+
 local function CreateCooldownDuration(startTime, duration)
     if not startTime or not duration or duration <= 0 then
         return nil
@@ -89,16 +98,16 @@ local function GetSpellStackAndChargeInfo(spellID, chargesCache, auraSpellID)
     return stacks, charges, hasCharges, chargeDuration, buffRemaining, targetDebuffRemaining
 end
 
+local function CreateEnchantDuration(expTime)
+    if not expTime or expTime <= 0 then return nil end
+    local durationObj = C_DurationUtil.CreateDuration()
+    durationObj:SetTimeFromStart(GetTime(), expTime, 1)
+    return durationObj
+end
+
 local function GetWeaponEnchantBuff(spellID)
     if not spellID then
         return nil, nil
-    end
-
-    local function CreateEnchantDuration(expTime)
-        if not expTime or expTime <= 0 then return nil end
-        local durationObj = C_DurationUtil.CreateDuration()
-        durationObj:SetTimeFromStart(GetTime(), expTime, 1)
-        return durationObj
     end
 
     local mhHas, mhExp, _, mhEnchantID, ohHas, ohExp, _, ohEnchantID = GetWeaponEnchantInfo()

@@ -1618,44 +1618,34 @@ end
 local function BuildCustomTabOptions()
     local actionSlotValues = GetActionSlotSelectValues()
     return {
-        addSpell = {
-            type = "input",
-            name = L["ADD_SPELL"],
-            desc = L["ENTER_SPELL_ID_DESC"],
+        pickSpell = {
+            type = "execute",
+            name = L["PICK_SPELL"],
+            desc = L["PICK_SPELL_DESC"],
             order = 1,
-            get = function() return "" end,
-            set = function(_, value)
-                local spellID = tonumber(value)
-                if spellID then
-                    local ok, spellInfo = pcall(C_Spell.GetSpellInfo, spellID)
-                    if ok and spellInfo then
-                        if not CreateCustomEntry(module.CONSTANTS.TRACKING_TYPE.SPELL, spellID, nil, {spellID = spellID}) then
-                            module:LogError("Failed to create spell entry")
-                        end
-                    else
-                        module:LogError("Invalid spellID: spell not found")
+            func = function()
+                local Picker = module.Picker
+                if not Picker then return end
+                Picker.ShowSpellPicker(function(entry)
+                    if not CreateCustomEntry(module.CONSTANTS.TRACKING_TYPE.SPELL, entry.id, nil, {spellID = entry.id}) then
+                        module:LogError("Failed to create spell entry")
                     end
-                end
+                end)
             end,
         },
-        addItem = {
-            type = "input",
-            name = L["ADD_ITEM"],
-            desc = L["ENTER_ITEM_ID_DESC"],
+        pickItem = {
+            type = "execute",
+            name = L["PICK_ITEM"],
+            desc = L["PICK_ITEM_DESC"],
             order = 2,
-            get = function() return "" end,
-            set = function(_, value)
-                local itemID = tonumber(value)
-                if itemID then
-                    local ok, itemInfo = pcall(C_Item.GetItemInfoByID, itemID)
-                    if ok and itemInfo then
-                        if not CreateCustomEntry(module.CONSTANTS.TRACKING_TYPE.ITEM, itemID, nil, {itemID = itemID}) then
-                            module:LogError("Failed to create item entry")
-                        end
-                    else
-                        module:LogError("Invalid itemID: item not found")
+            func = function()
+                local Picker = module.Picker
+                if not Picker then return end
+                Picker.ShowItemPicker(function(entry)
+                    if not CreateCustomEntry(module.CONSTANTS.TRACKING_TYPE.ITEM, entry.id, nil, {itemID = entry.id}) then
+                        module:LogError("Failed to create item entry")
                     end
-                end
+                end)
             end,
         },
         addTrinket = {
@@ -1736,6 +1726,164 @@ local function BuildCustomTabOptions()
     }
 end
 
+local ROTATION_ASSIST_STYLE_VALUES = {
+    native = L["STYLE_NATIVE"],
+    border = L["STYLE_BORDER"],
+}
+
+local function BuildRotationAssistOptions()
+    local order = 0
+    local function o() order = order + 1; return order end
+
+    return {
+        desc = {
+            type = "description",
+            name = L["ROTATION_ASSIST_DESC"],
+            order = o(),
+        },
+        enabled = {
+            type = "toggle",
+            name = L["ENABLED"],
+            order = o(),
+            get = function()
+                return module:GetSetting("rotationAssist.enabled", false) == true
+            end,
+            set = function(_, value)
+                module:SetSetting("rotationAssist.enabled", value)
+            end,
+        },
+        style = {
+            type = "select",
+            name = L["HIGHLIGHT_STYLE"],
+            desc = L["HIGHLIGHT_STYLE_DESC"],
+            order = o(),
+            values = ROTATION_ASSIST_STYLE_VALUES,
+            disabled = function()
+                return not module:GetSetting("rotationAssist.enabled", false)
+            end,
+            get = function()
+                return module:GetSetting("rotationAssist.style", "native")
+            end,
+            set = function(_, value)
+                module:SetSetting("rotationAssist.style", value)
+            end,
+        },
+        animDuration = {
+            type = "range",
+            name = L["ANIM_DURATION"],
+            desc = L["ANIM_DURATION_DESC"],
+            order = o(),
+            min = 0.5, max = 5.0, step = 0.25,
+            disabled = function()
+                return not module:GetSetting("rotationAssist.enabled", false)
+                    or module:GetSetting("rotationAssist.style", "native") ~= "native"
+            end,
+            get = function()
+                return module:GetSetting("rotationAssist.animDuration", 2.5)
+            end,
+            set = function(_, value)
+                module:SetSetting("rotationAssist.animDuration", value)
+            end,
+        },
+        color = {
+            type = "color",
+            name = L["HIGHLIGHT_COLOR"],
+            desc = L["HIGHLIGHT_COLOR_DESC"],
+            order = o(),
+            hasAlpha = true,
+            disabled = function()
+                return not module:GetSetting("rotationAssist.enabled", false)
+                    or module:GetSetting("rotationAssist.style", "native") ~= "border"
+            end,
+            get = function()
+                local c = module:GetSetting("rotationAssist.color", {r = 0, g = 1, b = 0.84, a = 0.9})
+                return c.r or 0, c.g or 1, c.b or 0.84, c.a or 0.9
+            end,
+            set = function(_, r, g, b, a)
+                module:SetSetting("rotationAssist.color", {r = r, g = g, b = b, a = a})
+            end,
+        },
+        thickness = {
+            type = "range",
+            name = L["HIGHLIGHT_THICKNESS"],
+            desc = L["HIGHLIGHT_THICKNESS_DESC"],
+            order = o(),
+            min = 1, max = 6, step = 1,
+            disabled = function()
+                return not module:GetSetting("rotationAssist.enabled", false)
+                    or module:GetSetting("rotationAssist.style", "native") ~= "border"
+            end,
+            get = function()
+                return module:GetSetting("rotationAssist.thickness", 2)
+            end,
+            set = function(_, value)
+                module:SetSetting("rotationAssist.thickness", value)
+            end,
+        },
+        viewersHeader = {
+            type = "header",
+            name = L["VIEWERS"],
+            order = o(),
+        },
+        viewerEssential = {
+            type = "toggle",
+            name = L["ESSENTIAL"],
+            order = o(),
+            disabled = function()
+                return not module:GetSetting("rotationAssist.enabled", false)
+            end,
+            get = function()
+                return module:GetSetting("rotationAssist.viewers.essential", true) ~= false
+            end,
+            set = function(_, value)
+                module:SetSetting("rotationAssist.viewers.essential", value)
+            end,
+        },
+        viewerUtility = {
+            type = "toggle",
+            name = L["UTILITY"],
+            order = o(),
+            disabled = function()
+                return not module:GetSetting("rotationAssist.enabled", false)
+            end,
+            get = function()
+                return module:GetSetting("rotationAssist.viewers.utility", true) ~= false
+            end,
+            set = function(_, value)
+                module:SetSetting("rotationAssist.viewers.utility", value)
+            end,
+        },
+        viewerBuff = {
+            type = "toggle",
+            name = L["BUFF_COOLDOWNS"],
+            order = o(),
+            disabled = function()
+                return not module:GetSetting("rotationAssist.enabled", false)
+            end,
+            get = function()
+                return module:GetSetting("rotationAssist.viewers.buff", false) == true
+            end,
+            set = function(_, value)
+                module:SetSetting("rotationAssist.viewers.buff", value)
+            end,
+        },
+        viewerCustom = {
+            type = "toggle",
+            name = L["CUSTOM_ITEMS"],
+            order = o(),
+            disabled = function()
+                return not module:GetSetting("rotationAssist.enabled", false)
+            end,
+            get = function()
+                return module:GetSetting("rotationAssist.viewers.custom", false) == true
+            end,
+            set = function(_, value)
+                module:SetSetting("rotationAssist.viewers.custom", value)
+            end,
+        },
+    }
+end
+
 function module:BuildOptions()
     if not TavernUI.db or not TavernUI.db.profile then
         return
@@ -1787,6 +1935,12 @@ function module:BuildOptions()
                 name = L["OVERLAYS"] or "Overlays",
                 order = 6,
                 args = BuildOverlaysOptions(),
+            },
+            rotationAssist = {
+                type = "group",
+                name = L["ROTATION_ASSIST"],
+                order = 7,
+                args = BuildRotationAssistOptions(),
             },
         },
     }

@@ -4,6 +4,14 @@ local PP = TavernUI.PixelPerfect
 
 if not module then return end
 
+-- Upvalue frequently-used globals
+local InCombatLockdown = InCombatLockdown
+local C_Timer = C_Timer
+local math_max = math.max
+local math_min = math.min
+local math_abs = math.abs
+local table_sort = table.sort
+
 --[[
     LayoutEngine - Positions items and applies per-row styling
     
@@ -23,7 +31,7 @@ local CONSTANTS = {
 
 local layoutRunning = {}
 local layoutSettingSize = {}
-local layoutLastNotifiedCount = {}
+local layoutLastCalculatedSize = {}  -- tracks our own computed size; avoids comparing against viewer:GetWidth() which Blizzard can change
 
 local LAYOUT_DEBUG = false
 local function LayoutDebug(fmt, ...)
@@ -177,6 +185,35 @@ function LayoutEngine.IsSettingViewerSize(viewerKey)
     return layoutSettingSize[viewerKey] == true
 end
 
+-- Default row config for the buff viewer when settings have no rows defined
+local function GetDefaultBuffRow(scale)
+    scale = scale or 1.0
+    return {
+        orientation = "horizontal",
+        positionAtSide = "left",
+        iconCount = 6,
+        iconSize = 40 * scale,
+        padding = 4 * scale,
+        yOffset = 0,
+        aspectRatioCrop = 1.0,
+        zoom = 0.08,
+        iconStyle = "square",
+        iconBorderSize = 1,
+        iconBorderColor = CONSTANTS.DEFAULT_ICON_BORDER_COLOR,
+        rowBorderSize = 0,
+        rowBorderColor = CONSTANTS.DEFAULT_ROW_BORDER_COLOR,
+        durationSize = 18 * scale,
+        durationPoint = "CENTER",
+        durationOffsetX = 0,
+        durationOffsetY = 0,
+        stackSize = 16 * scale,
+        stackPoint = "BOTTOMRIGHT",
+        stackOffsetX = 0,
+        stackOffsetY = 0,
+        keepRowHeightWhenEmpty = true,
+    }
+end
+
 local function GetActiveRows(settings, viewerKey)
     local rows = {}
     if not settings or not settings.rows then
@@ -224,34 +261,6 @@ local function GetActiveRows(settings, viewerKey)
     return rows
 end
 
-local function GetDefaultBuffRow(scale)
-    scale = scale or 1.0
-    return {
-        orientation = "horizontal",
-        positionAtSide = "left",
-        iconCount = 6,
-        iconSize = 40 * scale,
-        padding = 4 * scale,
-        yOffset = 0,
-        aspectRatioCrop = 1.0,
-        zoom = 0.08,
-        iconStyle = "square",
-        iconBorderSize = 1,
-        iconBorderColor = CONSTANTS.DEFAULT_ICON_BORDER_COLOR,
-        rowBorderSize = 0,
-        rowBorderColor = CONSTANTS.DEFAULT_ROW_BORDER_COLOR,
-        durationSize = 18 * scale,
-        durationPoint = "CENTER",
-        durationOffsetX = 0,
-        durationOffsetY = 0,
-        stackSize = 16 * scale,
-        stackPoint = "BOTTOMRIGHT",
-        stackOffsetX = 0,
-        stackOffsetY = 0,
-        keepRowHeightWhenEmpty = true,
-    }
-end
-
 local function GetTotalCapacity(rows)
     local total = 0
     for _, row in ipairs(rows) do
@@ -275,7 +284,7 @@ local function AssignItemsToRows(items, rows, viewerKey)
         end
     end
 
-    table.sort(visibleItems, function(a, b) return a.layoutIndex < b.layoutIndex end)
+    table_sort(visibleItems, function(a, b) return a.layoutIndex < b.layoutIndex end)
 
     local slotStart = 1
     for rowNum, rowConfig in ipairs(rows) do
@@ -336,7 +345,7 @@ local function GetRowAssignmentsWithPreview(viewer, viewerKey, settings, items, 
 
     if showPreview and Preview and Preview.BuildPreviewItems then
         local totalSlots = GetTotalCapacity(rows)
-        local count = math.min(settings.previewIconCount or 6, totalSlots)
+        local count = math_min(settings.previewIconCount or 6, totalSlots)
         local fakeItems = Preview.BuildPreviewItems(viewer, count)
         rowAssignments, visibleItems = AssignItemsToRows(fakeItems, rows, viewerKey)
     else
@@ -418,7 +427,7 @@ local function BuildRowMetrics(viewer, viewerKey, rowConfig, rowItems)
             count = 0
         end
     else
-        count = keepHeight and rowConfig.iconCount or math.max(1, actualIcons)
+        count = keepHeight and rowConfig.iconCount or math_max(1, actualIcons)
     end
 
     if not count or count <= 0 then
@@ -465,6 +474,18 @@ local function LayoutRowItems(viewer, rowItems, rowConfig, metrics, rowCenterY, 
     local actualIcons = metrics.actualIcons
     rowCenterX = rowCenterX or 0
 
+    -- Pre-compute per-row constants (invariant across all items in this row)
+    local startX, startY, fixedX, fixedY
+    if metrics.vertical then
+        local actualBlockHeight = actualIcons * pxIconH + (actualIcons - 1) * pxPad
+        startY = rowCenterY + actualBlockHeight / 2 - pxIconH / 2
+        fixedX = PP.SnapPosition(rowCenterX, viewer)
+    else
+        local actualBlockWidth = actualIcons * pxIcon + (actualIcons - 1) * pxPad
+        startX = rowCenterX - actualBlockWidth / 2 + pxIcon / 2
+        fixedY = PP.SnapPosition(rowCenterY, viewer)
+    end
+
     for col, item in ipairs(rowItems) do
         local frame = item.frame
         if frame then
@@ -474,15 +495,11 @@ local function LayoutRowItems(viewer, rowItems, rowConfig, metrics, rowCenterY, 
 
             local uX, uY
             if metrics.vertical then
-                local actualBlockHeight = actualIcons * pxIconH + (actualIcons - 1) * pxPad
-                local startY = rowCenterY + actualBlockHeight / 2 - pxIconH / 2
-                uX = PP.SnapPosition(rowCenterX or 0, viewer)
+                uX = fixedX
                 uY = PP.SnapPosition(startY - (col - 1) * (pxIconH + pxPad), viewer)
             else
-                local actualBlockWidth = actualIcons * pxIcon + (actualIcons - 1) * pxPad
-                local startX = rowCenterX - actualBlockWidth / 2 + pxIcon / 2
                 uX = PP.SnapPosition(startX + (col - 1) * (pxIcon + pxPad), viewer)
-                uY = PP.SnapPosition(rowCenterY, viewer)
+                uY = fixedY
             end
 
             frame:SetPoint("CENTER", viewer, "CENTER", uX, uY)
@@ -503,7 +520,7 @@ local function ComputeRowPosition(growDirection, rowNum, metrics, currentX, prev
             and (currentY + currentGroupHeight / 2 + pxYOffset)
             or (currentY - currentGroupHeight / 2 + pxYOffset)
         currentX = rowCenterX
-        currentGroupHeight = math.max(currentGroupHeight, metrics.rowHeight)
+        currentGroupHeight = math_max(currentGroupHeight, metrics.rowHeight)
     else
         if rowNum > 1 then
             if growDirection == "up" then
@@ -546,46 +563,47 @@ local function ApplyLayout(viewer, rowAssignments, rows, viewerKey, inCombat)
             
             if metrics.positionAtSide and rowNum > 1 then
                 currentGroupWidth = currentGroupWidth + metrics.rowWidth + pxRowGap
-                currentGroupHeight = math.max(currentGroupHeight, metrics.rowHeight)
+                currentGroupHeight = math_max(currentGroupHeight, metrics.rowHeight)
             else
                 if rowNum > 1 then
                     totalHeight = totalHeight + currentGroupHeight + pxRowGap
-                    maxRowWidth = math.max(maxRowWidth, currentGroupWidth)
+                    maxRowWidth = math_max(maxRowWidth, currentGroupWidth)
                 end
                 currentGroupWidth = metrics.rowWidth
                 currentGroupHeight = metrics.rowHeight
             end
 
             if metrics.actualIcons > 0 then
-                maxActualContentWidth = math.max(maxActualContentWidth, metrics.actualRowWidth)
+                maxActualContentWidth = math_max(maxActualContentWidth, metrics.actualRowWidth)
             end
         end
     end
     
     if currentGroupWidth > 0 then
         totalHeight = totalHeight + currentGroupHeight
-        maxRowWidth = math.max(maxRowWidth, currentGroupWidth)
+        maxRowWidth = math_max(maxRowWidth, currentGroupWidth)
     end
-    
+
     local effectiveWidth = maxRowWidth
     if not LayoutEngine.IsProtectedViewer(viewerKey) then
         effectiveWidth = (maxActualContentWidth > 0) and maxActualContentWidth or maxRowWidth
     end
-    local totalItems = 0
-    for _, rowItems in ipairs(rowAssignments) do
-        totalItems = totalItems + #rowItems
-    end
-    local structureUnchanged = (layoutLastNotifiedCount[viewerKey] == totalItems)
+
+    -- Only fire NotifySizeChanged when OUR calculated dimensions change.
+    -- Viewer size is config-driven (iconCount × iconSize × padding) and stable during gameplay.
+    -- Comparing against viewer:GetWidth() is wrong — Blizzard's RefreshLayout can change the
+    -- viewer size during spell procs, which would trigger spurious NotifySizeChanged and cause
+    -- anchor jumps on resource bars and unit frames.
     if effectiveWidth > 0 and totalHeight > 0 then
-        local currentW, currentH = viewer:GetWidth(), viewer:GetHeight()
-        local sizeChanged = not currentW or not currentH
-            or math.abs(currentW - effectiveWidth) > 0.5
-            or math.abs(currentH - totalHeight) > 0.5
-        if sizeChanged then
-            SafeSetSize(viewer, effectiveWidth, totalHeight, viewerKey, inCombat)
+        local last = layoutLastCalculatedSize[viewerKey]
+        local calcChanged = not last
+            or math_abs(last.w - effectiveWidth) > 0.5
+            or math_abs(last.h - totalHeight) > 0.5
+        if calcChanged then
+            layoutLastCalculatedSize[viewerKey] = { w = effectiveWidth, h = totalHeight }
         end
-        if not structureUnchanged then
-            layoutLastNotifiedCount[viewerKey] = totalItems
+        SafeSetSize(viewer, effectiveWidth, totalHeight, viewerKey, inCombat)
+        if calcChanged then
             local skipped = inCombat and LayoutEngine.IsProtectedViewer(viewerKey)
             if not skipped then
                 layoutSettingSize[viewerKey] = true
@@ -643,14 +661,10 @@ function LayoutEngine.ApplyVisibilityToViewer(viewerKey, deferInHookContext)
         return
     end
     
-    local function apply()
-        ApplyVisibilityState(viewer, true)
-    end
-    
     if deferInHookContext then
-        C_Timer.After(0, apply)
+        C_Timer.After(0, function() ApplyVisibilityState(viewer, true) end)
     else
-        apply()
+        ApplyVisibilityState(viewer, true)
     end
 end
 
@@ -700,12 +714,7 @@ function LayoutEngine.RefreshViewer(viewerKey)
         for _, entry in ipairs(visibleItems) do
             assignedItems[entry.item] = true
         end
-        for _, item in ipairs(items) do
-            if item.frame and not assignedItems[item] then
-                item.frame:Hide()
-                PP.ClearPoints(item.frame)
-            end
-        end
+        -- setInLayout(false) already hides the frame and clears its points
         for _, item in ipairs(items) do
             item:setInLayout(assignedItems[item] == true)
         end
