@@ -1,5 +1,13 @@
 TavernUI Changelog
 ==================
+v1.0.0-beta-16 (2026-02-17)
+ - FIX: Unit Frames - Per-hp tag, short value abbreviation, and tag truncation (#108, #112, #118)
+ - FIX: QoL - Sell junk no longer blocked by repair guard (#113)
+ - FIX: DataBar - Remove background memory polling; hover-only refresh with opt-in polling setting (#126)
+ - FIX: Docs - Correct CurseForge link in README (#125)
+ - NEW: CastBar - Unify standalone castbar into oUF framework (#57)
+ - NEW: DataBar - Dungeon short name lookup table (#127)
+
 v1.0.0-beta-15 (2026-02-12)
  - FIX: uCDM - Keybinds no longer cause taint errors in combat
  - FIX: uCDM - Ace3 module lifecycle for enable/disable (#79)
