@@ -594,7 +594,6 @@ function TavernUI:InitializeOptions()
     end
     
     AceConfig:RegisterOptionsTable("TavernUI", getOptions)
-    self.optionsFrame = AceConfigDialog:AddToBlizOptions("TavernUI", "TavernUI")
     
     AceConfigDialog:SetDefaultSize("TavernUI", 800, 800)
     
@@ -644,30 +643,41 @@ function TavernUI:InitializeOptions()
 end
 
 function TavernUI:RegisterBlizzardOptions()
-    AceConfigDialog:AddToBlizOptions("TavernUI", "General", "TavernUI", "general")
-    local options = self:GetOptions()
-    local moduleEntries = {}
-    if options.args.modules and options.args.modules.args then
-        for key, group in pairs(options.args.modules.args) do
-            table.insert(moduleEntries, {
-                key = key,
-                name = type(group.name) == "string" and group.name or key,
-            })
-        end
+    local optionsFrame = CreateFrame("Frame")
+
+    local header = optionsFrame:CreateFontString(nil, "ARTWORK", "GameFontNormalHuge3")
+    header:SetScale(3)
+    header:SetPoint("CENTER", optionsFrame, 0, 60)
+    header:SetText(LINK_FONT_COLOR:WrapTextInColorCode("TavernUI"))
+
+    local version = optionsFrame:CreateFontString(nil, "ARTWORK", "GameFontNormalLarge")
+    version:SetPoint("TOP", header, "BOTTOM", 0, -4)
+    version:SetText(WHITE_FONT_COLOR:WrapTextInColorCode("v" .. self.version))
+
+    local instructions = optionsFrame:CreateFontString(nil, "ARTWORK", "GameFontNormalLarge")
+    instructions:SetPoint("CENTER", optionsFrame, 0, -10)
+    instructions:SetText(WHITE_FONT_COLOR:WrapTextInColorCode("Type /tui or click below to open options"))
+
+    local template = "SharedButtonLargeTemplate"
+    if not C_XMLUtil.GetTemplateInfo(template) then
+        template = "UIPanelDynamicResizeButtonTemplate"
     end
-    table.sort(moduleEntries, function(a, b)
-        return a.name < b.name
+    local button = CreateFrame("Button", nil, optionsFrame, template)
+    button:SetText("Open TavernUI Options")
+    DynamicResizeButton_Resize(button)
+    button:SetPoint("CENTER", optionsFrame, 0, -30)
+    button:SetScale(2)
+    button:SetScript("OnClick", function()
+        self:OpenOptions()
     end)
 
-    for _, entry in ipairs(moduleEntries) do
-        local blizKey = "TavernUI." .. entry.key
-        AceConfig:RegisterOptionsTable(blizKey, function()
-            return options.args.modules.args[entry.key]
-        end)
-        AceConfigDialog:AddToBlizOptions(blizKey, entry.name, "TavernUI")
-    end
+    optionsFrame.OnCommit = function() end
+    optionsFrame.OnDefault = function() end
+    optionsFrame.OnRefresh = function() end
 
-    AceConfigDialog:AddToBlizOptions("TavernUI", "Profiles", "TavernUI", "profiles")
+    local category = Settings.RegisterCanvasLayoutCategory(optionsFrame, "TavernUI")
+    category.ID = "TavernUI"
+    Settings.RegisterAddOnCategory(category)
 end
 
 function TavernUI:RegisterModuleOptions(moduleName, moduleOptions, displayName)
