@@ -67,7 +67,7 @@ local function GetSpellStackAndChargeInfo(spellID, chargesCache, auraSpellID)
     targetDebuffRemaining = GetTargetDebuffDuration(spellID, auraSpellID)
 
     local chargeInfo = C_Spell.GetSpellCharges(spellID)
-    if chargeInfo then
+    if chargeInfo and chargeInfo.maxCharges > 1 then
         charges = chargeInfo.currentCharges
         hasCharges = true
         chargesCache[spellID] = true
@@ -75,6 +75,15 @@ local function GetSpellStackAndChargeInfo(spellID, chargesCache, auraSpellID)
     else
         chargesCache[spellID] = false
         hasCharges = false
+        -- Cast count / use count fallback (mirrors Blizzard CooldownViewer.lua:982-988)
+        -- Covers limited-use spells that don't use the charge system (e.g. Midnight-era use count mechanics)
+        if C_Spell.GetSpellCastCount then
+            local castCount = C_Spell.GetSpellCastCount(spellID)
+            if castCount and castCount > 0 then
+                charges = castCount
+                hasCharges = true
+            end
+        end
     end
 
     return stacks, charges, hasCharges, chargeDuration, buffRemaining, targetDebuffRemaining
