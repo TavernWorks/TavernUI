@@ -643,6 +643,53 @@ local function BuildUnitOptions(unitType, unitInfo)
                 RefreshCastbarModule(unitType)
             end,
         },
+        castbarIconClampToBar = {
+            type = "toggle",
+            name = "Icon: Match Bar Height",
+            desc = "Scale the icon to match the bar height. Disable to use custom Icon Size and Icon Scale.",
+            order = 52.6,
+            hidden = function()
+                return unitType == "targettarget" or unitType == "focustarget"
+                    or not GetUnitSetting(unitType, "showCastbar", true)
+            end,
+            get = function() return TavernUI:GetCastbarSetting(unitType, "iconClampToBar", true) end,
+            set = function(_, value)
+                TavernUI:SetCastbarSetting(unitType, "iconClampToBar", value)
+                RefreshCastbarModule(unitType)
+            end,
+        },
+        castbarIconSize = {
+            type = "range",
+            name = "Icon Size",
+            order = 52.7,
+            min = 10, max = 80, step = 1,
+            hidden = function()
+                return unitType == "targettarget" or unitType == "focustarget"
+                    or not GetUnitSetting(unitType, "showCastbar", true)
+                    or TavernUI:GetCastbarSetting(unitType, "iconClampToBar", true)
+            end,
+            get = function() return TavernUI:GetCastbarSetting(unitType, "iconSize", 20) end,
+            set = function(_, value)
+                TavernUI:SetCastbarSetting(unitType, "iconSize", value)
+                RefreshCastbarModule(unitType)
+            end,
+        },
+        castbarIconScale = {
+            type = "range",
+            name = "Icon Scale",
+            order = 52.8,
+            min = 0.5, max = 2.0, step = 0.05,
+            hidden = function()
+                return unitType == "targettarget" or unitType == "focustarget"
+                    or not GetUnitSetting(unitType, "showCastbar", true)
+                    or TavernUI:GetCastbarSetting(unitType, "iconClampToBar", true)
+            end,
+            get = function() return TavernUI:GetCastbarSetting(unitType, "iconScale", 1.0) end,
+            set = function(_, value)
+                TavernUI:SetCastbarSetting(unitType, "iconScale", value)
+                RefreshCastbarModule(unitType)
+            end,
+        },
         classpowerHeight = {
             type = "range",
             name = "Class Power Height",

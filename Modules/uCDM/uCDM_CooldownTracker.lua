@@ -12,6 +12,7 @@ local GetInventoryItemID = GetInventoryItemID
 local GetItemSpell = GetItemSpell
 local GetActionInfo = GetActionInfo
 local GetActionCooldown = GetActionCooldown
+local issecretvalue = issecretvalue
 
 local Helpers = module.CooldownTrackerHelpers
 
@@ -191,6 +192,9 @@ function CooldownTracker.UpdateActionSlot(slot)
     end
     local startTime, duration = GetActionCooldown(slot)
     local durationObj
+    if issecretvalue and (issecretvalue(startTime) or issecretvalue(duration)) then
+        return nil
+    end
     if type(startTime) == "number" and type(duration) == "number" and duration > 0 then
         durationObj = Helpers.CreateCooldownDuration(startTime, duration)
     end

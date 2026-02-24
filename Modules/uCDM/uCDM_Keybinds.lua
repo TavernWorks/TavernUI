@@ -136,7 +136,8 @@ local function BuildActionButtonCache()
     end
 
     if ElvUI then
-        local AB = ElvUI:GetModule('ActionBars', true)
+        local E = ElvUI[1]
+        local AB = E and E.GetModule and E:GetModule('ActionBars', true)
         if AB and AB.handledBars then
             for _, bar in pairs(AB.handledBars) do
                 if bar and bar.buttons then
@@ -152,7 +153,8 @@ local function BuildActionButtonCache()
             end
         end
 
-        local LAB = ElvUI.Libs and ElvUI.Libs.LAB
+        local libs = E and E.Libs
+        local LAB = libs and libs.LAB
         if LAB and LAB.actionButtons then
             for button in pairs(LAB.actionButtons) do
                 if button and C_Widget.IsFrameWidget(button) and not added[button] then

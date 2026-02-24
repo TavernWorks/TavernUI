@@ -118,7 +118,24 @@ function Factory:SpawnFrames()
             if mode then
                 local prefix = mode == "full" and "TavernUI_UF_" or "TavernUI_CB_"
                 local globalName = prefix .. unit:gsub("^%l", string.upper)
+
+                -- In castbar_only mode the oUF frame is just a hidden host for the
+                -- castbar element.  We must NOT let oUF hide the Blizzard unit frames
+                -- (PlayerFrame, TargetFrame, FocusFrame) because the user may still
+                -- want them visible.  Temporarily replace DisableBlizzard with a no-op
+                -- for the duration of this spawn, then restore it.
+                local savedDisableBlizzard
+                if mode == "castbar_only" then
+                    savedDisableBlizzard = oUF.DisableBlizzard
+                    oUF.DisableBlizzard = function() end
+                end
+
                 local frame = oufSelf:Spawn(unit, globalName)
+
+                if savedDisableBlizzard then
+                    oUF.DisableBlizzard = savedDisableBlizzard
+                end
+
                 frame:SetPoint("CENTER", UIParent, "CENTER", 0, 0)
                 self.frames[unit] = frame
 

@@ -729,7 +729,16 @@ function module:UpdateFrame(unit)
                 frame.TUI_Castbar.Spark:SetSize(2, cbHeight)
             end
             if frame.TUI_Castbar.TUI_IconContainer then
-                frame.TUI_Castbar.TUI_IconContainer:SetSize(cbHeight, cbHeight)
+                local iconClampToBar = TavernUI:GetCastbarSetting(unitType, "iconClampToBar", true)
+                local iconPixels
+                if iconClampToBar then
+                    iconPixels = cbHeight
+                else
+                    local iconSize = TavernUI:GetCastbarSetting(unitType, "iconSize", cbHeight)
+                    local iconScale = TavernUI:GetCastbarSetting(unitType, "iconScale", 1.0)
+                    iconPixels = iconSize * iconScale
+                end
+                frame.TUI_Castbar.TUI_IconContainer:SetSize(iconPixels, iconPixels)
             end
 
             frame.TUI_Castbar:ClearAllPoints()

@@ -456,12 +456,30 @@ local function BuildUnitOptions(unitKey)
     }
     order = order + 1
 
+    args.iconClampToBar = {
+        type = "toggle",
+        name = L["ICON_MATCH_BAR_HEIGHT"],
+        desc = L["ICON_MATCH_BAR_HEIGHT_DESC"],
+        order = order,
+        get = function()
+            return GetUnitSetting(unitKey, CONSTANTS.KEY_ICON_CLAMP_TO_BAR, true)
+        end,
+        set = function(_, value)
+            SetUnitSetting(unitKey, CONSTANTS.KEY_ICON_CLAMP_TO_BAR, value)
+            RefreshUnit(unitKey)
+        end,
+    }
+    order = order + 1
+
     args.iconSize = {
         type = "range",
         name = L["ICON_SIZE"],
         desc = L["SIZE_OF_ICONS_DESC"],
         order = order,
         min = 10, max = 80, step = 1,
+        hidden = function()
+            return GetUnitSetting(unitKey, CONSTANTS.KEY_ICON_CLAMP_TO_BAR, true)
+        end,
         get = function()
             return GetUnitSetting(unitKey, CONSTANTS.KEY_ICON_SIZE, 25)
         end,
@@ -478,6 +496,9 @@ local function BuildUnitOptions(unitKey)
         desc = L["ICON_SCALE_DESC"],
         order = order,
         min = 0.5, max = 2.0, step = 0.05,
+        hidden = function()
+            return GetUnitSetting(unitKey, CONSTANTS.KEY_ICON_CLAMP_TO_BAR, true)
+        end,
         get = function()
             return GetUnitSetting(unitKey, CONSTANTS.KEY_ICON_SCALE, 1.0)
         end,

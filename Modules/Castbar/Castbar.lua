@@ -26,6 +26,7 @@ local CONSTANTS = {
     KEY_USE_CLASS_COLOR      = "useClassColor",
     KEY_CHANNEL_FILL_FORWARD = "channelFillForward",
     KEY_SHOW_ICON            = "showIcon",
+    KEY_ICON_CLAMP_TO_BAR    = "iconClampToBar",
     KEY_ICON_SIZE            = "iconSize",
     KEY_ICON_SCALE           = "iconScale",
     KEY_ICON_ANCHOR          = "iconAnchor",
@@ -104,6 +105,7 @@ local function MakeUnitDefaults(isPlayer)
         channelFillForward = false,
 
         showIcon = true,
+        iconClampToBar = true,
         iconSize = 20,
         iconScale = 1.0,
         iconAnchor = "LEFT",
