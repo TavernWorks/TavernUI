@@ -8,6 +8,7 @@ local C_Spell = C_Spell
 local C_Container = C_Container
 local C_Item = C_Item
 local C_CurveUtil = C_CurveUtil
+local C_Widget = C_Widget
 local GetInventoryItemID = GetInventoryItemID
 local GetItemSpell = GetItemSpell
 local GetActionInfo = GetActionInfo
@@ -109,12 +110,13 @@ CooldownTracker.EnsureSwipeStyleAndHooks = EnsureSwipeStyleAndHooks
 local buffViewerName = module.CONSTANTS and module.CONSTANTS.VIEWER_NAMES and module.CONSTANTS.VIEWER_NAMES.buff
 local function IsCooldownUnderBuffViewer(cooldown)
     if not cooldown or not buffViewerName then return false end
+    if not C_Widget.IsFrameWidget(cooldown) then return false end
     local viewer = _G[buffViewerName]
     if not viewer then return false end
-    local p = cooldown.GetParent and cooldown:GetParent()
+    local p = cooldown:GetParent()
     while p do
         if p == viewer then return true end
-        p = p.GetParent and p:GetParent()
+        p = p:GetParent()
     end
     return false
 end
@@ -193,7 +195,7 @@ function CooldownTracker.UpdateActionSlot(slot)
     local startTime, duration = GetActionCooldown(slot)
     local durationObj
     if issecretvalue and (issecretvalue(startTime) or issecretvalue(duration)) then
-        return nil
+        return { duration = nil, desaturation = 0, stackDisplay = nil }
     end
     if type(startTime) == "number" and type(duration) == "number" and duration > 0 then
         durationObj = Helpers.CreateCooldownDuration(startTime, duration)

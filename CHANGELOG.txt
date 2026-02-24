@@ -1,5 +1,8 @@
 TavernUI Changelog
 ==================
+v1.0.0-beta-19 (2026-02-24)
+ - FIX: uCDM - CooldownFrame_Set hook now uses C_Widget.IsFrameWidget to guard against non-frame objects from nameplate auras (#133)
+
 v1.0.0-beta-18 (2026-02-24)
  - FIX: uCDM - Macro slot cooldown comparison tainted on combat start; guarded with issecretvalue (#193)
  - FIX: uCDM - Keybinds crash when ElvUI is loaded; engine object now accessed via ElvUI[1] (#192, #182)
