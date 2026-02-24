@@ -1,5 +1,16 @@
 TavernUI Changelog
 ==================
+v1.0.0-beta-18 (2026-02-24)
+ - FIX: uCDM - Macro slot cooldown comparison tainted on combat start; guarded with issecretvalue (#193)
+ - FIX: uCDM - Keybinds crash when ElvUI is loaded; engine object now accessed via ElvUI[1] (#192, #182)
+ - FIX: uCDM - CooldownFrame_Set hook no longer errors on nameplate aura cooldown frames (#133)
+ - FIX: uCDM - Essential Cooldown Viewer Show() deferred out of combat to prevent ADDON_ACTION_BLOCKED taint (#91)
+ - FIX: Castbar - Standalone castbar no longer causes oUF to hide Blizzard PlayerFrame (#190)
+ - FIX: Castbar - Icon Size and Icon Scale settings now applied; Match Bar Height toggle (default on) preserves existing behaviour (#184)
+ - FIX: Castbar - Lua error on cast start resolved (#181)
+ - NEW: ResourceBars - Auto-hide when mounted or in Travel Form (#47)
+ - FIX: Anchors - Anchor disabled state now persists across /reload (#89)
+
 v1.0.0-beta-17 (2026-02-18)
  - NEW: uCDM - Searchable spell/item picker UI replaces raw ID text input (#143, #144)
  - NEW: uCDM - Rotation assist highlight: mirrors Blizzard's spell suggestion onto CDM icons, native (animated ants) or border style (#154)
