@@ -103,6 +103,7 @@ Data.SEGMENTED_TYPES = {
         maxDefault = 4,
         fractional = false,
         classes = {CLASS_MAGE},
+        specs = {1},
     },
     RUNES = {
         id = "RUNES",

@@ -238,6 +238,7 @@ local defaults = {
         },
         boss = {
             enabled = false, width = 200, height = 40,
+            frameSpacing = 60,
             showPower = true, showCastbar = true, showPortrait = false,
             showClassPower = false, showInfoBar = false,
             useClassColor = false, rangeAlpha = 1,
@@ -260,6 +261,7 @@ local defaults = {
         },
         arena = {
             enabled = false, width = 200, height = 40,
+            frameSpacing = 60,
             showPower = true, showCastbar = true, showPortrait = false,
             showClassPower = false, showInfoBar = false,
             portrait = { side = "RIGHT" },

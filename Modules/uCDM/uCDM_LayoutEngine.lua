@@ -80,10 +80,11 @@ local function ApplyVisibilityState(viewer, withHoverScripts)
     local show = not Visibility or Visibility:ShouldShow()
     local hiddenAlpha = Visibility and Visibility:GetHiddenOpacity() or 0
 
+    local inCombat = InCombatLockdown()
     if show then
         SafeShowFrame(viewer)
         viewer:SetAlpha(1)
-        if withHoverScripts then
+        if withHoverScripts and not inCombat then
             viewer:SetScript("OnEnter", nil)
             viewer:SetScript("OnLeave", nil)
         end
@@ -96,17 +97,19 @@ local function ApplyVisibilityState(viewer, withHoverScripts)
         else
             viewer:SetAlpha(alpha)
         end
-        
-        if withHoverScripts and visibleOnHover then
-            viewer:SetScript("OnEnter", function()
-                viewer:SetAlpha(1)
-            end)
-            viewer:SetScript("OnLeave", function()
-                viewer:SetAlpha(alpha)
-            end)
-        elseif withHoverScripts then
-            viewer:SetScript("OnEnter", nil)
-            viewer:SetScript("OnLeave", nil)
+
+        if withHoverScripts and not inCombat then
+            if visibleOnHover then
+                viewer:SetScript("OnEnter", function()
+                    viewer:SetAlpha(1)
+                end)
+                viewer:SetScript("OnLeave", function()
+                    viewer:SetAlpha(alpha)
+                end)
+            else
+                viewer:SetScript("OnEnter", nil)
+                viewer:SetScript("OnLeave", nil)
+            end
         end
     end
 end

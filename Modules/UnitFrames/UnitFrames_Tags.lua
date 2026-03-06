@@ -153,7 +153,14 @@ oUF.Tags.Events["TUI:resting"] = "PLAYER_UPDATE_RESTING"
 -- Color Tags (return |cff hex codes)
 -- ============================================================================
 
-oUF.Tags.Methods["TUI:classcolor"] = delegate("raidcolor")
+oUF.Tags.Methods["TUI:classcolor"] = function(unit)
+    local _, class = UnitClass(unit)
+    local color = class and oUF.colors.class[class]
+    if color then
+        return color:GenerateHexColorMarkup()
+    end
+    return "|cffffffff"
+end
 oUF.Tags.Events["TUI:classcolor"] = "UNIT_NAME_UPDATE"
 
 oUF.Tags.Methods["TUI:diffcolor"] = function(unit)

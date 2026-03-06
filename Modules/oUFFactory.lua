@@ -150,13 +150,14 @@ function Factory:SpawnFrames()
         if ufModule and TavernUI:IsModuleEnabled("UnitFrames") then
             local bossDB = ufModule:GetUnitDB("boss")
             if bossDB and bossDB.enabled then
+                local bossGap = -(bossDB.frameSpacing or 60)
                 for i = 1, 5 do
                     local unit = "boss" .. i
                     local frame = oufSelf:Spawn(unit, "TavernUI_UF_Boss" .. i)
                     if i == 1 then
                         frame:SetPoint("RIGHT", UIParent, "RIGHT", -50, 0)
                     else
-                        frame:SetPoint("TOP", self.frames["boss" .. (i - 1)], "BOTTOM", 0, -8)
+                        frame:SetPoint("TOP", self.frames["boss" .. (i - 1)], "BOTTOM", 0, bossGap)
                     end
                     self.frames[unit] = frame
                 end
@@ -164,13 +165,14 @@ function Factory:SpawnFrames()
 
             local arenaDB = ufModule:GetUnitDB("arena")
             if arenaDB and arenaDB.enabled then
+                local arenaGap = -(arenaDB.frameSpacing or 60)
                 for i = 1, 3 do
                     local unit = "arena" .. i
                     local frame = oufSelf:Spawn(unit, "TavernUI_UF_Arena" .. i)
                     if i == 1 then
                         frame:SetPoint("RIGHT", UIParent, "RIGHT", -50, 100)
                     else
-                        frame:SetPoint("TOP", self.frames["arena" .. (i - 1)], "BOTTOM", 0, -8)
+                        frame:SetPoint("TOP", self.frames["arena" .. (i - 1)], "BOTTOM", 0, arenaGap)
                     end
                     self.frames[unit] = frame
                 end
