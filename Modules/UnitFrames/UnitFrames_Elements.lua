@@ -293,7 +293,7 @@ function Elements:CreateInfoBar(frame, unit, db)
     bar:SetValue(1)
 
     local text = bar:CreateFontString(nil, "OVERLAY")
-    text:SetFont(TavernUI.DEFAULT_FONT, 9, "OUTLINE")
+    TavernUI:ApplyFont(text, bar, 9)
     text:SetPoint("LEFT", bar, "LEFT", 2, 0)
     text:SetPoint("RIGHT", bar, "RIGHT", -2, 0)
     text:SetJustifyH("CENTER")
@@ -320,7 +320,7 @@ end
 function Elements:CreateNameTag(frame, unit, db)
     local nameDb = db.nameTag or {}
     local name = frame.Health:CreateFontString(nil, "OVERLAY")
-    name:SetFont(TavernUI.DEFAULT_FONT, 11, "OUTLINE")
+    TavernUI:ApplyFont(name, frame.Health, 11)
     name:SetPoint("LEFT", frame.Health, "LEFT", 4, 0)
     name:SetPoint("RIGHT", frame.Health, "RIGHT", -4, 0)
     name:SetJustifyH("LEFT")
@@ -343,7 +343,7 @@ end
 function Elements:CreateHealthTag(frame, unit, db)
     local healthDb = db.healthTag or {}
     local text = frame.Health:CreateFontString(nil, "OVERLAY")
-    text:SetFont(TavernUI.DEFAULT_FONT, 11, "OUTLINE")
+    TavernUI:ApplyFont(text, frame.Health, 11)
     text:SetPoint("LEFT", frame.Health, "LEFT", 4, 0)
     text:SetPoint("RIGHT", frame.Health, "RIGHT", -4, 0)
     text:SetJustifyH("RIGHT")
@@ -366,7 +366,7 @@ end
 function Elements:CreatePowerTag(frame, unit, db)
     local powerDb = db.powerTag or {}
     local text = frame.TUI_Power:CreateFontString(nil, "OVERLAY")
-    text:SetFont(TavernUI.DEFAULT_FONT, 9, "OUTLINE")
+    TavernUI:ApplyFont(text, frame.TUI_Power, 9)
     text:SetPoint("CENTER", frame.TUI_Power, "CENTER", 0, 0)
     local r, g, b, a = TavernUI:GetThemeColor("textColor")
     text:SetTextColor(r, g, b, a)

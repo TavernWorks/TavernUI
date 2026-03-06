@@ -8,7 +8,6 @@ local C_Spell = C_Spell
 local C_Container = C_Container
 local C_Item = C_Item
 local C_CurveUtil = C_CurveUtil
-local C_Widget = C_Widget
 local GetInventoryItemID = GetInventoryItemID
 local GetItemSpell = GetItemSpell
 local GetActionInfo = GetActionInfo
@@ -107,29 +106,6 @@ end
 CooldownTracker.ApplySwipeStyle = ApplySwipeStyle
 CooldownTracker.EnsureSwipeStyleAndHooks = EnsureSwipeStyleAndHooks
 
-local buffViewerName = module.CONSTANTS and module.CONSTANTS.VIEWER_NAMES and module.CONSTANTS.VIEWER_NAMES.buff
-local function IsCooldownUnderBuffViewer(cooldown)
-    if not cooldown or not buffViewerName then return false end
-    if not C_Widget.IsFrameWidget(cooldown) then return false end
-    local viewer = _G[buffViewerName]
-    if not viewer then return false end
-    local p = cooldown:GetParent()
-    while p do
-        if p == viewer then return true end
-        p = p:GetParent()
-    end
-    return false
-end
-
-if CooldownFrame_Set and type(CooldownFrame_Set) == "function" then
-    hooksecurefunc("CooldownFrame_Set", function(self)
-        if self and IsCooldownUnderBuffViewer(self) then
-            C_Timer.After(0, function()
-                if self then ApplySwipeStyle(self) end
-            end)
-        end
-    end)
-end
 
 function CooldownTracker.UpdateTrinket(slotID)
     local itemID = GetInventoryItemID("player", slotID)
@@ -168,9 +144,12 @@ function CooldownTracker.UpdateSpell(spellID, auraSpellID)
     local stackDisplay = Helpers.GetStackDisplay(nil, nil, nil, stacks, hasCharges, charges)
     local isUsable, noMana = Helpers.GetSpellUsability(spellID)
 
-    -- Determine the primary duration object for desaturation
-    -- Priority: target debuff > player buff > charge > cooldown
-    local primaryDuration = targetDebuffRemaining or buffRemaining or chargeDuration or durationObj
+    -- Determine the primary duration object for desaturation.
+    -- When the spell is usable (no real cooldown, only GCD may be active), exclude
+    -- durationObj so GCD doesn't cause the icon to desaturate.
+    -- Priority: target debuff > player buff > charge > cooldown (only if on real CD)
+    local primaryDuration = targetDebuffRemaining or buffRemaining or chargeDuration
+                            or (not isUsable and durationObj)
 
     return {
         stackDisplay = stackDisplay,
@@ -194,7 +173,7 @@ function CooldownTracker.UpdateActionSlot(slot)
     end
     local startTime, duration = GetActionCooldown(slot)
     local durationObj
-    if issecretvalue and (issecretvalue(startTime) or issecretvalue(duration)) then
+    if issecretvalue(startTime) or issecretvalue(duration) then
         return { duration = nil, desaturation = 0, stackDisplay = nil }
     end
     if type(startTime) == "number" and type(duration) == "number" and duration > 0 then

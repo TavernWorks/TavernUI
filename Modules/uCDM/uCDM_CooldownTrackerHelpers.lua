@@ -77,7 +77,8 @@ local function GetSpellStackAndChargeInfo(spellID, chargesCache, auraSpellID)
     targetDebuffRemaining = GetTargetDebuffDuration(spellID, auraSpellID)
 
     local chargeInfo = C_Spell.GetSpellCharges(spellID)
-    if chargeInfo and chargeInfo.maxCharges > 1 then
+    local maxCharges = chargeInfo and chargeInfo.maxCharges
+    if maxCharges and not issecretvalue(maxCharges) and maxCharges > 1 then
         charges = chargeInfo.currentCharges
         hasCharges = true
         chargesCache[spellID] = true
@@ -89,7 +90,7 @@ local function GetSpellStackAndChargeInfo(spellID, chargesCache, auraSpellID)
         -- Covers limited-use spells that don't use the charge system (e.g. Midnight-era use count mechanics)
         if C_Spell.GetSpellCastCount then
             local castCount = C_Spell.GetSpellCastCount(spellID)
-            if castCount and not (issecretvalue and issecretvalue(castCount)) and castCount > 0 then
+            if castCount and not issecretvalue(castCount) and castCount > 0 then
                 charges = castCount
                 hasCharges = true
             end

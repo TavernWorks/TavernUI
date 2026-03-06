@@ -364,7 +364,15 @@ function ItemRegistry.CollectBlizzardItems(viewerKey)
         allItems[#allItems + 1] = item
     end
 
+    -- Blizzard items sort by their dynamic viewer index; custom items always
+    -- follow Blizzard items and sort among themselves by their saved config index.
+    -- This prevents Blizzard item re-indexing from shifting custom item positions.
     table.sort(allItems, function(a, b)
+        local aIsCustom = a.source == "custom"
+        local bIsCustom = b.source == "custom"
+        if aIsCustom ~= bIsCustom then
+            return not aIsCustom
+        end
         return (a.index or 9999) < (b.index or 9999)
     end)
 
@@ -445,11 +453,18 @@ function ItemRegistry.CreateCustomItem(config, skipDBSave)
         return nil
     end
 
-    -- Determine index
+    -- Determine index — count only existing custom items so the index is stable
+    -- regardless of how many Blizzard items are currently visible.
     local index = config.index
     if not index then
         local viewerItems = itemsByViewer[viewerKey] or {}
-        index = #viewerItems + 1
+        local customCount = 0
+        for _, existingItem in ipairs(viewerItems) do
+            if existingItem.source == "custom" then
+                customCount = customCount + 1
+            end
+        end
+        index = customCount + 1
     end
 
     local item = module.CooldownItem.new({

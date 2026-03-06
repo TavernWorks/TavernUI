@@ -1,5 +1,17 @@
 TavernUI Changelog
 ==================
+v1.0.0-beta-20 (2026-03-06)
+ - FIX: uCDM - CooldownFrame_Set global hook removed; per-instance hooks via EnsureSwipeStyleAndHooks are sufficient and prevent nameplate aura errors (#133)
+ - FIX: uCDM - maxCharges secret-value taint crash in GetSpellStackAndChargeInfo (#200); issecretvalue guards simplified for Midnight (always available)
+ - FIX: uCDM - Macro slot cooldown taint crash on combat start (#193)
+ - FIX: uCDM - ADDON_ACTION_BLOCKED from SetScript on protected viewer frames during combat (#91)
+ - FIX: uCDM - Custom icons desaturate on GCD even when spell has no real cooldown; GCD now excluded from desaturation when spell is usable (#140)
+ - FIX: uCDM - Custom item positions shift on every CDM update; sort now keeps Blizzard items before custom items and indexes custom items relative to other custom items only (#114, #115)
+ - FIX: ResourceBars - Arcane Charges bar now restricted to Arcane spec only (#98)
+ - FIX: Unit Frames - Font changes now apply to unit frame text elements (registered with font registry) (#82)
+ - FIX: Unit Frames - NPC class (e.g. "Adventurer") no longer crashes TUI:classcolor tag (#194)
+ - FIX: Unit Frames - Boss and Arena frame spacing increased (default 60px) to prevent debuff containers overlapping next frame (#129)
+
 v1.0.0-beta-19 (2026-02-24)
  - FIX: uCDM - CooldownFrame_Set hook now uses C_Widget.IsFrameWidget to guard against non-frame objects from nameplate auras (#133)
 

@@ -405,7 +405,7 @@ end
 function Keybinds.GetSpellKeybind(spellID, visited)
     if not spellID then return nil end
 
-    if issecretvalue and issecretvalue(spellID) then
+    if issecretvalue(spellID) then
         return nil
     end
 
